@@ -1,0 +1,49 @@
+version: '3.9'
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    environment:
+      - NODE_ENV=development
+    depends_on:
+      - api
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    environment:
+      - DATABASE_PATH=/data/hangar.db
+      - CADDY_ADMIN_URL=http://caddy:2019
+      - BUILDKIT_HOST=tcp://buildkit:1234
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      - RAILPACK_BUILD_ARGS=--output type=docker
+    volumes:
+      - db-data:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - caddy
+      - buildkit
+
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "2019:2019"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile
+      - caddy-data:/data
+
+  buildkit:
+    image: moby/buildkit
+    privileged: true
+    restart: unless-stopped
+    command: --addr tcp://0.0.0.0:1234 --oci-worker-snapshotter=overlayfs
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      
+volumes:
+  db-data:
+  caddy-data:

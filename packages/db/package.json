@@ -1,0 +1,20 @@
+{
+  "name": "@hangar/db",
+  "version": "0.0.0",
+  "private": true,
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc --project tsconfig.json && cpx src/**/*.sql dist"
+  },
+  "dependencies": {
+    "@hangar/types": "workspace:^",
+    "better-sqlite3": "^9.6.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.0",
+    "cpx2": "^7.0.0"
+  }
+}
