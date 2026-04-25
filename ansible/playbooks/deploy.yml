@@ -1,6 +1,6 @@
 ---
 - name: Deploy Hangar
-  hosts: local
+  hosts: hangar
   become: false
 
   vars:

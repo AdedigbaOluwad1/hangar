@@ -1,6 +1,6 @@
 ---
 - name: Setup Hangar
-  hosts: local
+  hosts: hangar
   become: false
 
   tasks:

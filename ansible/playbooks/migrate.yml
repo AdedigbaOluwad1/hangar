@@ -1,6 +1,6 @@
 ---
 - name: Run database migrations
-  hosts: local
+  hosts: hangar
   become: false
 
   vars:

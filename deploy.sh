@@ -26,16 +26,13 @@ MODE="${HANGAR_MODE:-local}"
 if [ "$MODE" = "remote" ]; then
   echo "🌍 Remote mode — provisioning server with Terraform..."
 
-  # init terraform
   cd "$TERRAFORM_DIR"
   terraform init
 
-  # plan
   terraform plan \
     -var="hetzner_token=$HETZNER_TOKEN" \
     -var="ssh_key_name=$HETZNER_SSH_KEY_NAME"
 
-  # apply
   terraform apply \
     -var="hetzner_token=$HETZNER_TOKEN" \
     -var="ssh_key_name=$HETZNER_SSH_KEY_NAME" \
@@ -44,13 +41,11 @@ if [ "$MODE" = "remote" ]; then
   SERVER_IP=$(terraform output -raw server_ip)
   cd "$SCRIPT_DIR"
 
-  # wait for SSH
   echo "⏳ Waiting for SSH on $SERVER_IP..."
   until ssh -o StrictHostKeyChecking=no root@$SERVER_IP "echo ready" 2>/dev/null; do
     sleep 5
   done
 
-  # generate remote inventory
   cat > "$ANSIBLE_DIR/inventory.ini" << EOF
 [hangar]
 $SERVER_IP ansible_user=root
@@ -59,7 +54,6 @@ EOF
 else
   echo "💻 Local mode — deploying to localhost..."
 
-  # use local inventory
   cat > "$ANSIBLE_DIR/inventory.ini" << 'EOF'
 [hangar]
 localhost ansible_connection=local
@@ -67,11 +61,9 @@ EOF
 
 fi
 
-# 1. setup machine
 echo "⚙️  Running setup..."
 ansible-playbook -i "$ANSIBLE_DIR/inventory.ini" "$ANSIBLE_DIR/playbooks/setup.yml"
 
-# 2. deploy app
 echo "🚢 Deploying..."
 ansible-playbook -i "$ANSIBLE_DIR/inventory.ini" "$ANSIBLE_DIR/playbooks/deploy.yml"
 
