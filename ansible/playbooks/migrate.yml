@@ -1,0 +1,19 @@
+---
+- name: Run database migrations
+  hosts: local
+  become: false
+
+  vars:
+    hangar_dir: "{{ ansible_env.HOME }}/documents/hangar"
+
+  tasks:
+    - name: Run Prisma migrations
+      shell: docker compose exec api sh -c "cd /app/packages/db && npx prisma migrate
+        deploy"
+      args:
+        chdir: "{{ hangar_dir }}"
+      register: migrate_result
+
+    - name: Show migration output
+      debug:
+        msg: "{{ migrate_result.stdout_lines }}"

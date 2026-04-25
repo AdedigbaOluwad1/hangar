@@ -1,0 +1,69 @@
+---
+- name: Deploy Hangar
+  hosts: local
+  become: false
+
+  vars:
+    hangar_dir: "{{ ansible_env.HOME }}/documents/hangar"
+    repo_url: "{{ ansible_env.HANGAR_REPO_URL }}"
+
+  tasks:
+    - name: Check if repo exists
+      stat:
+        path: "{{ hangar_dir }}"
+      register: repo_check
+
+    - name: Clone repo if not exists
+      git:
+        repo: "{{ repo_url }}"
+        dest: "{{ hangar_dir }}"
+        version: main
+      when: not repo_check.stat.exists
+
+    - name: Pull latest changes
+      git:
+        repo: "{{ repo_url }}"
+        dest: "{{ hangar_dir }}"
+        version: main
+        force: yes
+      when: repo_check.stat.exists
+
+    - name: Install dependencies
+      shell: |
+        export NVM_DIR="{{ ansible_env.HOME }}/.nvm"
+        source "$NVM_DIR/nvm.sh"
+        pnpm install --no-frozen-lockfile
+      args:
+        executable: /bin/bash
+        chdir: "{{ hangar_dir }}"
+
+    - name: Build and start services
+      shell: docker compose up -d --build
+      args:
+        chdir: "{{ hangar_dir }}"
+
+    - name: Wait for postgres to be healthy
+      shell: docker compose exec postgres pg_isready -U hangar
+      args:
+        chdir: "{{ hangar_dir }}"
+      register: pg_check
+      retries: 10
+      delay: 3
+      until: pg_check.rc == 0
+
+    - name: Run database migrations
+      shell: docker compose exec api sh -c "cd /app/packages/db && npx prisma migrate
+        deploy"
+      args:
+        chdir: "{{ hangar_dir }}"
+
+    - name: Check services are running
+      shell: docker compose ps
+      args:
+        chdir: "{{ hangar_dir }}"
+      register: services
+      changed_when: false
+
+    - name: Show running services
+      debug:
+        msg: "{{ services.stdout_lines }}"

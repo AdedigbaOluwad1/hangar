@@ -1,0 +1,157 @@
+---
+- name: Setup Hangar
+  hosts: local
+  become: false
+
+  tasks:
+    - name: Check if git is installed
+      command: git --version
+      register: git_check
+      ignore_errors: true
+      changed_when: false
+
+    - name: Check if curl is installed
+      command: curl --version
+      register: curl_check
+      ignore_errors: true
+      changed_when: false
+
+    - name: Install base dependencies
+      become: true
+      apt:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - git
+        - curl
+      when: >
+        (item == 'git' and git_check.rc != 0) or (item == 'curl' and
+        curl_check.rc != 0)
+
+    - name: Check if Docker is installed
+      command: docker --version
+      register: docker_check
+      ignore_errors: true
+      changed_when: false
+
+    - name: Install Docker
+      become: true
+      block:
+        - name: Add Docker GPG key
+          shell: |
+            curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+          args:
+            creates: /etc/apt/keyrings/docker.gpg
+
+        - name: Add Docker repository
+          shell: |
+            echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+        - name: Install Docker packages
+          apt:
+            name:
+              - docker-ce
+              - docker-ce-cli
+              - containerd.io
+              - docker-compose-plugin
+            update_cache: yes
+            state: present
+      when: docker_check.rc != 0
+
+    - name: Add user to docker group
+      become: true
+      user:
+        name: "{{ ansible_user_id }}"
+        groups: docker
+        append: yes
+
+    - name: Ensure Docker is running
+      become: true
+      service:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Check if NVM is installed
+      stat:
+        path: "{{ ansible_env.HOME }}/.nvm/nvm.sh"
+      register: nvm_check
+
+    - name: Install NVM
+      shell: |
+        curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+      args:
+        creates: "{{ ansible_env.HOME }}/.nvm/nvm.sh"
+      when: not nvm_check.stat.exists
+
+    - name: Check if Node.js is installed via NVM
+      stat:
+        path: "{{ ansible_env.HOME }}/.nvm/alias/default"
+      register: node_check
+
+    - name: Install Node.js LTS via NVM
+      shell: |
+        export NVM_DIR="{{ ansible_env.HOME }}/.nvm"
+        source "$NVM_DIR/nvm.sh"
+        nvm install --lts
+        nvm alias default lts/*
+      args:
+        executable: /bin/bash
+      when: not node_check.stat.exists
+
+    - name: Check if pnpm is installed
+      shell: |
+        export NVM_DIR="{{ ansible_env.HOME }}/.nvm"
+        source "$NVM_DIR/nvm.sh"
+        command -v pnpm
+      args:
+        executable: /bin/bash
+      register: pnpm_check
+      ignore_errors: true
+      changed_when: false
+
+    - name: Install pnpm globally
+      shell: |
+        export NVM_DIR="{{ ansible_env.HOME }}/.nvm"
+        source "$NVM_DIR/nvm.sh"
+        npm install -g pnpm
+      args:
+        executable: /bin/bash
+      when: pnpm_check.rc != 0
+
+    - name: Check if tsx is installed
+      shell: |
+        export NVM_DIR="{{ ansible_env.HOME }}/.nvm"
+        source "$NVM_DIR/nvm.sh"
+        command -v tsx
+      args:
+        executable: /bin/bash
+      register: tsx_check
+      ignore_errors: true
+      changed_when: false
+
+    - name: Install tsx globally
+      shell: |
+        export NVM_DIR="{{ ansible_env.HOME }}/.nvm"
+        source "$NVM_DIR/nvm.sh"
+        npm install -g tsx
+      args:
+        executable: /bin/bash
+      when: tsx_check.rc != 0
+
+    - name: Print installed versions
+      shell: |
+        export NVM_DIR="{{ ansible_env.HOME }}/.nvm"
+        source "$NVM_DIR/nvm.sh"
+        echo "Docker: $(docker --version)"
+        echo "Node.js: $(node --version)"
+        echo "pnpm: $(pnpm --version)"
+        echo "tsx: $(tsx --version)"
+      args:
+        executable: /bin/bash
+      register: versions
+      changed_when: false
+
+    - name: Show versions
+      debug:
+        msg: "{{ versions.stdout_lines }}"
