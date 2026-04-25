@@ -15,12 +15,16 @@
     "@hangar/db": "workspace:^",
     "@hangar/types": "workspace:^",
     "@hono/node-server": "^2.0.0",
+    "@types/tar": "^7.0.87",
     "dockerode": "^5.0.0",
     "execa": "^8.0.1",
     "hono": "^4.12.15",
-    "nanoid": "^5.1.9"
+    "nanoid": "^5.1.9",
+    "tar": "^7.5.13"
   },
   "devDependencies": {
+    "@types/dockerode": "^4.0.1",
+    "@types/node": "^22",
     "cross-env": "^10.1.0",
     "tsx": "^4.21.0"
   }

@@ -21,6 +21,7 @@ export async function runContainer(
 
 	const container = await docker.createContainer({
 		Image: imageTag,
+    Env: ['PORT=3000'],
 		ExposedPorts: { '3000/tcp': {} },
 		HostConfig: {
 			PortBindings: { '3000/tcp': [{ HostPort: String(port) }] },

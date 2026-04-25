@@ -1,15 +1,13 @@
 {
-  admin 0.0.0.0:2019
+  admin 0.0.0.0:2019 {
+    origins localhost:2019 caddy:2019 ""
+  }
 }
 
 :80 {
   handle /api/* {
     uri strip_prefix /api
     reverse_proxy api:3001
-  }
-
-  handle /deploys/* {
-    # dynamic routes injected at runtime by the api
   }
 
   handle {

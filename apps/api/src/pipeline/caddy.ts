@@ -2,7 +2,7 @@
 import { writeLog } from '@hangar/db';
 import { emitLog } from '../lib/emitter';
 
-const CADDY_ADMIN = process.env.CADDY_ADMIN_URL ?? 'http://localhost:2019';
+const CADDY_ADMIN = process.env.CADDY_ADMIN_URL ?? 'http://caddy:2019';
 
 export async function patchCaddy(
 	deploymentId: string,
