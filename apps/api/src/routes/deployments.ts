@@ -2,41 +2,41 @@
 import { Hono } from 'hono';
 import { nanoid } from 'nanoid';
 import { createDeployment, listDeployments, getDeployment } from '@hangar/db';
-import { runPipeline } from '../pipeline';
+import { deployQueue } from '../lib/queue';
 
 export const deployments = new Hono();
 
 // list
 deployments.get('/', async (c) => {
-	return c.json(await listDeployments());
+  return c.json(await listDeployments());
 });
 
 // get one
 deployments.get('/:id', async (c) => {
-	const deployment = await getDeployment(c.req.param('id'));
-	if (!deployment) return c.json({ error: 'Not found' }, 404);
-	return c.json(deployment);
+  const deployment = await getDeployment(c.req.param('id'));
+  if (!deployment) return c.json({ error: 'Not found' }, 404);
+  return c.json(deployment);
 });
 
 // create
 deployments.post('/', async (c) => {
-	const body = await c.req.json();
+  const body = await c.req.json();
 
-	if (!body.sourceType || !['git', 'zip'].includes(body.sourceType)) {
-		return c.json({ error: 'Invalid sourceType' }, 400);
-	}
-	if (body.sourceType === 'git' && !body.sourceUrl) {
-		return c.json({ error: 'sourceUrl required for git deploys' }, 400);
-	}
+  if (!body.sourceType || !['git', 'zip'].includes(body.sourceType)) {
+    return c.json({ error: 'Invalid sourceType' }, 400);
+  }
+  if (body.sourceType === 'git' && !body.sourceUrl) {
+    return c.json({ error: 'sourceUrl required for git deploys' }, 400);
+  }
 
-	const deployment = await createDeployment({
-		id: `dep_${nanoid(8)}`,
-		sourceType: body.sourceType,
-		sourceUrl: body.sourceUrl ?? null,
-	});
+  const deployment = await createDeployment({
+    id: `dep_${nanoid(8)}`,
+    sourceType: body.sourceType,
+    sourceUrl: body.sourceUrl ?? null,
+  });
 
-	// kick off pipeline async — don't await
-	runPipeline(deployment.id).catch(console.error);
+  // add to queue instead of fire-and-forget
+  await deployQueue.add('deploy', { deploymentId: deployment.id })
 
-	return c.json(deployment, 201);
+  return c.json(deployment, 201);
 });
