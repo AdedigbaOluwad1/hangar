@@ -7,13 +7,13 @@ import { runPipeline } from '../pipeline';
 export const deployments = new Hono();
 
 // list
-deployments.get('/', (c) => {
-	return c.json(listDeployments());
+deployments.get('/', async (c) => {
+	return c.json(await listDeployments());
 });
 
 // get one
-deployments.get('/:id', (c) => {
-	const deployment = getDeployment(c.req.param('id'));
+deployments.get('/:id', async (c) => {
+	const deployment = await getDeployment(c.req.param('id'));
 	if (!deployment) return c.json({ error: 'Not found' }, 404);
 	return c.json(deployment);
 });
@@ -29,7 +29,7 @@ deployments.post('/', async (c) => {
 		return c.json({ error: 'sourceUrl required for git deploys' }, 400);
 	}
 
-	const deployment = createDeployment({
+	const deployment = await createDeployment({
 		id: `dep_${nanoid(8)}`,
 		sourceType: body.sourceType,
 		sourceUrl: body.sourceUrl ?? null,

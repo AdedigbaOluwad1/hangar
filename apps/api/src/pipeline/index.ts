@@ -7,25 +7,25 @@ import { patchCaddy } from './caddy';
 import { emitDone, emitLog } from '../lib/emitter';
 
 export async function runPipeline(deploymentId: string) {
-	try {
-		updateDeployment(deploymentId, { status: 'building' });
+  try {
+    await updateDeployment(deploymentId, { status: 'building' });
 
-		const dir = await clone(deploymentId);
-		const imageTag = await build(deploymentId, dir);
-		updateDeployment(deploymentId, { imageTag });
+    const dir = await clone(deploymentId);
+    const imageTag = await build(deploymentId, dir);
+    await updateDeployment(deploymentId, { imageTag });
 
-		updateDeployment(deploymentId, { status: 'deploying' });
-		const { containerId, port } = await runContainer(deploymentId, imageTag);
-		updateDeployment(deploymentId, { containerId, port });
+    await updateDeployment(deploymentId, { status: 'deploying' });
+    const { containerId, port } = await runContainer(deploymentId, imageTag);
+    await updateDeployment(deploymentId, { containerId, port });
 
-		const liveUrl = await patchCaddy(deploymentId, port);
-		updateDeployment(deploymentId, { liveUrl, status: 'running' });
+    const liveUrl = await patchCaddy(deploymentId, port);
+    await updateDeployment(deploymentId, { liveUrl, status: 'running' });
 
-		emitLog(deploymentId, 'system', '✅ Deployment complete');
-	} catch (err: any) {
-		writeLog(deploymentId, 'system', `❌ Pipeline failed: ${err.message}`);
-		updateDeployment(deploymentId, { status: 'failed' });
-	} finally {
-		emitDone(deploymentId);
-	}
+    emitLog(deploymentId, 'system', '✅ Deployment complete');
+  } catch (err: any) {
+    await writeLog(deploymentId, 'system', `❌ Pipeline failed: ${err.message}`);
+    await updateDeployment(deploymentId, { status: 'failed' });
+  } finally {
+    emitDone(deploymentId);
+  }
 }

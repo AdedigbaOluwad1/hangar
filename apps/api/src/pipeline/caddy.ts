@@ -14,7 +14,7 @@ export async function patchCaddy(
   deploymentId: string,
   port: number,
 ): Promise<string> {
-  writeLog(deploymentId, 'deploy', `🌐 Configuring Caddy route`);
+  await writeLog(deploymentId, 'deploy', `🌐 Configuring Caddy route`);
   emitLog(deploymentId, 'deploy', `🌐 Configuring Caddy route`);
 
   const route = {
@@ -59,7 +59,7 @@ export async function patchCaddy(
   }
 
   const liveUrl = `http://localhost/deploys/${deploymentId}`;
-  writeLog(deploymentId, 'deploy', `🔗 Live at ${liveUrl}`);
+  await writeLog(deploymentId, 'deploy', `🔗 Live at ${liveUrl}`);
   emitLog(deploymentId, 'deploy', `🔗 Live at ${liveUrl}`);
 
   return liveUrl;

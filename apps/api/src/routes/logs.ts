@@ -11,7 +11,7 @@ logs.get('/:id/logs', (c) => {
 
 	return streamSSE(c, async (stream) => {
 		// 1. replay history
-		const history = getLogs(id);
+		const history =  await getLogs(id);
 		for (const log of history) {
 			await stream.writeSSE({
 				event: 'log',
@@ -20,7 +20,7 @@ logs.get('/:id/logs', (c) => {
 		}
 
 		// 2. if still active, stream live
-		const deployment = getDeployment(id);
+		const deployment = await getDeployment(id);
 		const active = ['pending', 'building', 'deploying'];
 
 		if (!deployment || !active.includes(deployment.status)) {

@@ -1,0 +1,34 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Deployment {
+  id          String   @id
+  status      String   @default("pending")
+  sourceType  String   @map("source_type")
+  sourceUrl   String?  @map("source_url")
+  imageTag    String?  @map("image_tag")
+  containerId String?  @map("container_id")
+  port        Int?
+  liveUrl     String?  @map("live_url")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  logs        Log[]
+
+  @@map("deployments")
+}
+
+model Log {
+  id           Int        @id @default(autoincrement())
+  deploymentId String     @map("deployment_id")
+  stream       String
+  line         String
+  createdAt    DateTime   @default(now()) @map("created_at")
+  deployment   Deployment @relation(fields: [deploymentId], references: [id])
+
+  @@map("logs")
+}

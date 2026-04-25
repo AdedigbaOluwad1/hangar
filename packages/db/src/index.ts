@@ -1,13 +1,10 @@
-import Database from 'better-sqlite3';
-import { readFileSync } from 'fs';
-import { join } from 'path';
+import { PrismaPg } from '@prisma/adapter-pg'
+import { PrismaClient } from '@prisma/client'
 
-const DB_PATH = process.env.DATABASE_PATH ?? join(process.cwd(), 'hangar.db');
-export const db = new Database(DB_PATH);
-export * from './queries';
+export const prisma = new PrismaClient({
+  adapter: new PrismaPg({
+    connectionString: process.env.DATABASE_URL,
+  })
+})
 
-db.pragma('journal_mode = WAL');
-db.pragma('foreign_keys = ON');
-
-const schema = readFileSync(join(__dirname, 'schema.sql'), 'utf-8');
-db.exec(schema);
+export * from './queries'

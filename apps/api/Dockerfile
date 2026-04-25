@@ -1,4 +1,5 @@
 FROM node:20-slim
+
 RUN apt-get update && apt-get install -y git curl tar && rm -rf /var/lib/apt/lists/*
 
 # install mise
@@ -8,8 +9,9 @@ ENV PATH="/root/.local/bin:$PATH"
 # install railpack
 RUN curl -sSL https://railpack.com/install.sh | sh
 
-# install pnpm
-RUN npm install -g pnpm
+# install pnpm and tsx globally
+RUN npm install -g pnpm tsx
+
 WORKDIR /app
 
 COPY pnpm-workspace.yaml ./
@@ -21,6 +23,12 @@ COPY packages/db ./packages/db
 COPY apps/api ./apps/api
 
 RUN pnpm install --no-frozen-lockfile
-WORKDIR /app/apps/api
+
+# generate prisma client inside container
+RUN cd /app/packages/db && npx prisma generate
+
 COPY --from=moby/buildkit:latest /usr/bin/buildctl /usr/bin/buildctl
-CMD ["pnpm", "dev"]
+
+WORKDIR /app/apps/api
+
+CMD ["sh", "-c", "cd /app/packages/db && npx prisma migrate deploy && cd /app/apps/api && tsx watch src/index.ts"]

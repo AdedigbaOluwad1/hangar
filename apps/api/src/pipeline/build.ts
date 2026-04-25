@@ -22,15 +22,15 @@ export async function build(
     '--plan-out', planPath,
   ])
 
-  prepareProc.stdout?.on('data', (chunk: Buffer) => {
+  prepareProc.stdout?.on('data', async (chunk: Buffer) => {
     for (const line of chunk.toString().split('\n').filter(Boolean)) {
-      writeLog(deploymentId, 'build', line);
+      await writeLog(deploymentId, 'build', line);
       emitLog(deploymentId, 'build', line);
     }
   })
-  prepareProc.stderr?.on('data', (chunk: Buffer) => {
+  prepareProc.stderr?.on('data', async (chunk: Buffer) => {
     for (const line of chunk.toString().split('\n').filter(Boolean)) {
-      writeLog(deploymentId, 'build', line);
+      await writeLog(deploymentId, 'build', line);
       emitLog(deploymentId, 'build', line);
     }
   })
@@ -53,9 +53,9 @@ export async function build(
 
   // pipe stdout (the image tarball) to docker load via dockerode
   // collect stderr for logs
-  buildProc.stderr?.on('data', (chunk: Buffer) => {
+  buildProc.stderr?.on('data', async (chunk: Buffer) => {
     for (const line of chunk.toString().split('\n').filter(Boolean)) {
-      writeLog(deploymentId, 'build', line);
+      await writeLog(deploymentId, 'build', line);
       emitLog(deploymentId, 'build', line);
     }
   })
