@@ -36,3 +36,24 @@ yarn-error.log*
 # Misc
 .DS_Store
 *.pem
+
+# Database
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+hangar.db
+
+# Docker
+docker-compose.override.yml
+
+# Prisma
+packages/db/prisma/migrations/**/migration_lock.toml
+
+# Temp files
+tmp/
+*.tar
+*.tar.gz
+
+# OS
+Thumbs.db

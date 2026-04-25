@@ -27,6 +27,8 @@ services:
         condition: service_started
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_started
     extra_hosts:
       - "host-gateway:172.30.186.74"
 
@@ -45,7 +47,6 @@ services:
     restart: unless-stopped
     command: --addr tcp://0.0.0.0:1234 --oci-worker-snapshotter=overlayfs
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
       - buildkit-cache:/var/lib/buildkit
 
   postgres:
@@ -54,8 +55,6 @@ services:
       POSTGRES_DB: hangar
       POSTGRES_USER: hangar
       POSTGRES_PASSWORD: hangar
-    ports:
-      - "5432:5432"
     volumes:
       - pg-data:/var/lib/postgresql/data
     healthcheck:
@@ -74,4 +73,3 @@ volumes:
   buildkit-cache:
   pg-data:
   redis-data:
-

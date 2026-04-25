@@ -30,7 +30,7 @@ deployments.post('/', async (c) => {
   }
 
   const deployment = await createDeployment({
-    id: `dep_${nanoid(8)}`,
+    id: `dep-${nanoid(8).toLowerCase().replace(/[^a-z0-9-]/g, '')}`,
     sourceType: body.sourceType,
     sourceUrl: body.sourceUrl ?? null,
   });

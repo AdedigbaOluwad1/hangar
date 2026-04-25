@@ -5,12 +5,15 @@ const REDIS_URL = process.env.REDIS_URL ?? 'redis://localhost:6379'
 const pub = new Redis(REDIS_URL)
 const sub = new Redis(REDIS_URL)
 
-export function emitLog(deploymentId: string, stream: string, line: string) {
-  pub.publish(`log:${deploymentId}`, JSON.stringify({ stream, line }))
+pub.on('error', (err) => console.error('Redis pub error:', err))
+sub.on('error', (err) => console.error('Redis sub error:', err))
+
+export async function emitLog(deploymentId: string, stream: string, line: string) {
+  await pub.publish(`log:${deploymentId}`, JSON.stringify({ stream, line }))
 }
 
-export function emitDone(deploymentId: string) {
-  pub.publish(`done:${deploymentId}`, '1')
+export async function emitDone(deploymentId: string) {
+  await pub.publish(`done:${deploymentId}`, '1')
 }
 
 export function subscribeToLogs(
