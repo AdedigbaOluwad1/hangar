@@ -26,6 +26,8 @@ services:
     depends_on:
       - caddy
       - buildkit
+    extra_hosts:
+      - "host-gateway:172.30.186.74"
 
   caddy:
     image: caddy:2-alpine
