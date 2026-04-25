@@ -22,4 +22,5 @@ COPY apps/api ./apps/api
 
 RUN pnpm install --no-frozen-lockfile
 WORKDIR /app/apps/api
+COPY --from=moby/buildkit:latest /usr/bin/buildctl /usr/bin/buildctl
 CMD ["pnpm", "dev"]

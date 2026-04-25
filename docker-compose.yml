@@ -45,7 +45,9 @@ services:
     command: --addr tcp://0.0.0.0:1234 --oci-worker-snapshotter=overlayfs
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - buildkit-cache:/var/lib/buildkit  # ← persist build cache
       
 volumes:
   db-data:
   caddy-data:
+  buildkit-cache:

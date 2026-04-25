@@ -1,88 +1,80 @@
 import { execa } from 'execa';
-import { writeFile } from 'fs/promises';
-import { join } from 'path';
 import { writeLog } from '@hangar/db';
 import { emitLog } from '../lib/emitter';
-import Dockerode from 'dockerode';
-
-const docker = new Dockerode({ socketPath: '/var/run/docker.sock' });
+import { join } from 'path';
 
 export async function build(
-	deploymentId: string,
-	dir: string,
+  deploymentId: string,
+  dir: string,
 ): Promise<string> {
-	const imageTag = `hangar-${deploymentId.toLowerCase().replace(/[^a-z0-9]/g, '')}:latest`;
+  const imageTag = `hangar-${deploymentId}:latest`.toLowerCase();
+  await writeLog(deploymentId, 'build', `🔨 Building image ${imageTag}`);
+  emitLog(deploymentId, 'build', `🔨 Building image ${imageTag}`);
 
-	await writeLog(deploymentId, 'build', `🔨 Building image ${imageTag}`);
-	emitLog(deploymentId, 'build', `🔨 Building image ${imageTag}`);
+  const planPath = join(dir, 'railpack-plan.json')
 
-	// get railpack plan
-	const { stdout } = await execa('railpack', ['plan', dir]);
-	const plan = JSON.parse(stdout);
+  // step 1 — prepare: detect runtime, generate build plan
+  await writeLog(deploymentId, 'build', `📋 Analysing app...`);
+  emitLog(deploymentId, 'build', `📋 Analysing app...`);
 
-	const startCommand = plan.deploy?.startCommand ?? 'node index.js';
-	const nodeVersion = '20';
-	const vars = plan.deploy?.variables ?? {};
+  const prepareProc = execa('railpack', [
+    'prepare', dir,
+    '--plan-out', planPath,
+  ])
 
-	const envLines = Object.entries(vars)
-		.map(([k, v]) => `ENV ${k}="${v}"`)
-		.join('\n');
+  prepareProc.stdout?.on('data', (chunk: Buffer) => {
+    for (const line of chunk.toString().split('\n').filter(Boolean)) {
+      writeLog(deploymentId, 'build', line);
+      emitLog(deploymentId, 'build', line);
+    }
+  })
+  prepareProc.stderr?.on('data', (chunk: Buffer) => {
+    for (const line of chunk.toString().split('\n').filter(Boolean)) {
+      writeLog(deploymentId, 'build', line);
+      emitLog(deploymentId, 'build', line);
+    }
+  })
 
-	// generate dockerfile
-	const dockerfile = `
-    FROM node:${nodeVersion}-alpine
-    WORKDIR /app
-    COPY package*.json yarn.lock* ./
-    RUN yarn install --frozen-lockfile --production=false
-    COPY . .
-    ${envLines}
-    EXPOSE 3000
-    CMD ${JSON.stringify(startCommand.split(' '))}
-  `.trim();
+  await prepareProc
 
-	await writeLog(deploymentId, 'build', `📋 Generated Dockerfile`);
-	emitLog(deploymentId, 'build', `📋 Generated Dockerfile`);
+  // step 2 — build with buildctl directly (no docker CLI needed)
+  await writeLog(deploymentId, 'build', `🐳 Building image...`);
+  emitLog(deploymentId, 'build', `🐳 Building image...`);
 
-	// write dockerfile into the cloned dir
-	await writeFile(join(dir, 'Dockerfile'), dockerfile);
+  const buildProc = execa('buildctl', [
+    '--addr', 'tcp://buildkit:1234',
+    'build',
+    '--local', `context=${dir}`,
+    '--local', `dockerfile=${dir}`,
+    '--frontend=gateway.v0',
+    '--opt', 'source=ghcr.io/railwayapp/railpack-frontend',
+    '--output', `type=docker,name=${imageTag}`,
+  ])
 
-	// create tar of the build context
-	const contextTarPath = `${dir}.tar`;
+  // pipe stdout (the image tarball) to docker load via dockerode
+  // collect stderr for logs
+  buildProc.stderr?.on('data', (chunk: Buffer) => {
+    for (const line of chunk.toString().split('\n').filter(Boolean)) {
+      writeLog(deploymentId, 'build', line);
+      emitLog(deploymentId, 'build', line);
+    }
+  })
 
-	// write .dockerignore
-	await writeFile(
-		join(dir, '.dockerignore'),
-		`node_modules
-      .git
-      .yarn
-      *.log
-    `.trim(),
-	);
+  // load image from buildctl stdout
+  const Dockerode = (await import('dockerode')).default
+  const docker = new Dockerode({ socketPath: '/var/run/docker.sock' })
 
-	await execa('tar', ['-cf', contextTarPath, '-C', dir, '.']);
+  await new Promise<void>((resolve, reject) => {
+    docker.loadImage(buildProc.stdout!, (err: Error | null) => {
+      if (err) reject(err)
+      else resolve()
+    })
+  })
 
-	await writeLog(deploymentId, 'build', `🐳 Building Docker image...`);
-	emitLog(deploymentId, 'build', `🐳 Building Docker image...`);
+  await buildProc
 
-	// build with dockerode — no BuildKit tarball issues
-	const buildStream = await docker.buildImage(contextTarPath, { t: imageTag });
+  await writeLog(deploymentId, 'build', `✅ Image built: ${imageTag}`);
+  emitLog(deploymentId, 'build', `✅ Image built: ${imageTag}`);
 
-	await new Promise<void>((resolve, reject) => {
-		docker.modem.followProgress(
-			buildStream,
-			(err: Error | null) => (err ? reject(err) : resolve()),
-			(event: any) => {
-				const line = event.stream ?? event.status ?? '';
-				if (line.trim()) {
-					writeLog(deploymentId, 'build', line.trim());
-					emitLog(deploymentId, 'build', line.trim());
-				}
-			},
-		);
-	});
-
-	await writeLog(deploymentId, 'build', `✅ Image built: ${imageTag}`);
-	emitLog(deploymentId, 'build', `✅ Image built: ${imageTag}`);
-
-	return imageTag;
+  return imageTag;
 }
