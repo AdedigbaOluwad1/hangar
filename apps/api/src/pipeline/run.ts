@@ -1,36 +1,18 @@
-// apps/api/src/pipeline/run.ts
-import Dockerode from 'dockerode'
 import { writeLog } from '@hangar/db'
 import { emitLog } from '../lib/emitter'
-import { getFreePort } from '../lib/port'
-
-const docker = new Dockerode({ socketPath: '/var/run/docker.sock' })
+import { submitJob } from '../lib/nomad'
 
 export async function runContainer(
   deploymentId: string,
   imageTag: string,
-): Promise<{ containerId: string; port: number }> {
-  const port = await getFreePort()
+): Promise<{ containerId: string }> {
+  await writeLog(deploymentId, 'deploy', `🐳 Submitting Nomad job`)
+  await emitLog(deploymentId, 'deploy', `🐳 Submitting Nomad job`)
 
-  await writeLog(deploymentId, 'deploy', `🐳 Starting container on port ${port}`)
-  await emitLog(deploymentId, 'deploy', `🐳 Starting container on port ${port}`)
+  const result = await submitJob(deploymentId, imageTag)
 
-  const container = await docker.createContainer({
-    Image: imageTag,
-    Env: ['PORT=3000'],
-    ExposedPorts: { '3000/tcp': {} },
-    HostConfig: {
-      PortBindings: { '3000/tcp': [{ HostPort: String(port) }] },
-      RestartPolicy: { Name: 'unless-stopped' },
-    },
-    Labels: { 'hangar.deployment': deploymentId },
-  })
+  await writeLog(deploymentId, 'deploy', `✅ Nomad job submitted: ${result.EvalID}`)
+  await emitLog(deploymentId, 'deploy', `✅ Nomad job submitted: ${result.EvalID}`)
 
-  await container.start()
-
-  const short = container.id.slice(0, 12)
-  await writeLog(deploymentId, 'deploy', `✅ Container ${short} running`)
-  await emitLog(deploymentId, 'deploy', `✅ Container ${short} running`)
-
-  return { containerId: container.id, port }
+  return { containerId: result.EvalID }
 }

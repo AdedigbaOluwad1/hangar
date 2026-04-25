@@ -18,6 +18,8 @@ services:
       - DOCKER_HOST=unix:///var/run/docker.sock
       - DATABASE_URL=postgresql://hangar:hangar@postgres:5432/hangar
       - REDIS_URL=redis://redis:6379
+      - NOMAD_ADDR=http://host.docker.internal:4646
+      - CONSUL_ADDR=http://host.docker.internal:8500
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
@@ -31,6 +33,7 @@ services:
         condition: service_started
     extra_hosts:
       - "host-gateway:172.30.186.74"
+      - "host.docker.internal:host-gateway"
 
   caddy:
     image: caddy:2-alpine

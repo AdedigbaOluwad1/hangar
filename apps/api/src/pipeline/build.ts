@@ -63,6 +63,19 @@ export async function build(
     })
   })
 
+  // tag for local registry
+  const registryTag = `localhost:5000/${imageTag}`
+  await docker.getImage(imageTag).tag({ repo: `localhost:5000/hangar-${deploymentId}`, tag: 'latest' })
+
+  // push to local registry
+  const pushStream = await docker.getImage(registryTag).push({})
+  await new Promise<void>((resolve, reject) => {
+    docker.modem.followProgress(pushStream, (err: Error | null) => {
+      if (err) reject(err)
+      else resolve()
+    })
+  })
+
   await buildProc
 
   await writeLog(deploymentId, 'build', `✅ Image built: ${imageTag}`)

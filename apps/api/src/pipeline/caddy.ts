@@ -1,21 +1,37 @@
-import { execSync } from 'child_process';
 import { writeLog } from '@hangar/db';
 import { emitLog } from '../lib/emitter';
 
 const CADDY_ADMIN = process.env.CADDY_ADMIN_URL ?? 'http://caddy:2019';
+const CONSUL_ADDR = process.env.CONSUL_ADDR ?? 'http://127.0.0.1:8500';
 
-function getHostIp(): string {
-  return execSync("getent hosts host-gateway | awk '{print $1}'")
-    .toString()
-    .trim();
+async function getServiceAddress(deploymentId: string): Promise<string> {
+  const res = await fetch(
+    `${CONSUL_ADDR}/v1/health/service/hangar-${deploymentId}?passing=true`
+  );
+  const services = await res.json();
+  if (!services.length) throw new Error(`Service hangar-${deploymentId} not found in Consul`);
+  const { Address, Port } = services[0].Service;
+  return `${Address}:${Port}`;
+}
+
+async function waitForService(deploymentId: string, retries = 20, delay = 3000): Promise<string> {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const address = await getServiceAddress(deploymentId);
+      if (address) return address;
+    } catch { }
+    await new Promise(r => setTimeout(r, delay));
+  }
+  throw new Error(`Service hangar-${deploymentId} never became healthy`);
 }
 
 export async function patchCaddy(
   deploymentId: string,
-  port: number,
 ): Promise<string> {
   await writeLog(deploymentId, 'deploy', `🌐 Configuring Caddy route`);
   emitLog(deploymentId, 'deploy', `🌐 Configuring Caddy route`);
+
+  const address = await waitForService(deploymentId);
 
   const route = {
     match: [{ path: [`/deploys/${deploymentId}`, `/deploys/${deploymentId}/*`] }],
@@ -31,7 +47,7 @@ export async function patchCaddy(
               },
               {
                 handler: 'reverse_proxy',
-                upstreams: [{ dial: `${getHostIp()}:${port}` }],
+                upstreams: [{ dial: address }],
               },
             ],
           },
@@ -61,6 +77,5 @@ export async function patchCaddy(
   const liveUrl = `http://localhost/deploys/${deploymentId}`;
   await writeLog(deploymentId, 'deploy', `🔗 Live at ${liveUrl}`);
   emitLog(deploymentId, 'deploy', `🔗 Live at ${liveUrl}`);
-
   return liveUrl;
 }

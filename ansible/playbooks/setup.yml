@@ -3,6 +3,9 @@
   hosts: hangar
   become: false
 
+  vars:
+    hangar_dir: "{{ ansible_env.HOME }}/documents/hangar"
+
   tasks:
     - name: Check if git is installed
       command: git --version
@@ -54,7 +57,7 @@
               - docker-ce-cli
               - containerd.io
               - docker-compose-plugin
-            update_cache: yes
+            update_cache: true
             state: present
       when: docker_check.rc != 0
 
@@ -63,14 +66,14 @@
       user:
         name: "{{ ansible_user_id }}"
         groups: docker
-        append: yes
+        append: true
 
     - name: Ensure Docker is running
       become: true
       service:
         name: docker
         state: started
-        enabled: yes
+        enabled: true
 
     - name: Check if NVM is installed
       stat:
@@ -139,6 +142,52 @@
         executable: /bin/bash
       when: tsx_check.rc != 0
 
+    - name: Check if Nomad is installed
+      command: nomad version
+      register: nomad_check
+      ignore_errors: true
+      changed_when: false
+
+    - name: Install Nomad
+      become: true
+      block:
+        - name: Add HashiCorp GPG key
+          shell: |
+            curl -fsSL https://apt.releases.hashicorp.com/gpg | gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+          args:
+            creates: /usr/share/keyrings/hashicorp-archive-keyring.gpg
+
+        - name: Add HashiCorp repository
+          shell: |
+            echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | tee /etc/apt/sources.list.d/hashicorp.list
+
+        - name: Install Nomad package
+          apt:
+            name: nomad
+            update_cache: true
+            state: present
+      when: nomad_check.rc != 0
+
+    - name: Copy Nomad config
+      become: true
+      copy:
+        src: "{{ hangar_dir }}/nomad/config/nomad.hcl"
+        dest: /etc/nomad.d/nomad.hcl
+
+    - name: Copy Nomad systemd service
+      become: true
+      copy:
+        src: "{{ hangar_dir }}/nomad/config/nomad.service"
+        dest: /etc/systemd/system/nomad.service
+
+    - name: Start Nomad
+      become: true
+      systemd:
+        name: nomad
+        state: started
+        enabled: true
+        daemon_reload: true
+
     - name: Print installed versions
       shell: |
         export NVM_DIR="{{ ansible_env.HOME }}/.nvm"
@@ -147,6 +196,7 @@
         echo "Node.js: $(node --version)"
         echo "pnpm: $(pnpm --version)"
         echo "tsx: $(tsx --version)"
+        echo "Nomad: $(nomad version)"
       args:
         executable: /bin/bash
       register: versions
