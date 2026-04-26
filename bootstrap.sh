@@ -50,6 +50,10 @@ else
   git clone "$REPO_URL" "$DEST"
 fi
 
+# install ansible collections
+echo "📦 Installing Ansible collections..."
+ansible-galaxy collection install -r ansible/requirements.yml
+
 # hand off to deploy.sh
 cd "$DEST"
 chmod +x deploy.sh

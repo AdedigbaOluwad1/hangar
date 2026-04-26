@@ -20,19 +20,29 @@ if [ -f "$SCRIPT_DIR/.env" ]; then
   set +a
 fi
 
+# handle vault password
+if [ -z "$ANSIBLE_VAULT_PASSWORD" ] && [ ! -f "$SCRIPT_DIR/.vault-pass" ]; then
+  echo "🔐 Enter Ansible Vault password:"
+  read -s ANSIBLE_VAULT_PASSWORD
+  echo
+fi
+
+if [ -n "$ANSIBLE_VAULT_PASSWORD" ]; then
+  echo "$ANSIBLE_VAULT_PASSWORD" > "$SCRIPT_DIR/.vault-pass"
+  chmod 600 "$SCRIPT_DIR/.vault-pass"
+  trap "rm -f $SCRIPT_DIR/.vault-pass" EXIT
+fi
+
 # detect mode
 MODE="${HANGAR_MODE:-local}"
 
 if [ "$MODE" = "remote" ]; then
   echo "🌍 Remote mode — provisioning server with Terraform..."
-
   cd "$TERRAFORM_DIR"
   terraform init
-
   terraform plan \
     -var="hetzner_token=$HETZNER_TOKEN" \
     -var="ssh_key_name=$HETZNER_SSH_KEY_NAME"
-
   terraform apply \
     -var="hetzner_token=$HETZNER_TOKEN" \
     -var="ssh_key_name=$HETZNER_SSH_KEY_NAME" \
@@ -53,19 +63,29 @@ EOF
 
 else
   echo "💻 Local mode — deploying to localhost..."
-
   cat > "$ANSIBLE_DIR/inventory.ini" << 'EOF'
 [hangar]
 localhost ansible_connection=local
 EOF
-
 fi
 
 echo "⚙️  Running setup..."
-ansible-playbook -i "$ANSIBLE_DIR/inventory.ini" "$ANSIBLE_DIR/playbooks/setup.yml"
+ansible-playbook \
+  -i "$ANSIBLE_DIR/inventory.ini" \
+  "$ANSIBLE_DIR/playbooks/setup.yml" \
+  --vault-password-file "$SCRIPT_DIR/.vault-pass"
 
+echo "🔐 Initializing Vault secrets..."
+ansible-playbook \
+  -i "$ANSIBLE_DIR/inventory.ini" \
+  "$ANSIBLE_DIR/playbooks/vault-init.yml" \
+  --vault-password-file "$SCRIPT_DIR/.vault-pass"
+  
 echo "🚢 Deploying..."
-ansible-playbook -i "$ANSIBLE_DIR/inventory.ini" "$ANSIBLE_DIR/playbooks/deploy.yml"
+ansible-playbook \
+  -i "$ANSIBLE_DIR/inventory.ini" \
+  "$ANSIBLE_DIR/playbooks/deploy.yml" \
+  --vault-password-file "$SCRIPT_DIR/.vault-pass"
 
 echo "✅ Hangar is live!"
 if [ "$MODE" = "remote" ]; then

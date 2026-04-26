@@ -1,0 +1,69 @@
+---
+- name: Initialize Vault Secrets
+  hosts: hangar
+  become: false
+
+  vars:
+    hangar_dir: "{{ ansible_env.HOME }}/documents/hangar"
+
+  tasks:
+    - name: Wait for Vault to be unsealed
+      shell: |
+        export VAULT_ADDR=https://127.0.0.1:8200
+        export VAULT_SKIP_VERIFY=true
+        vault status | grep "Sealed.*false"
+      register: vault_sealed
+      retries: 10
+      delay: 5
+      until: vault_sealed.rc == 0
+      changed_when: false
+
+    - name: Enable KV secrets engine
+      shell: |
+        export VAULT_ADDR=https://127.0.0.1:8200
+        export VAULT_SKIP_VERIFY=true
+        export VAULT_TOKEN={{ vault_root_token }}
+        vault secrets enable -path=hangar kv-v2 || true
+      changed_when: false
+
+    - name: Seed hangar config secrets
+      shell: |
+        export VAULT_ADDR=https://127.0.0.1:8200
+        export VAULT_SKIP_VERIFY=true
+        export VAULT_TOKEN={{ vault_root_token }}
+        vault kv put hangar/config \
+          database_url="{{ database_url }}" \
+          redis_url="{{ redis_url }}" \
+          nomad_addr="{{ nomad_addr }}" \
+          consul_addr="{{ consul_addr }}" \
+          caddy_admin_url="{{ caddy_admin_url }}" \
+          buildkit_host="{{ buildkit_host }}"
+      changed_when: false
+
+    - name: Create hangar-api policy
+      shell: |
+        export VAULT_ADDR=https://127.0.0.1:8200
+        export VAULT_SKIP_VERIFY=true
+        export VAULT_TOKEN={{ vault_root_token }}
+        vault policy write hangar-api - <<EOF
+        path "hangar/data/*" {
+          capabilities = ["read"]
+        }
+        path "hangar/data/deployments/*" {
+          capabilities = ["create", "update", "read", "delete"]
+        }
+        EOF
+      changed_when: false
+
+    - name: Create hangar-api token
+      shell: |
+        export VAULT_ADDR=https://127.0.0.1:8200
+        export VAULT_SKIP_VERIFY=true
+        export VAULT_TOKEN={{ vault_root_token }}
+        vault token create -policy=hangar-api -display-name=hangar-api -format=json | jq -r '.auth.client_token'
+      register: api_token
+      changed_when: false
+
+    - name: Show API token
+      debug:
+        msg: "VAULT_TOKEN for hangar-api: {{ api_token.stdout }}"

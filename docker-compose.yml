@@ -22,8 +22,9 @@ services:
       # - NOMAD_ADDR=http://host.docker.internal:4646
       # - CONSUL_ADDR=http://host.docker.internal:8500
 
-      - VAULT_ADDR=http://host.docker.internal:8200
+      - VAULT_ADDR=https://host.docker.internal:8200
       - VAULT_TOKEN=${VAULT_TOKEN}
+      - VAULT_SKIP_VERIFY=true
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     depends_on:

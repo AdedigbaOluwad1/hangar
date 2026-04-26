@@ -35,5 +35,7 @@ plugin "docker" {
 }
 
 consul {
-  address = "127.0.0.1:8500"
+  address    = "127.0.0.1:8500"
+  scheme     = "http"
+  verify_ssl = false
 }

@@ -160,6 +160,8 @@
       args:
         creates: /etc/apt/sources.list.d/hashicorp.list
 
+    # ── Nomad ────────────────────────────────────────────────────────────────
+
     - name: Check if Nomad is installed
       command: nomad version
       register: nomad_check
@@ -203,6 +205,8 @@
         enabled: true
         daemon_reload: true
 
+    # ── Consul ───────────────────────────────────────────────────────────────
+
     - name: Check if Consul is installed
       command: consul version
       register: consul_check
@@ -226,6 +230,49 @@
         group: "{{ ansible_user_id }}"
         mode: "0755"
 
+    - name: Create Consul TLS directory
+      become: true
+      file:
+        path: /opt/consul/tls
+        state: directory
+        mode: "0700"
+        owner: root
+        group: root
+
+    - name: Generate Consul TLS private key
+      become: true
+      community.crypto.openssl_privatekey:
+        path: /opt/consul/tls/consul.key
+        size: 4096
+        mode: "0600"
+        owner: root
+        group: root
+
+    - name: Generate Consul TLS CSR
+      become: true
+      community.crypto.openssl_csr:
+        path: /opt/consul/tls/consul.csr
+        privatekey_path: /opt/consul/tls/consul.key
+        common_name: consul.hangar.local
+        subject_alt_name:
+          - IP:127.0.0.1
+          - DNS:localhost
+          - DNS:consul.hangar.local
+          # - DNS:yourdomain.com  ← uncomment for Let's Encrypt
+
+    - name: Generate Consul TLS certificate
+      become: true
+      community.crypto.x509_certificate:
+        path: /opt/consul/tls/consul.crt
+        privatekey_path: /opt/consul/tls/consul.key
+        csr_path: /opt/consul/tls/consul.csr
+        provider: selfsigned
+        selfsigned_digest: sha256
+        selfsigned_not_after: "+365d"
+        mode: "0644"
+        owner: root
+        group: root
+
     - name: Copy Consul config
       become: true
       copy:
@@ -245,6 +292,8 @@
         state: started
         enabled: true
         daemon_reload: true
+
+    # ── Vault ────────────────────────────────────────────────────────────────
 
     - name: Check if Vault is installed
       command: vault version
@@ -268,6 +317,49 @@
         owner: "{{ ansible_user_id }}"
         group: "{{ ansible_user_id }}"
         mode: "0755"
+
+    - name: Create Vault TLS directory
+      become: true
+      file:
+        path: /opt/vault/tls
+        state: directory
+        mode: "0700"
+        owner: root
+        group: root
+
+    - name: Generate Vault TLS private key
+      become: true
+      community.crypto.openssl_privatekey:
+        path: /opt/vault/tls/vault.key
+        size: 4096
+        mode: "0600"
+        owner: root
+        group: root
+
+    - name: Generate Vault TLS CSR
+      become: true
+      community.crypto.openssl_csr:
+        path: /opt/vault/tls/vault.csr
+        privatekey_path: /opt/vault/tls/vault.key
+        common_name: vault.hangar.local
+        subject_alt_name:
+          - IP:127.0.0.1
+          - DNS:localhost
+          - DNS:vault.hangar.local
+          # - DNS:yourdomain.com  ← uncomment for Let's Encrypt
+
+    - name: Generate Vault TLS certificate
+      become: true
+      community.crypto.x509_certificate:
+        path: /opt/vault/tls/vault.crt
+        privatekey_path: /opt/vault/tls/vault.key
+        csr_path: /opt/vault/tls/vault.csr
+        provider: selfsigned
+        selfsigned_digest: sha256
+        selfsigned_not_after: "+365d"
+        mode: "0644"
+        owner: root
+        group: root
 
     - name: Copy Vault config
       become: true
@@ -322,6 +414,8 @@
         name: vault-unseal
         enabled: true
         daemon_reload: true
+
+    # ── Versions ─────────────────────────────────────────────────────────────
 
     - name: Print installed versions
       shell: |

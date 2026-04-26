@@ -16,7 +16,11 @@ async function getServiceAddress(deploymentId: string): Promise<string> {
   const CONSUL_ADDR = await getConsulAddr()
 
   const res = await fetch(
-    `${CONSUL_ADDR}/v1/health/service/hangar-${deploymentId}?passing=true`
+    `${CONSUL_ADDR}/v1/health/service/hangar-${deploymentId}?passing=true`,
+    {
+      // @ts-ignore
+      agent: new (require('https').Agent)({ rejectUnauthorized: false })
+    }
   );
   const services = await res.json();
   if (!services.length) throw new Error(`Service hangar-${deploymentId} not found in Consul`);
