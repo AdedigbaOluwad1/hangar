@@ -1,9 +1,17 @@
-const NOMAD_ADDR = process.env.NOMAD_ADDR ?? 'http://127.0.0.1:4646'
+import { getConfig } from "./config"
+
+async function getNomadAddr(): Promise<string> {
+  const config = await getConfig()
+  return config.nomad_addr ?? 'http://127.0.0.1:4646'
+}
+
 
 export async function submitJob(
   deploymentId: string,
   imageTag: string,
 ) {
+  const NOMAD_ADDR = await getNomadAddr()
+
   const job = {
     Job: {
       ID: `hangar-${deploymentId}`,
@@ -26,7 +34,7 @@ export async function submitJob(
               Name: 'web',
               Driver: 'docker',
               Config: {
-                image: `localhost:5000/${imageTag}`,
+                image: imageTag,
                 ports: ['http'],
               },
               Env: {
@@ -71,6 +79,8 @@ export async function submitJob(
 }
 
 export async function stopJob(deploymentId: string) {
+  const NOMAD_ADDR = await getNomadAddr()
+
   const res = await fetch(
     `${NOMAD_ADDR}/v1/job/hangar-${deploymentId}`,
     { method: 'DELETE' }
@@ -82,6 +92,8 @@ export async function stopJob(deploymentId: string) {
 }
 
 export async function getJobStatus(deploymentId: string) {
+  const NOMAD_ADDR = await getNomadAddr()
+
   const res = await fetch(
     `${NOMAD_ADDR}/v1/job/hangar-${deploymentId}/allocations`
   )

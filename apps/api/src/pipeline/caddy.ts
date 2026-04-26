@@ -1,10 +1,20 @@
 import { writeLog } from '@hangar/db';
 import { emitLog } from '../lib/emitter';
+import { getConfig } from '../lib/config';
 
-const CADDY_ADMIN = process.env.CADDY_ADMIN_URL ?? 'http://caddy:2019';
-const CONSUL_ADDR = process.env.CONSUL_ADDR ?? 'http://127.0.0.1:8500';
+async function getCaddyAdmin(): Promise<string> {
+  const config = await getConfig()
+  return config.caddy_admin_url ?? 'http://caddy:2019'
+}
+
+async function getConsulAddr(): Promise<string> {
+  const config = await getConfig()
+  return config.consul_addr ?? 'http://127.0.0.1:8500'
+}
 
 async function getServiceAddress(deploymentId: string): Promise<string> {
+  const CONSUL_ADDR = await getConsulAddr()
+
   const res = await fetch(
     `${CONSUL_ADDR}/v1/health/service/hangar-${deploymentId}?passing=true`
   );
@@ -28,6 +38,8 @@ async function waitForService(deploymentId: string, retries = 20, delay = 3000):
 export async function patchCaddy(
   deploymentId: string,
 ): Promise<string> {
+  const CADDY_ADMIN = await getCaddyAdmin()
+
   await writeLog(deploymentId, 'deploy', `🌐 Configuring Caddy route`);
   emitLog(deploymentId, 'deploy', `🌐 Configuring Caddy route`);
 

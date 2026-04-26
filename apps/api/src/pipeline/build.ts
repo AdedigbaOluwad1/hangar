@@ -81,5 +81,5 @@ export async function build(
   await writeLog(deploymentId, 'build', `✅ Image built: ${imageTag}`)
   await emitLog(deploymentId, 'build', `✅ Image built: ${imageTag}`)
 
-  return imageTag
+  return registryTag
 }
