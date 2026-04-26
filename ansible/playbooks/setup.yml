@@ -174,6 +174,15 @@
         state: present
       when: nomad_check.rc != 0
 
+    - name: Create Nomad data directory
+      become: true
+      file:
+        path: /opt/nomad/data
+        state: directory
+        owner: "{{ ansible_user_id }}"
+        group: "{{ ansible_user_id }}"
+        mode: "0755"
+
     - name: Copy Nomad config
       become: true
       copy:
@@ -183,8 +192,8 @@
     - name: Deploy Nomad systemd service
       become: true
       template:
-          src: nomad.service.j2
-          dest: /etc/systemd/system/nomad.service
+        src: nomad.service.j2
+        dest: /etc/systemd/system/nomad.service
 
     - name: Start Nomad
       become: true
@@ -208,6 +217,15 @@
         state: present
       when: consul_check.rc != 0
 
+    - name: Create Consul data directory
+      become: true
+      file:
+        path: /opt/consul/data
+        state: directory
+        owner: "{{ ansible_user_id }}"
+        group: "{{ ansible_user_id }}"
+        mode: "0755"
+
     - name: Copy Consul config
       become: true
       copy:
@@ -217,8 +235,8 @@
     - name: Deploy Consul systemd service
       become: true
       template:
-          src: consul.service.j2
-          dest: /etc/systemd/system/consul.service
+        src: consul.service.j2
+        dest: /etc/systemd/system/consul.service
 
     - name: Start Consul
       become: true
@@ -242,6 +260,15 @@
         state: present
       when: vault_check.rc != 0
 
+    - name: Create Vault data directory
+      become: true
+      file:
+        path: /opt/vault/data
+        state: directory
+        owner: "{{ ansible_user_id }}"
+        group: "{{ ansible_user_id }}"
+        mode: "0755"
+
     - name: Copy Vault config
       become: true
       copy:
@@ -251,8 +278,8 @@
     - name: Deploy Vault systemd service
       become: true
       template:
-          src: vault.service.j2
-          dest: /etc/systemd/system/vault.service
+        src: vault.service.j2
+        dest: /etc/systemd/system/vault.service
 
     - name: Start Vault
       become: true

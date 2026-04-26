@@ -1,4 +1,4 @@
-data_dir  = "/tmp/nomad/data"
+data_dir  = "/opt/nomad/data"
 log_level = "INFO"
 bind_addr = "0.0.0.0"
 
