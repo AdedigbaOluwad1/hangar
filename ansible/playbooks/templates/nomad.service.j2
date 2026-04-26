@@ -1,0 +1,16 @@
+[Unit]
+Description=HashiCorp Nomad
+Documentation=https://developer.hashicorp.com/nomad/docs
+Requires=network-online.target
+After=network-online.target consul.service
+
+[Service]
+ExecStart=/usr/bin/nomad agent -config={{ hangar_dir }}/nomad/config/nomad.hcl
+ExecReload=/bin/kill -HUP $MAINPID
+KillMode=process
+KillSignal=SIGINT
+Restart=on-failure
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

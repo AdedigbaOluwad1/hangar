@@ -1,0 +1,18 @@
+[Unit]
+Description=HashiCorp Vault
+Documentation=https://developer.hashicorp.com/vault/docs
+Requires=network-online.target
+After=network-online.target consul.service
+
+[Service]
+ExecStart=/usr/bin/vault server -config={{ hangar_dir }}/vault/config/vault.hcl
+ExecReload=/bin/kill -HUP $MAINPID
+KillMode=process
+KillSignal=SIGINT
+Restart=on-failure
+LimitNOFILE=65536
+LimitCORE=0
+Environment=VAULT_ADDR=http://127.0.0.1:8200
+
+[Install]
+WantedBy=multi-user.target

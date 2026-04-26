@@ -1,6 +1,5 @@
 data_dir  = "/tmp/nomad/data"
 log_level = "INFO"
-
 bind_addr = "0.0.0.0"
 
 advertise {
@@ -16,12 +15,9 @@ server {
 
 client {
   enabled = true
-
-  # disable consul requirement
   options = {
     "driver.whitelist" = "docker"
   }
-
   host_volume "docker_sock" {
     path      = "/var/run/docker.sock"
     read_only = false

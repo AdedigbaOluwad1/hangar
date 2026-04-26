@@ -142,6 +142,24 @@
         executable: /bin/bash
       when: tsx_check.rc != 0
 
+    - name: Check if HashiCorp GPG key exists
+      stat:
+        path: /usr/share/keyrings/hashicorp-archive-keyring.gpg
+      register: hashicorp_gpg
+
+    - name: Add HashiCorp GPG key
+      become: true
+      shell: |
+        curl -fsSL https://apt.releases.hashicorp.com/gpg | gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+      when: not hashicorp_gpg.stat.exists
+
+    - name: Add HashiCorp repository
+      become: true
+      shell: |
+        echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | tee /etc/apt/sources.list.d/hashicorp.list
+      args:
+        creates: /etc/apt/sources.list.d/hashicorp.list
+
     - name: Check if Nomad is installed
       command: nomad version
       register: nomad_check
@@ -150,22 +168,10 @@
 
     - name: Install Nomad
       become: true
-      block:
-        - name: Add HashiCorp GPG key
-          shell: |
-            curl -fsSL https://apt.releases.hashicorp.com/gpg | gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
-          args:
-            creates: /usr/share/keyrings/hashicorp-archive-keyring.gpg
-
-        - name: Add HashiCorp repository
-          shell: |
-            echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | tee /etc/apt/sources.list.d/hashicorp.list
-
-        - name: Install Nomad package
-          apt:
-            name: nomad
-            update_cache: true
-            state: present
+      apt:
+        name: nomad
+        update_cache: true
+        state: present
       when: nomad_check.rc != 0
 
     - name: Copy Nomad config
@@ -174,16 +180,84 @@
         src: "{{ hangar_dir }}/nomad/config/nomad.hcl"
         dest: /etc/nomad.d/nomad.hcl
 
-    - name: Copy Nomad systemd service
+    - name: Deploy Nomad systemd service
       become: true
-      copy:
-        src: "{{ hangar_dir }}/nomad/config/nomad.service"
-        dest: /etc/systemd/system/nomad.service
+      template:
+          src: nomad.service.j2
+          dest: /etc/systemd/system/nomad.service
 
     - name: Start Nomad
       become: true
       systemd:
         name: nomad
+        state: started
+        enabled: true
+        daemon_reload: true
+
+    - name: Check if Consul is installed
+      command: consul version
+      register: consul_check
+      ignore_errors: true
+      changed_when: false
+
+    - name: Install Consul
+      become: true
+      apt:
+        name: consul
+        update_cache: true
+        state: present
+      when: consul_check.rc != 0
+
+    - name: Copy Consul config
+      become: true
+      copy:
+        src: "{{ hangar_dir }}/consul/config/consul.hcl"
+        dest: /etc/consul.d/consul.hcl
+
+    - name: Deploy Consul systemd service
+      become: true
+      template:
+          src: consul.service.j2
+          dest: /etc/systemd/system/consul.service
+
+    - name: Start Consul
+      become: true
+      systemd:
+        name: consul
+        state: started
+        enabled: true
+        daemon_reload: true
+
+    - name: Check if Vault is installed
+      command: vault version
+      register: vault_check
+      ignore_errors: true
+      changed_when: false
+
+    - name: Install Vault
+      become: true
+      apt:
+        name: vault
+        update_cache: true
+        state: present
+      when: vault_check.rc != 0
+
+    - name: Copy Vault config
+      become: true
+      copy:
+        src: "{{ hangar_dir }}/vault/config/vault.hcl"
+        dest: /etc/vault.d/vault.hcl
+
+    - name: Deploy Vault systemd service
+      become: true
+      template:
+          src: vault.service.j2
+          dest: /etc/systemd/system/vault.service
+
+    - name: Start Vault
+      become: true
+      systemd:
+        name: vault
         state: started
         enabled: true
         daemon_reload: true
@@ -196,7 +270,9 @@
         echo "Node.js: $(node --version)"
         echo "pnpm: $(pnpm --version)"
         echo "tsx: $(tsx --version)"
-        echo "Nomad: $(nomad version)"
+        echo "Nomad: $(nomad version | head -1)"
+        echo "Consul: $(consul version | head -1)"
+        echo "Vault: $(vault version)"
       args:
         executable: /bin/bash
       register: versions
