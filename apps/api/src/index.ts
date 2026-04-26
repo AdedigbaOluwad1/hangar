@@ -1,4 +1,3 @@
-// apps/api/src/index.ts
 import { Hono } from 'hono';
 import { serve } from '@hono/node-server';
 import { cors } from 'hono/cors';
@@ -13,5 +12,5 @@ app.route('/deployments', deployments);
 app.route('/deployments', logs);
 
 serve({ fetch: app.fetch, port: 3001 }, () => {
-	console.log('⚓ Hangar API running on http://localhost:3001');
+  console.log('⚓ Hangar API running on http://localhost:3001');
 });

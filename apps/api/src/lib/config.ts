@@ -8,6 +8,11 @@ const vault = Vault({
 
 let config: Record<string, string> | null = null
 
+export function getVault() {
+  return vault
+}
+
+
 export async function getConfig(): Promise<Record<string, string>> {
   if (config) return config
   const result = await vault.read('hangar/data/config')

@@ -9,6 +9,7 @@ async function getNomadAddr(): Promise<string> {
 export async function submitJob(
   deploymentId: string,
   imageTag: string,
+  userEnv: Record<string, string> = {},
 ) {
   const NOMAD_ADDR = await getNomadAddr()
 
@@ -39,6 +40,7 @@ export async function submitJob(
               },
               Env: {
                 PORT: '3000',
+                ...userEnv,
               },
               Resources: {
                 CPU: 500,

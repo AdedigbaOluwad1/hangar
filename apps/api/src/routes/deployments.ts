@@ -1,8 +1,8 @@
-// apps/api/src/routes/deployments.ts
 import { Hono } from 'hono';
 import { nanoid } from 'nanoid';
 import { createDeployment, listDeployments, getDeployment } from '@hangar/db';
 import { deployQueue } from '../lib/queue';
+import { getVault } from '../lib/config';
 
 export const deployments = new Hono();
 
@@ -35,7 +35,14 @@ deployments.post('/', async (c) => {
     sourceUrl: body.sourceUrl ?? null,
   });
 
-  // add to queue instead of fire-and-forget
+  if (body.env && typeof body.env === 'object') {
+    const vault = getVault()
+    await vault.write(`hangar/data/deployments/${deployment.id}/env`, {
+      data: body.env
+    })
+  }
+
+
   await deployQueue.add('deploy', { deploymentId: deployment.id })
 
   return c.json(deployment, 201);

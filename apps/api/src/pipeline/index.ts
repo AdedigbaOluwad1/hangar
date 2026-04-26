@@ -20,7 +20,7 @@ export async function runPipeline(deploymentId: string) {
     await updateDeployment(deploymentId, { liveUrl, status: 'running' })
     await emitLog(deploymentId, 'system', '✅ Deployment complete')
   } catch (err: any) {
-    console.error('Pipeline error:', err)  // add this line to log the error details
+    console.error('Pipeline error:', err)
     await writeLog(deploymentId, 'system', `❌ Pipeline failed: ${err.message}`)
     await updateDeployment(deploymentId, { status: 'failed' })
   } finally {

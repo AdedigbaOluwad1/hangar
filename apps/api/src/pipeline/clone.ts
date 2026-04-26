@@ -1,4 +1,3 @@
-// apps/api/src/pipeline/clone.ts
 import { execa } from 'execa'
 import { mkdtemp } from 'fs/promises'
 import { tmpdir } from 'os'

@@ -1,4 +1,3 @@
-// apps/api/src/routes/logs.ts
 import { Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
 import { getLogs, getDeployment } from '@hangar/db';
@@ -10,7 +9,6 @@ logs.get('/:id/logs', (c) => {
   const { id } = c.req.param();
 
   return streamSSE(c, async (stream) => {
-    // 1. replay history
     const history = await getLogs(id);
     for (const log of history) {
       await stream.writeSSE({
@@ -19,7 +17,6 @@ logs.get('/:id/logs', (c) => {
       });
     }
 
-    // 2. if still active, stream live
     const deployment = await getDeployment(id);
     const active = ['pending', 'building', 'deploying'];
 
