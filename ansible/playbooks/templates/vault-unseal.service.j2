@@ -1,0 +1,13 @@
+[Unit]
+Description=Vault Auto-Unseal
+After=vault.service
+Requires=vault.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/vault.d/keys/unseal.env
+ExecStart={{ hangar_dir }}/vault/scripts/unseal.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

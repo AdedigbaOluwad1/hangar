@@ -1,0 +1,26 @@
+name: Provision Server
+
+on:
+  workflow_dispatch:
+
+jobs:
+  provision:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Ansible
+        run: pip install ansible
+
+      - name: Write Ansible Vault password
+        run: echo "${{ secrets.ANSIBLE_VAULT_PASSWORD }}" > .vault-pass
+
+      - name: Run Ansible playbook
+        run: |
+          ansible-playbook \
+            -i ansible/inventory.ini \
+            ansible/playbooks/setup.yml \
+            --vault-password-file .vault-pass
+
+      - name: Cleanup
+        run: rm -f .vault-pass

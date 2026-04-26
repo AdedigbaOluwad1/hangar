@@ -281,11 +281,45 @@
         src: vault.service.j2
         dest: /etc/systemd/system/vault.service
 
+    - name: Create vault keys directory
+      become: true
+      file:
+        path: /etc/vault.d/keys
+        state: directory
+        mode: "0700"
+        owner: root
+        group: root
+
+    - name: Write unseal keys
+      become: true
+      copy:
+        content: |
+          VAULT_UNSEAL_KEY_1={{ vault_unseal_key_1 }}
+          VAULT_UNSEAL_KEY_2={{ vault_unseal_key_2 }}
+          VAULT_UNSEAL_KEY_3={{ vault_unseal_key_3 }}
+        dest: /etc/vault.d/keys/unseal.env
+        mode: "0600"
+        owner: root
+        group: root
+
     - name: Start Vault
       become: true
       systemd:
         name: vault
         state: started
+        enabled: true
+        daemon_reload: true
+
+    - name: Deploy vault unseal service
+      become: true
+      template:
+        src: vault-unseal.service.j2
+        dest: /etc/systemd/system/vault-unseal.service
+
+    - name: Enable vault unseal service
+      become: true
+      systemd:
+        name: vault-unseal
         enabled: true
         daemon_reload: true
 
