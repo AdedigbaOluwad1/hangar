@@ -1,36 +1,30 @@
-export type DeploymentStatus =
-	| 'pending'
-	| 'building'
-	| 'deploying'
-	| 'running'
-	| 'failed';
+export type { DeploymentStatus } from '@prisma/client'
 
 export interface Deployment {
-	id: string;
-	status: DeploymentStatus;
-	sourceType: 'git' | 'zip';
-	sourceUrl: string | null;
-	imageTag: string | null;
-	containerId: string | null;
-	port: number | null;
-	liveUrl: string | null;
-	createdAt: string;
-	updatedAt: string;
+  id: string;
+  status: DeploymentStatus;
+  sourceType: 'git' | 'zip';
+  sourceUrl: string | null;
+  imageTag: string | null;
+  containerId: string | null;
+  liveUrl: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface LogLine {
-	deploymentId: string;
-	stream: 'build' | 'deploy' | 'system';
-	line: string;
-	createdAt: string;
+  deploymentId: string;
+  stream: 'build' | 'deploy' | 'system';
+  line: string;
+  createdAt: string;
 }
 
 export interface CreateDeploymentInput {
-	sourceType: 'git' | 'zip';
-	sourceUrl?: string;
+  sourceType: 'git' | 'zip';
+  sourceUrl?: string;
 }
 
 export interface ApiResponse<T> {
-	data: T;
-	error?: string;
+  data: T;
+  error?: string;
 }

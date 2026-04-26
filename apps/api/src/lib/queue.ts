@@ -1,5 +1,5 @@
-import { Queue, Worker } from 'bullmq';
-import { runPipeline } from '../pipeline';
+import { Queue, Worker } from 'bullmq'
+import { runPipeline } from '../pipeline'
 
 const connection = {
   host: process.env.REDIS_HOST ?? 'redis',
@@ -8,9 +8,11 @@ const connection = {
 
 export const deployQueue = new Queue('deployments', { connection })
 
-// worker runs in same process for now
 new Worker('deployments', async (job) => {
-  await runPipeline(job.data.deploymentId)
+  await runPipeline(job.data.deploymentId, {
+    resources: job.data.resources,
+    previousDeploymentId: job.data.previousDeploymentId,
+  })
 }, { connection })
 
 console.log('⚡ Deploy queue worker ready')

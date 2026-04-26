@@ -6,17 +6,25 @@ datasource db {
   provider = "postgresql"
 }
 
+enum DeploymentStatus {
+  pending
+  building
+  deploying
+  running
+  failed
+  stopped
+}
+
 model Deployment {
-  id          String   @id
-  status      String   @default("pending")
-  sourceType  String   @map("source_type")
-  sourceUrl   String?  @map("source_url")
-  imageTag    String?  @map("image_tag")
-  containerId String?  @map("container_id")
-  port        Int?
-  liveUrl     String?  @map("live_url")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id          String           @id
+  status      DeploymentStatus @default(pending)
+  sourceType  String           @map("source_type")
+  sourceUrl   String?          @map("source_url")
+  imageTag    String?          @map("image_tag")
+  containerId String?          @map("container_id")
+  liveUrl     String?          @map("live_url")
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
   logs        Log[]
 
   @@map("deployments")

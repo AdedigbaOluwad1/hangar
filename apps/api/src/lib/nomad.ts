@@ -10,6 +10,7 @@ export async function submitJob(
   deploymentId: string,
   imageTag: string,
   userEnv: Record<string, string> = {},
+  resources: { cpu?: number; memoryMb?: number } = {},
 ) {
   const NOMAD_ADDR = await getNomadAddr()
 
@@ -43,8 +44,8 @@ export async function submitJob(
                 ...userEnv,
               },
               Resources: {
-                CPU: 500,
-                MemoryMB: 512,
+                CPU: resources.cpu ?? 500,
+                MemoryMB: resources.memoryMb ?? 512,
               },
               Services: [
                 {
