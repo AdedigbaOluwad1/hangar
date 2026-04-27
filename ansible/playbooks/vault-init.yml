@@ -7,6 +7,17 @@
     hangar_dir: "{{ ansible_env.HOME }}/documents/hangar"
 
   tasks:
+    - name: Read vault init data
+      become: true
+      slurp:
+        src: /etc/vault.d/keys/init.json
+      register: vault_init_raw
+
+    - name: Set root token fact
+      set_fact:
+        vault_root_token: "{{ (vault_init_raw.content | b64decode | from_json).root_token }}"
+      no_log: true
+
     - name: Wait for Vault to be unsealed
       shell: |
         export VAULT_ADDR=https://127.0.0.1:8200
@@ -67,3 +78,11 @@
     - name: Show API token
       debug:
         msg: "VAULT_TOKEN for hangar-api: {{ api_token.stdout }}"
+
+    - name: Write API token to .env
+      lineinfile:
+        path: "{{ hangar_dir }}/.env"
+        regexp: "^VAULT_TOKEN="
+        line: "VAULT_TOKEN={{ api_token.stdout }}"
+        create: true
+        mode: "0600"

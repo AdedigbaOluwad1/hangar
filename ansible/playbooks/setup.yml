@@ -382,18 +382,6 @@
         owner: root
         group: root
 
-    - name: Write unseal keys
-      become: true
-      copy:
-        content: |
-          VAULT_UNSEAL_KEY_1={{ vault_unseal_key_1 }}
-          VAULT_UNSEAL_KEY_2={{ vault_unseal_key_2 }}
-          VAULT_UNSEAL_KEY_3={{ vault_unseal_key_3 }}
-        dest: /etc/vault.d/keys/unseal.env
-        mode: "0600"
-        owner: root
-        group: root
-
     - name: Start Vault
       become: true
       systemd:
@@ -401,6 +389,54 @@
         state: started
         enabled: true
         daemon_reload: true
+
+    - name: Wait for Vault to start
+      wait_for:
+        port: 8200
+        delay: 3
+        timeout: 30
+
+    - name: Check if Vault is already initialized
+      shell: |
+        export VAULT_ADDR=https://127.0.0.1:8200
+        export VAULT_SKIP_VERIFY=true
+        vault operator init -status -format=json | jq -r '.initialized'
+      register: vault_initialized
+      changed_when: false
+      failed_when: false
+
+    - name: Initialize Vault
+      shell: |
+        export VAULT_ADDR=https://127.0.0.1:8200
+        export VAULT_SKIP_VERIFY=true
+        vault operator init -key-shares=5 -key-threshold=3 -format=json
+      register: vault_init_raw
+      when: vault_initialized.stdout == "false"
+      no_log: true
+
+    - name: Save init output to disk
+      become: true
+      copy:
+        content: "{{ vault_init_raw.stdout }}"
+        dest: /etc/vault.d/keys/init.json
+        mode: "0600"
+        owner: root
+        group: root
+      when: vault_initialized.stdout == "false"
+
+    - name: Parse init output
+      set_fact:
+        vault_init_data: "{{ vault_init_raw.stdout | from_json }}"
+      when: vault_initialized.stdout == "false"
+
+    - name: Unseal Vault (first time)
+      shell: |
+        export VAULT_ADDR=https://127.0.0.1:8200
+        export VAULT_SKIP_VERIFY=true
+        vault operator unseal {{ item }}
+      loop: "{{ vault_init_data.unseal_keys_b64[:3] }}"
+      when: vault_initialized.stdout == "false"
+      no_log: true
 
     - name: Deploy vault unseal service
       become: true

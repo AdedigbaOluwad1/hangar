@@ -39,7 +39,7 @@ if ! command -v terraform &>/dev/null; then
 fi
 
 # clone or pull repo
-REPO_URL="${HANGAR_REPO_URL:-https://github.com/your-username/hangar.git}"
+REPO_URL="${HANGAR_REPO_URL:-https://github.com/adedigbaoluwad1/hangar.git}"
 DEST="${HOME}/documents/hangar"
 
 if [ -d "$DEST/.git" ]; then
@@ -50,11 +50,12 @@ else
   git clone "$REPO_URL" "$DEST"
 fi
 
+cd "$DEST"
+
 # install ansible collections
 echo "📦 Installing Ansible collections..."
 ansible-galaxy collection install -r ansible/requirements.yml
 
 # hand off to deploy.sh
-cd "$DEST"
 chmod +x deploy.sh
 ./deploy.sh
