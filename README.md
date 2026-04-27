@@ -549,7 +549,9 @@ Manual trigger (`workflow_dispatch`): installs Ansible, reads `ANSIBLE_VAULT_PAS
 | `SERVER_HOST` | Server IP or hostname |
 | `SERVER_USER` | SSH username |
 | `SERVER_SSH_KEY` | Private SSH key for the server |
-| `HANGAR_REPO_URL` | Repository URL for Github Actions |
+| `HANGAR_REPO_URL` | Full Git URL of the repository to clone and deploy |
+| `HETZNER_TOKEN` | Hetzner API token for Terraform to provision servers |
+| `HETZNER_SSH_KEY_NAME` | Name of the SSH key registered in your Hetzner account |
 
 ---
 

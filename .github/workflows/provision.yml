@@ -2,6 +2,15 @@ name: Provision Server
 
 on:
   workflow_dispatch:
+    inputs:
+      mode:
+        description: "Provisioning mode"
+        required: true
+        default: "existing"
+        type: choice
+        options:
+          - existing
+          - terraform
 
 jobs:
   provision:
@@ -15,6 +24,39 @@ jobs:
       - name: Install Ansible collections
         run: ansible-galaxy collection install -r ansible/requirements.yml
 
+      - name: Setup Terraform
+        if: inputs.mode == 'terraform'
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform Init
+        if: inputs.mode == 'terraform'
+        run: terraform init
+        working-directory: terraform
+        env:
+          TF_VAR_hetzner_token: ${{ secrets.HETZNER_TOKEN }}
+
+      - name: Terraform Apply
+        if: inputs.mode == 'terraform'
+        run: terraform apply -auto-approve
+        working-directory: terraform
+        env:
+          TF_VAR_hetzner_token: ${{ secrets.HETZNER_TOKEN }}
+          TF_VAR_ssh_key_name: ${{ secrets.HETZNER_SSH_KEY_NAME }}
+
+      - name: Get server IP from Terraform
+        if: inputs.mode == 'terraform'
+        id: terraform_output
+        run: echo "server_ip=$(terraform output -raw server_ip)" >> $GITHUB_OUTPUT
+        working-directory: terraform
+
+      - name: Wait for SSH
+        if: inputs.mode == 'terraform'
+        run: |
+          echo "⏳ Waiting for SSH on ${{ steps.terraform_output.outputs.server_ip }}..."
+          until ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 root@${{ steps.terraform_output.outputs.server_ip }} "echo ready" 2>/dev/null; do
+            sleep 5
+          done
+
       - name: Write Ansible Vault password
         run: echo "${{ secrets.ANSIBLE_VAULT_PASSWORD }}" > .vault-pass
 
@@ -23,12 +65,21 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.SERVER_SSH_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Update remote inventory
+      - name: Update inventory — existing server
+        if: inputs.mode == 'existing'
         run: |
+          ssh-keyscan ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
           sed -i "s/YOUR_SERVER_IP/${{ secrets.SERVER_HOST }}/" ansible/inventory.ini
           sed -i "s/YOUR_SERVER_USER/${{ secrets.SERVER_USER }}/" ansible/inventory.ini
+
+      - name: Update inventory — terraform server
+        if: inputs.mode == 'terraform'
+        run: |
+          SERVER_IP=${{ steps.terraform_output.outputs.server_ip }}
+          ssh-keyscan $SERVER_IP >> ~/.ssh/known_hosts
+          sed -i "s/YOUR_SERVER_IP/$SERVER_IP/" ansible/inventory.ini
+          sed -i "s/YOUR_SERVER_USER/root/" ansible/inventory.ini
 
       - name: Run setup.yml
         run: |
