@@ -549,6 +549,7 @@ Manual trigger (`workflow_dispatch`): installs Ansible, reads `ANSIBLE_VAULT_PAS
 | `SERVER_HOST` | Server IP or hostname |
 | `SERVER_USER` | SSH username |
 | `SERVER_SSH_KEY` | Private SSH key for the server |
+| `HANGAR_REPO_URL` | Repository URL for Github Actions |
 
 ---
 

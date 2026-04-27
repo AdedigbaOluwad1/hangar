@@ -39,6 +39,8 @@ jobs:
             --limit hangar_remote
 
       - name: Run deploy.yml
+        env:
+          HANGAR_REPO_URL: ${{ secrets.HANGAR_REPO_URL }}
         run: |
           ansible-playbook \
             -i ansible/inventory.ini \

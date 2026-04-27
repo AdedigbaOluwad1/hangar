@@ -5,7 +5,7 @@
 
   vars:
     hangar_dir: "{{ ansible_env.HOME }}/documents/hangar"
-    repo_url: "{{ ansible_env.HANGAR_REPO_URL }}"
+    repo_url: "{{ lookup('env', 'HANGAR_REPO_URL') }}"
 
   tasks:
     - name: Check if repo exists
