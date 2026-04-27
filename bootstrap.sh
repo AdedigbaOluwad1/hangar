@@ -60,6 +60,8 @@ ansible-galaxy collection install -r ansible/requirements.yml
 cd "$DEST"
 chmod +x deploy.sh
 
+export HANGAR_REPO_URL="$REPO_URL"
+
 read -s -p "🔐 Enter Ansible Vault password: " VAULT_PASS < /dev/tty
 echo
 echo "$VAULT_PASS" > /tmp/.vault-pass
