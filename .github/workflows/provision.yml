@@ -12,15 +12,48 @@ jobs:
       - name: Install Ansible
         run: pip install ansible
 
+      - name: Install Ansible collections
+        run: ansible-galaxy collection install -r ansible/requirements.yml
+
       - name: Write Ansible Vault password
         run: echo "${{ secrets.ANSIBLE_VAULT_PASSWORD }}" > .vault-pass
 
-      - name: Run Ansible playbook
+      - name: Write SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SERVER_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Update remote inventory
+        run: |
+          sed -i "s/YOUR_SERVER_IP/${{ secrets.SERVER_HOST }}/" ansible/inventory.ini
+          sed -i "s/YOUR_SERVER_USER/${{ secrets.SERVER_USER }}/" ansible/inventory.ini
+
+      - name: Run setup.yml
         run: |
           ansible-playbook \
             -i ansible/inventory.ini \
             ansible/playbooks/setup.yml \
-            --vault-password-file .vault-pass
+            --vault-password-file .vault-pass \
+            --limit hangar_remote
+
+      - name: Run deploy.yml
+        run: |
+          ansible-playbook \
+            -i ansible/inventory.ini \
+            ansible/playbooks/deploy.yml \
+            --vault-password-file .vault-pass \
+            --limit hangar_remote
+
+      - name: Run vault-init.yml
+        run: |
+          ansible-playbook \
+            -i ansible/inventory.ini \
+            ansible/playbooks/vault-init.yml \
+            --vault-password-file .vault-pass \
+            --limit hangar_remote
 
       - name: Cleanup
-        run: rm -f .vault-pass
+        if: always()
+        run: rm -f .vault-pass ~/.ssh/id_rsa

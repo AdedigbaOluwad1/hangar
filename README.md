@@ -436,15 +436,14 @@ Or use a local DNS tool like `dnsmasq` to resolve `*.localhost` globally.
 
 ---
 
-## Provisioning a New Server from Scratch
+# Provisioning a New Server from Scratch
 
-### Prerequisites
+## Prerequisites
 
 - Ubuntu 24 server with SSH access
 - Your Ansible Vault password
-- GitHub secrets configured (see below)
 
-### Step 1: Bootstrap
+## Step 1: Bootstrap
 
 SSH into the server and run:
 
@@ -463,59 +462,52 @@ chmod +x bootstrap.sh
 
 `bootstrap.sh` installs: `curl`, `git`, `unzip`, `ansible`, `terraform`, Ansible collections. Then hands off to `deploy.sh`.
 
-### Step 2: deploy.sh
+## Step 2: deploy.sh
 
-`deploy.sh` runs automatically from `bootstrap.sh`. It:
-
-1. Prompts for the Ansible Vault password
-2. Generates `inventory.ini`
-3. Runs `setup.yml` — installs Docker, Node, NVM, pnpm, tsx, Nomad, Consul, Vault, generates TLS certs, writes unseal keys, starts all systemd services
-4. Runs `deploy.yml` — `docker compose up` for the app
-5. Runs `vault-init.yml` — enables KV engine, seeds config secrets, creates `hangar-api` policy and token
-
-### Step 3: Initialize Vault (one-time, manual)
-
-```bash
-export VAULT_ADDR=https://127.0.0.1:8200
-export VAULT_SKIP_VERIFY=true
-vault operator init
-```
-
-Save the 5 unseal keys and root token. Then update `ansible/group_vars/hangar/vault.yml`:
-
-```bash
-ansible-vault decrypt ansible/group_vars/hangar/vault.yml
-# edit: update vault_unseal_key_1/2/3 and vault_root_token
-ansible-vault encrypt ansible/group_vars/hangar/vault.yml
-git add . && git commit -m "chore: update vault keys" && git push
-```
-
-Re-run vault-init to seed secrets with the new token:
-
-```bash
-ansible-playbook \
-  -i ansible/inventory.ini \
-  ansible/playbooks/vault-init.yml \
-  --ask-vault-pass
-```
-
-Copy the printed `VAULT_TOKEN` into `.env` on the server, then restart the API:
-
-```bash
-docker compose up -d
-```
-
-### Step 4: Every subsequent restart — fully automatic
+`deploy.sh` runs automatically from `bootstrap.sh`. It prompts once for your Ansible Vault password, then runs the full provisioning stack unattended:
 
 ```
-systemd starts consul.service → nomad.service → vault.service
-vault-unseal.service runs → Vault unseals automatically
-docker compose up (if not already running)
+bootstrap.sh
+  └── deploy.sh
+        ├── setup.yml
+        │     ├── installs Docker, Node, NVM, pnpm, tsx
+        │     ├── installs Nomad, Consul, Vault
+        │     ├── generates TLS certs for Consul + Vault
+        │     ├── starts all systemd services
+        │     ├── runs vault operator init (first time only)
+        │     ├── saves unseal keys + root token to /etc/vault.d/keys/init.json
+        │     ├── unseals Vault
+        │     └── enables + starts vault-unseal.service
+        │
+        ├── deploy.yml
+        │     └── docker compose up
+        │
+        └── vault-init.yml
+              ├── reads root token from /etc/vault.d/keys/init.json
+              ├── enables KV secrets engine at hangar/
+              ├── seeds hangar/config secrets
+              ├── creates hangar-api policy + token
+              └── writes VAULT_TOKEN to .env
 ```
 
-No human intervention needed after first setup.
+Zero manual steps. The server is fully provisioned and the app is live when `deploy.sh` exits.
 
----
+## What Happens on Reboot
+
+Systemd brings everything back up automatically in the correct order:
+
+```
+consul.service → nomad.service → vault.service → vault-unseal.service
+```
+
+`vault-unseal.service` reads unseal keys from `/etc/vault.d/keys/init.json` and unseals Vault automatically. No human intervention required.
+
+## Known Issues & Notes
+
+- **Vault init is idempotent** — `setup.yml` checks if Vault is already initialized before running `vault operator init`. Re-running `bootstrap.sh` on an existing server is safe.
+- **`/etc/vault.d/keys/init.json`** contains your unseal keys and root token. It is root-owned, `0600`, and never leaves the server. Back it up somewhere secure (password manager, secrets manager) after first provision.
+- **Ansible Vault password** — never goes in the repo. It lives in your password manager for manual runs and in `ANSIBLE_VAULT_PASSWORD` as a GitHub secret for CI/CD.
+- **Vault sealed after restart** — if `vault-unseal.service` fails for any reason: `export VAULT_ADDR=https://127.0.0.1:8200 && export VAULT_SKIP_VERIFY=true && vault operator unseal`.
 
 ## Remote Mode (Terraform)
 
@@ -534,6 +526,29 @@ export HETZNER_SSH_KEY_NAME=your-key-name
 2. Wait for SSH to become available
 3. Generate `inventory.ini` with the server IP
 4. Run all Ansible playbooks against it
+
+## GitHub Actions
+
+### CI (`ci.yml`)
+
+Runs on every PR and push to `main`: type check and lint.
+
+### Deploy (`deploy.yml`)
+
+Runs on push to `main`: SSHes into the server, `git pull origin main`, `docker compose up -d --build`.
+
+### Provision (`provision.yml`)
+
+Manual trigger (`workflow_dispatch`): installs Ansible, reads `ANSIBLE_VAULT_PASSWORD` from GitHub secrets, runs full `setup.yml` playbook.
+
+### Required GitHub Secrets
+
+| Secret | Description |
+|---|---|
+| `ANSIBLE_VAULT_PASSWORD` | Password to decrypt `ansible/group_vars/hangar/vault.yml` |
+| `SERVER_HOST` | Server IP or hostname |
+| `SERVER_USER` | SSH username |
+| `SERVER_SSH_KEY` | Private SSH key for the server |
 
 ---
 
@@ -714,29 +729,6 @@ tls {
 ```
 
 Remove `VAULT_SKIP_VERIFY=true` from `docker-compose.yml` and the unseal script.
-
----
-
-## Ansible Group Variables
-
-Secrets are stored encrypted with Ansible Vault in `ansible/group_vars/hangar/vault.yml`. To edit:
-
-```bash
-ansible-vault edit ansible/group_vars/hangar/vault.yml
-```
-
-The Ansible Vault password never goes in the repo — it lives in your password manager for manual runs and in `ANSIBLE_VAULT_PASSWORD` as a GitHub secret for CI/CD.
-
----
-
-## Known Issues & Notes
-
-- **WSL IP** — `host.docker.internal` is mapped to `172.30.186.74` in `extra_hosts`. If your WSL IP differs, update `docker-compose.yml` and `ansible/group_vars/hangar/vault.yml`.
-- **Vault initialization** — `vault operator init` must be run manually once per server. Cannot be automated by design (Shamir's Secret Sharing).
-- **`.localhost` subdomains on Windows** — add `127.0.0.1 {deploymentId}.localhost` to `C:\Windows\System32\drivers\etc\hosts` per deployment, or use `dnsmasq`.
-- **Local registry persistence** — the registry must be running before deploys. Start with `docker run -d -p 5000:5000 --restart always --name registry registry:2`.
-- **Vault sealed after restart** — if `vault-unseal.service` fails: `export VAULT_ADDR=https://127.0.0.1:8200 && export VAULT_SKIP_VERIFY=true && vault operator unseal`.
-- **Postgres port for migrations** — postgres does not expose port 5432 to the host by default. To run `prisma migrate dev` locally, temporarily add `ports: ["5432:5432"]` to the postgres service in `docker-compose.yml`.
 
 ---
 
