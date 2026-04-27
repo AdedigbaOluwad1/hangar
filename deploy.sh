@@ -21,16 +21,26 @@ if [ -f "$SCRIPT_DIR/.env" ]; then
 fi
 
 # handle vault password
-if [ -z "$ANSIBLE_VAULT_PASSWORD" ] && [ ! -f "$SCRIPT_DIR/.vault-pass" ]; then
-  echo "🔐 Enter Ansible Vault password:"
-  read -s ANSIBLE_VAULT_PASSWORD
-  echo
-fi
+VAULT_PASS_FILE="${1:-}"
 
-if [ -n "$ANSIBLE_VAULT_PASSWORD" ]; then
-  echo "$ANSIBLE_VAULT_PASSWORD" > "$SCRIPT_DIR/.vault-pass"
-  chmod 600 "$SCRIPT_DIR/.vault-pass"
-  trap "rm -f $SCRIPT_DIR/.vault-pass" EXIT
+if [ -n "$VAULT_PASS_FILE" ] && [ -f "$VAULT_PASS_FILE" ]; then
+  # passed in from bootstrap.sh
+  trap "rm -f $VAULT_PASS_FILE" EXIT
+elif [ -n "$ANSIBLE_VAULT_PASSWORD" ]; then
+  VAULT_PASS_FILE="$SCRIPT_DIR/.vault-pass"
+  echo "$ANSIBLE_VAULT_PASSWORD" > "$VAULT_PASS_FILE"
+  chmod 600 "$VAULT_PASS_FILE"
+  trap "rm -f $VAULT_PASS_FILE" EXIT
+elif [ -f "$SCRIPT_DIR/.vault-pass" ]; then
+  VAULT_PASS_FILE="$SCRIPT_DIR/.vault-pass"
+else
+  read -s -p "🔐 Enter Ansible Vault password: " VAULT_PASS < /dev/tty
+  echo
+  VAULT_PASS_FILE="$SCRIPT_DIR/.vault-pass"
+  echo "$VAULT_PASS" > "$VAULT_PASS_FILE"
+  chmod 600 "$VAULT_PASS_FILE"
+  unset VAULT_PASS
+  trap "rm -f $VAULT_PASS_FILE" EXIT
 fi
 
 # detect mode
@@ -73,19 +83,19 @@ echo "⚙️  Running setup..."
 ansible-playbook \
   -i "$ANSIBLE_DIR/inventory.ini" \
   "$ANSIBLE_DIR/playbooks/setup.yml" \
-  --vault-password-file "$SCRIPT_DIR/.vault-pass"
+  --vault-password-file "$VAULT_PASS_FILE"
 
 echo "🔐 Initializing Vault secrets..."
 ansible-playbook \
   -i "$ANSIBLE_DIR/inventory.ini" \
   "$ANSIBLE_DIR/playbooks/vault-init.yml" \
-  --vault-password-file "$SCRIPT_DIR/.vault-pass"
-  
+  --vault-password-file "$VAULT_PASS_FILE"
+
 echo "🚢 Deploying..."
 ansible-playbook \
   -i "$ANSIBLE_DIR/inventory.ini" \
   "$ANSIBLE_DIR/playbooks/deploy.yml" \
-  --vault-password-file "$SCRIPT_DIR/.vault-pass"
+  --vault-password-file "$VAULT_PASS_FILE"
 
 echo "✅ Hangar is live!"
 if [ "$MODE" = "remote" ]; then

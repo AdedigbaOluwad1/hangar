@@ -57,5 +57,13 @@ echo "📦 Installing Ansible collections..."
 ansible-galaxy collection install -r ansible/requirements.yml
 
 # hand off to deploy.sh
+cd "$DEST"
 chmod +x deploy.sh
-./deploy.sh
+
+read -s -p "🔐 Enter Ansible Vault password: " VAULT_PASS < /dev/tty
+echo
+echo "$VAULT_PASS" > /tmp/.vault-pass
+chmod 600 /tmp/.vault-pass
+unset VAULT_PASS
+
+./deploy.sh /tmp/.vault-pass
