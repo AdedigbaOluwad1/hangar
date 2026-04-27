@@ -400,7 +400,7 @@
       shell: |
         export VAULT_ADDR=https://127.0.0.1:8200
         export VAULT_SKIP_VERIFY=true
-        vault operator init -status -format=json | jq -r '.initialized'
+        vault operator init -status -format=json | jq -r '.Initialized'
       register: vault_initialized
       changed_when: false
       failed_when: false
