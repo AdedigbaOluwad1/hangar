@@ -7,7 +7,7 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "build": "tsc --project tsconfig.json && cpx src/**/*.sql dist"
+    "build": "tsc --project tsconfig.json"
   },
   "dependencies": {
     "@hangar/types": "workspace:^",

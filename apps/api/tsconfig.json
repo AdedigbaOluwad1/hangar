@@ -1,11 +1,13 @@
 {
-	"extends": "../../tsconfig.json",
-	"compilerOptions": {
-		"module": "CommonJS",
-		"noEmit": false,
-		"outDir": "dist",
-		"rootDir": "src",
-		"lib": ["ES2022", "DOM"],
-		"types": ["node"]
-	}
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "module": "CommonJS",
+    "moduleResolution": "node",
+    "esModuleInterop": true,
+    "noEmit": false,
+    "outDir": "dist",
+    "rootDir": "src",
+    "lib": ["ES2022", "DOM"],
+    "types": ["node"]
+  }
 }

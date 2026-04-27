@@ -22,6 +22,8 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install
+      - name: Generate Prisma client
+        run: cd packages/db && npx prisma generate
       - name: Typecheck
         run: pnpm typecheck
       - name: Lint

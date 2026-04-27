@@ -1,4 +1,4 @@
-export type { DeploymentStatus } from '@prisma/client'
+export type DeploymentStatus = 'pending' | 'building' | 'deploying' | 'running' | 'failed' | 'stopped'
 
 export interface Deployment {
   id: string;

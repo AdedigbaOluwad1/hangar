@@ -5,7 +5,8 @@
     "declaration": true,
     "module": "CommonJS",
     "target": "ES2022",
-    "types": ["node"]
+    "types": ["node"],
+    "skipLibCheck": true
   },
   "include": ["src"]
 }
