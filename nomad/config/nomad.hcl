@@ -14,20 +14,13 @@ server {
 }
 
 client {
-  enabled = true
-  options = {
-    "driver.whitelist" = "docker"
-  }
-  host_volume "docker_sock" {
-    path      = "/var/run/docker.sock"
-    read_only = false
-  }
+  enabled    = true
+  plugin_dir = "/opt/nomad/plugins"
 }
 
-plugin "docker" {
+plugin "nomad-driver-podman" {
   config {
-    allow_privileged = true
-    allow_caps       = ["ALL"]
+    socket_path = "unix:///run/podman/podman.sock"
     volumes {
       enabled = true
     }

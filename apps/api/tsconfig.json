@@ -6,6 +6,7 @@
     "esModuleInterop": true,
     "noEmit": false,
     "outDir": "dist",
+    "ignoreDeprecations":"6.0",
     "rootDir": "src",
     "lib": ["ES2022", "DOM"],
     "types": ["node"]

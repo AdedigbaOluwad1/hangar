@@ -53,9 +53,16 @@ services:
     image: moby/buildkit
     privileged: true
     restart: unless-stopped
-    command: --addr tcp://0.0.0.0:1234 --oci-worker-snapshotter=overlayfs
+    command: --addr tcp://0.0.0.0:1234 --oci-worker-snapshotter=overlayfs --config
+      /etc/buildkit/buildkitd.toml
     volumes:
       - buildkit-cache:/var/lib/buildkit
+      - ./buildkitd.toml:/etc/buildkit/buildkitd.toml
+
+  registry:
+    image: registry:2
+    ports:
+      - "5000:5000"
 
   postgres:
     image: postgres:16-alpine
