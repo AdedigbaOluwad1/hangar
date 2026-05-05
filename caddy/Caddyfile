@@ -7,10 +7,10 @@
 :80 {
   handle /api/* {
     uri strip_prefix /api
-    reverse_proxy api:3001
+    reverse_proxy 127.0.0.1:3001
   }
 
   handle {
-    reverse_proxy web:5173
+    reverse_proxy 10.88.0.99:5173
   }
 }
