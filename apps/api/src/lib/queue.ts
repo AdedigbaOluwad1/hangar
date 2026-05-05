@@ -1,9 +1,11 @@
 import { Queue, Worker } from 'bullmq'
 import { runPipeline } from '../pipeline'
 
+const redisUrl = new URL(process.env.REDIS_URL ?? 'redis://redis:6379')
+
 const connection = {
-  host: process.env.REDIS_HOST ?? 'redis',
-  port: 6379,
+  host: redisUrl.hostname,
+  port: parseInt(redisUrl.port) || 6379,
 }
 
 export const deployQueue = new Queue('deployments', { connection })
