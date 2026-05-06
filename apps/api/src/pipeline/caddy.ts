@@ -3,23 +3,13 @@ import { emitLog } from '../lib/emitter'
 import { getConfig } from '../lib/config'
 
 async function getCaddyAdmin(): Promise<string> {
-  const config = await getConfig()
-  return config.caddy_admin_url ?? 'http://caddy:2019'
-}
-
-async function getConsulAddr(): Promise<string> {
-  const config = await getConfig()
-  return config.consul_addr ?? 'http://127.0.0.1:8500'
+  return process.env.CADDY_ADMIN_URL ?? 'http://127.0.0.1:2019'
 }
 
 async function getServiceAddress(deploymentId: string): Promise<string> {
-  const CONSUL_ADDR = await getConsulAddr()
+  const CONSUL_ADDR = process.env.CONSUL_ADDR ?? 'http://10.88.0.1:8500'
   const res = await fetch(
-    `${CONSUL_ADDR}/v1/health/service/hangar-${deploymentId}?passing=true`,
-    {
-      // @ts-ignore
-      agent: new (require('https').Agent)({ rejectUnauthorized: false })
-    }
+    `${CONSUL_ADDR}/v1/health/service/hangar-${deploymentId}?passing=true`
   )
   const services = await res.json()
   if (!services.length) throw new Error(`Service hangar-${deploymentId} not found in Consul`)

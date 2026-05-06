@@ -58,6 +58,8 @@ services:
     volumes:
       - buildkit-cache:/var/lib/buildkit
       - ./buildkitd.toml:/etc/buildkit/buildkitd.toml
+    ports:
+      - "1234:1234"
 
   registry:
     image: registry:2

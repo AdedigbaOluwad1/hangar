@@ -27,7 +27,7 @@ RUN pnpm install --no-frozen-lockfile
 # generate prisma client inside container
 RUN cd /app/packages/db && npx prisma generate
 
-COPY --from=moby/buildkit:latest /usr/bin/buildctl /usr/bin/buildctl
+COPY --from=docker.io/moby/buildkit:latest /usr/bin/buildctl /usr/bin/buildctl
 
 WORKDIR /app/apps/api
 

@@ -1,39 +1,46 @@
-job "hangar-web" {
+job "hangar-registry" {
   datacenters = ["dc1"]
-  type        = "service"
+  type        = "system"
 
-  group "web" {
+  group "registry" {
     count = 1
 
     network {
       port "http" {
-        static = 5173
-        to     = 5173
+        static = 5000
+        to     = 5000
       }
     }
 
-    task "web" {
+    task "registry" {
       driver = "podman"
 
       config {
-        image = "registry.service.consul:5000/hangar-web:latest"
+        image = "docker.io/library/registry:2"
         ports = ["http"]
+        volumes = [
+          "/opt/hangar/data/registry:/var/lib/registry",
+        ]
+      }
+
+      env {
+        REGISTRY_STORAGE_DELETE_ENABLED = "true"
       }
 
       resources {
-        cpu    = 256
-        memory = 512
+        cpu    = 128
+        memory = 128
       }
 
       service {
-        name         = "web"
+        name         = "registry"
         port         = "http"
         address_mode = "driver"
         provider     = "consul"
 
         check {
           type         = "http"
-          path         = "/"
+          path         = "/v2/"
           interval     = "10s"
           timeout      = "3s"
           address_mode = "driver"

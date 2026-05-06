@@ -6,6 +6,9 @@ job "hangar-api" {
     count = 1
 
     network {
+      dns {
+        servers = ["10.88.0.1"]
+      }
       port "http" {
         static = 3001
         to     = 3001
@@ -16,7 +19,8 @@ job "hangar-api" {
       driver = "podman"
 
       config {
-        image = "localhost:5000/hangar-api:latest"
+        image = "registry.service.consul:5000/hangar-api:latest"
+        force_pull = true
         ports = ["http"]
       }
 
@@ -32,22 +36,27 @@ job "hangar-api" {
       }
 
       template {
-        data        = <<-EOT
-          {{- with secret "hangar/data/config" -}}
-          BUILDKIT_HOST={{ .Data.data.buildkit_host }}
-          CADDY_ADMIN_URL={{ .Data.data.caddy_admin_url }}
-          NOMAD_ADDR={{ .Data.data.nomad_addr }}
-          CONSUL_ADDR={{ .Data.data.consul_addr }}
-          {{- end }}
-          {{- range service "postgres" }}
-          DATABASE_URL=postgresql://hangar:hangar@{{ .Address }}:{{ .Port }}/hangar
-          {{- end }}
-          {{- range service "redis" }}
-          REDIS_URL=redis://{{ .Address }}:{{ .Port }}
-          {{- end }}
-        EOT
+        data        = <<EOT
+{{- with secret "hangar/data/config" -}}
+NOMAD_ADDR={{ .Data.data.nomad_addr }}
+CONSUL_ADDR={{ .Data.data.consul_addr }}
+NOMAD_TOKEN={{ .Data.data.nomad_token }}
+{{- end }}
+BUILDKIT_HOST=tcp://buildkit.service.consul:1234
+REGISTRY_HOST=registry.service.consul:5000
+{{- range service "caddy" }}
+CADDY_ADMIN_URL=http://{{ .Address }}:2019
+{{- end }}
+{{- range service "postgres" }}
+DATABASE_URL=postgresql://hangar:hangar@{{ .Address }}:{{ .Port }}/hangar
+{{- end }}
+{{- range service "redis" }}
+REDIS_URL=redis://{{ .Address }}:{{ .Port }}
+{{- end }}
+EOT
         destination = "secrets/config.env"
         env         = true
+        change_mode = "noop"
       }
 
       env {
@@ -58,6 +67,21 @@ job "hangar-api" {
       resources {
         cpu    = 256
         memory = 512
+      }
+
+      service {
+        name         = "api"
+        port         = "http"
+        address_mode = "driver"
+        provider     = "consul"
+
+        check {
+          type         = "http"
+          path         = "/health"
+          interval     = "10s"
+          timeout      = "3s"
+          address_mode = "driver"
+        }
       }
     }
   }

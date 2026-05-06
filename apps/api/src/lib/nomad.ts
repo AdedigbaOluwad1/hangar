@@ -5,6 +5,13 @@ async function getNomadAddr(): Promise<string> {
   return config.nomad_addr ?? 'http://127.0.0.1:4646'
 }
 
+async function nomadHeaders(): Promise<Record<string, string>> {
+  const config = await getConfig()
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (config.nomad_token) headers['X-Nomad-Token'] = config.nomad_token
+  return headers
+}
+
 export async function submitJob(
   deploymentId: string,
   imageTag: string,
@@ -68,7 +75,7 @@ export async function submitJob(
 
   const res = await fetch(`${NOMAD_ADDR}/v1/jobs`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: await nomadHeaders(),
     body: JSON.stringify(job),
   })
 
@@ -83,7 +90,7 @@ export async function stopJob(deploymentId: string) {
   const NOMAD_ADDR = await getNomadAddr()
   const res = await fetch(
     `${NOMAD_ADDR}/v1/job/hangar-${deploymentId}`,
-    { method: 'DELETE' }
+    { method: 'DELETE', headers: await nomadHeaders() }
   )
   if (!res.ok) {
     throw new Error(`Nomad job stop failed: ${res.status}`)
@@ -93,7 +100,8 @@ export async function stopJob(deploymentId: string) {
 export async function getJobStatus(deploymentId: string) {
   const NOMAD_ADDR = await getNomadAddr()
   const res = await fetch(
-    `${NOMAD_ADDR}/v1/job/hangar-${deploymentId}/allocations`
+    `${NOMAD_ADDR}/v1/job/hangar-${deploymentId}/allocations`,
+    { headers: await nomadHeaders() }
   )
   if (!res.ok) return null
   const allocs = await res.json()

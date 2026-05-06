@@ -6,19 +6,23 @@ A self-hosted Platform-as-a-Service running on the HashiCorp stack. Push a Git U
 
 ## What This Is
 
-Hangar is what Railway, Render, and Brimble look like under the hood — minus the managed cloud. It runs entirely on bare metal (or any Ubuntu server) and is provisioned from scratch with a single command.
+Hangar is what Railway, Render, and Brimble look like under the hood — minus the managed cloud. It runs entirely on bare metal (or any Ubuntu server). Every component runs as a **Nomad job** with the **Podman driver** — no Docker daemon, no Docker Compose.
 
 The production stack is:
 
-- **Nomad** — container orchestration (replaces `docker run`)
-- **Consul** — service discovery (replaces manual port tracking)
-- **Vault** — secrets management (replaces `.env` files)
-- **Caddy** — dynamic reverse proxy (subdomain per deployment)
+- **Nomad** — container orchestration; all workloads are Nomad jobs
+- **Consul** — service discovery and DNS (`.service.consul` resolves across all containers)
+- **Vault** — secrets management with workload identity JWT auth
+- **Caddy** — dynamic reverse proxy; one subdomain per deployment, patched live via admin API
 - **BuildKit + Railpack** — zero-Dockerfile image builds
 - **BullMQ + Redis** — async deployment queue
-- **Ansible** — idempotent server provisioning
-- **Terraform** — infrastructure provisioning (Hetzner/DigitalOcean)
-- **GitHub Actions** — CI, deploy, provision pipelines
+- **Podman** — rootful container runtime (replaces Docker)
+- **dnsmasq** — forwards `.consul` DNS queries into Consul from host and containers
+- **Ansible** — idempotent server provisioning *(provisioning playbooks are WIP — see note below)*
+- **Terraform** — infrastructure provisioning *(WIP)*
+- **GitHub Actions** — CI, deploy, provision pipelines *(WIP)*
+
+> **Note:** The Ansible playbooks, Terraform config, `bootstrap.sh`, `deploy.sh`, and GitHub Actions workflows are not yet updated to reflect the Nomad/Podman stack. The provisioning section of this README describes the target state. Current setup is manual — see the [Manual Setup](#manual-setup) section.
 
 ---
 
@@ -28,7 +32,6 @@ The production stack is:
 User submits Git URL via UI
           ↓
 POST /api/deployments
-  → env vars stored in Vault at hangar/data/deployments/{id}/env
   → deployment record created in Postgres
   → job added to BullMQ queue
           ↓
@@ -39,21 +42,55 @@ BullMQ worker picks up job
 │                                           │
 │  clone.ts   — git clone to /tmp           │
 │  build.ts   — Railpack + BuildKit         │
-│               → image built               │
-│               → loaded into Docker        │
-│               → tagged + pushed to        │
-│                 localhost:5000 registry   │
+│               → image built by BuildKit   │
+│               → pushed directly to        │
+│                 registry.service.consul   │
+│                 :5000 (local registry)    │
 │  run.ts     — reads user env from Vault   │
 │               → submitJob to Nomad        │
-│  caddy.ts   — polls Consul until          │
-│               health check passes         │
+│  caddy.ts   — polls Consul until alloc    │
+│               is healthy                  │
 │               → patches Caddy admin API   │
 └───────────────────────────────────────────┘
           ↓
 App live at http://{deploymentId}.localhost
 ```
 
-Logs are written to Postgres and published to Redis pub/sub simultaneously at every pipeline stage. The SSE endpoint subscribes to the relevant Redis channel and streams log lines to the client in real time — including mid-build output from Railpack and BuildKit.
+Logs are written to Postgres and published to Redis pub/sub simultaneously at every pipeline stage. The SSE endpoint subscribes to the relevant Redis channel and streams log lines to the client in real time.
+
+---
+
+## Infrastructure Stack
+
+All workloads run as Nomad jobs with the Podman driver. There is no Docker daemon.
+
+### Nomad Jobs
+
+| Job | Type | Port |
+|---|---|---|
+| `hangar-registry` | system | 5000 |
+| `hangar-postgres` | service | 5432 (dynamic) |
+| `hangar-redis` | service | 6379 (dynamic) |
+| `hangar-buildkit` | service | 1234 |
+| `hangar-api` | service | 3001 |
+| `hangar-web` | service | 5173 |
+| `hangar-caddy` | service | 80, 2019 |
+
+### Networking
+
+- **Podman bridge subnet:** `10.88.0.0/16`, gateway `10.88.0.1`
+- **Static ports** bind to the host eth0 IP — used only for external access, never for inter-service communication
+- **Inter-service communication** uses Consul DNS: `<service>.service.consul`
+- **dnsmasq** forwards `.consul` queries to `10.88.0.1:8600` (Consul DNS) from both host and containers
+- All Nomad jobs have `dns { servers = ["10.88.0.1"] }` in their network block so containers resolve `.consul` hostnames
+
+### Registry
+
+Runs as a Nomad system job. Always reachable at `registry.service.consul:5000` regardless of container restarts. Configured as an insecure registry in `/etc/containers/registries.conf.d/local.conf` and in BuildKit's `buildkitd.toml`.
+
+### Secrets
+
+Vault uses Nomad workload identity (JWT) for auth — no static tokens in job files. Secrets are read via Consul template at job start and injected as environment variables. The template block in each job file reads from `hangar/data/config`.
 
 ---
 
@@ -66,11 +103,11 @@ apps/
       lib/
         config.ts             — Vault client, getConfig(), getVault()
         nomad.ts              — submitJob, stopJob, getJobStatus
-        emitter.ts            — Redis pub/sub log emitter (own ioredis connections)
+        emitter.ts            — Redis pub/sub log emitter
         queue.ts              — BullMQ worker
-        session.ts            — Redis session management (coming: GitHub OAuth)
+        session.ts            — Redis session management
       middleware/
-        auth.ts               — requireAuth middleware (coming: GitHub OAuth)
+        auth.ts               — requireAuth middleware
       pipeline/
         index.ts              — runPipeline orchestrator
         clone.ts              — git clone
@@ -89,6 +126,14 @@ packages/
   db/                         — Prisma client + shared queries
 
 nomad/
+  jobs/                       — all Nomad job files (.nomad.hcl)
+    hangar-api.nomad.hcl
+    hangar-web.nomad.hcl
+    hangar-caddy.nomad.hcl
+    hangar-buildkit.nomad.hcl
+    hangar-postgres.nomad.hcl
+    hangar-redis.nomad.hcl
+    hangar-registry.nomad.hcl
   config/
     nomad.hcl                 — Nomad agent config
 
@@ -102,139 +147,99 @@ vault/
   scripts/
     unseal.sh                 — auto-unseal script
 
-ansible/
-  playbooks/
-    setup.yml                 — full server provisioning
-    vault-init.yml            — seeds Vault secrets + creates API token
-    deploy.yml                — deploys app via Docker Compose
-    templates/                — j2 templates for all systemd services
-      vault.service.j2        — systemd service template
-      consul.service.j2       — systemd service template
-      nomad.service.j2        — systemd service template
-      vault-unseal.service.j2 — systemd service template
-  group_vars/
-    hangar/
-      vault.yml               — Ansible Vault encrypted secrets
-  requirements.yml            — community.crypto Ansible collection
-  inventory.ini               — generated at deploy time
-
-terraform/                    — server provisioning (Hetzner/DigitalOcean)
-
-caddy/
-  Caddyfile                   — Caddy config
-
-.github/
-  workflows/
-    ci.yml                    — lint + typecheck
-    deploy.yml                — SSH deploy on push to main
-    provision.yml             — Ansible provisioning (manual trigger)
-
-bootstrap.sh                  — machine bootstrap (curl | bash)
-deploy.sh                     — full deploy orchestrator
-docker-compose.yml            — all app services
+ansible/                      — WIP: not yet updated for Nomad/Podman stack
+terraform/                    — WIP: not yet updated
+.github/workflows/            — WIP: not yet updated
 ```
 
 ---
 
-## Running in Development
+## Manual Setup
+
+> This is the current dev/production setup path. Ansible provisioning is not yet complete.
 
 ### Prerequisites
 
-- Docker + Docker Compose
-- Node.js 22+ (via NVM recommended)
-- pnpm
-- Nomad, Consul, Vault installed on the host (see below)
-- A running local registry at `localhost:5000`
+- Ubuntu 24 (WSL2 or bare metal)
+- Nomad, Consul, Vault installed
+- Podman (rootful) + aardvark-dns + netavark
+- dnsmasq
+- Node.js 22+, pnpm
 
-### 1. Clone the repo
+### 1. DNS Setup
 
-```bash
-git clone https://github.com/AdedigbaOluwad1/hangar.git
-cd hangar
+Install and configure dnsmasq to forward `.consul` queries to Consul:
+
+```
+# /etc/dnsmasq.conf
+server=/consul/10.88.0.1#8600
+listen-address=10.88.0.1
+listen-address=127.0.0.1
+bind-interfaces
 ```
 
-### 2. Install dependencies
+Point `/etc/resolv.conf` at `127.0.0.1`. Configure Podman containers to use `10.88.0.1` as DNS:
 
-```bash
-pnpm install
+```toml
+# /etc/containers/containers.conf.d/dns.conf
+[containers]
+dns_servers = ["10.88.0.1"]
 ```
 
-### 3. Set up environment
+> **Important:** The `dns_servers` setting in `containers.conf.d` is not respected by Nomad-launched containers. Each Nomad job must include an explicit `dns { servers = ["10.88.0.1"] }` block in its `network` stanza.
 
-Copy the example env file:
+### 2. Registry
 
-```bash
-cp .env.example .env
+Configure Podman to treat the local registry as insecure:
+
+```toml
+# /etc/containers/registries.conf.d/local.conf
+[[registry]]
+location = "registry.service.consul:5000"
+insecure = true
 ```
 
-Minimum required values in `.env`:
+Configure BuildKit to push to the insecure registry:
 
-```env
-VAULT_ADDR=https://host.docker.internal:8200
-VAULT_TOKEN=hvs.your-api-token
-VAULT_SKIP_VERIFY=true
-DATABASE_URL=postgresql://hangar:hangar@postgres:5432/hangar
-REDIS_URL=redis://redis:6379
-DOCKER_HOST=unix:///var/run/docker.sock
-SWAGGER_ENABLED=true
+```toml
+# /etc/buildkit/buildkitd.toml
+[registry."registry.service.consul:5000"]
+  http = true
+  insecure = true
 ```
 
-### 4. Start HashiCorp services on the host
-
-Install if not already installed:
+### 3. Start Services
 
 ```bash
-sudo apt install consul nomad vault
-ansible-galaxy collection install -r ansible/requirements.yml
+# Start in this order
+sudo systemctl start consul
+sudo systemctl start nomad
+sudo systemctl start vault
+sudo systemctl start dnsmasq
 ```
 
-Start Consul:
+Unseal Vault:
 
 ```bash
-consul agent -dev -bind=127.0.0.1 -client=0.0.0.0 &
-```
-
-Start Nomad:
-
-```bash
-sudo nomad agent -config=nomad/config/nomad.hcl &
-```
-
-Start Vault:
-
-```bash
-sudo vault server -config=vault/config/vault.hcl &
 export VAULT_ADDR=https://127.0.0.1:8200
 export VAULT_SKIP_VERIFY=true
-```
-
-Initialize and unseal Vault (first time only):
-
-```bash
-vault operator init
-# save the 5 unseal keys and root token
+export VAULT_TOKEN=$(cat /etc/vault.d/keys/init.json | jq -r '.root_token')
 vault operator unseal <key1>
 vault operator unseal <key2>
 vault operator unseal <key3>
-vault login <root-token>
 ```
 
-Seed secrets:
+### 4. Seed Vault Secrets
 
 ```bash
 vault secrets enable -path=hangar kv-v2
 
 vault kv put hangar/config \
-  database_url="postgresql://hangar:hangar@postgres:5432/hangar" \
-  redis_url="redis://redis:6379" \
-  nomad_addr="http://host.docker.internal:4646" \
-  consul_addr="http://host.docker.internal:8500" \
-  caddy_admin_url="http://caddy:2019" \
-  buildkit_host="tcp://buildkit:1234" \
-  github_client_id="your-github-oauth-app-client-id" \
-  github_client_secret="your-github-oauth-app-client-secret"
+  nomad_addr="http://127.0.0.1:4646" \
+  consul_addr="http://127.0.0.1:8500" \
+  nomad_token="<your-nomad-token>"
 
-vault policy write hangar-api - <<EOF
+vault policy write nomad-workloads - <<EOF
 path "hangar/data/*" {
   capabilities = ["read"]
 }
@@ -242,134 +247,106 @@ path "hangar/data/deployments/*" {
   capabilities = ["create", "update", "read", "delete"]
 }
 EOF
-
-vault token create -policy=hangar-api -display-name=hangar-api
-# copy the token → update VAULT_TOKEN in .env
 ```
 
-### 5. Start the local Docker registry
+### 5. Deploy Nomad Jobs
 
 ```bash
-docker run -d -p 5000:5000 --restart always --name registry registry:2
+export NOMAD_TOKEN=<your-nomad-token>
+
+# Deploy in startup order
+nomad job run nomad/jobs/hangar-registry.nomad.hcl
+nomad job run nomad/jobs/hangar-postgres.nomad.hcl
+nomad job run nomad/jobs/hangar-redis.nomad.hcl
+nomad job run nomad/jobs/hangar-buildkit.nomad.hcl
+nomad job run nomad/jobs/hangar-caddy.nomad.hcl
 ```
 
-### 6. Start app services
+Build and push the API and web images, then deploy:
 
 ```bash
-docker compose up
+podman build -t registry.service.consul:5000/hangar-api:latest -f apps/api/Dockerfile .
+podman push registry.service.consul:5000/hangar-api:latest --tls-verify=false
+
+podman build -t registry.service.consul:5000/hangar-web:latest -f apps/web/Dockerfile .
+podman push registry.service.consul:5000/hangar-web:latest --tls-verify=false
+
+nomad job run nomad/jobs/hangar-api.nomad.hcl
+nomad job run nomad/jobs/hangar-web.nomad.hcl
 ```
 
-This starts: `web`, `api`, `caddy`, `buildkit`, `postgres`, `redis`.
-
-### 7. Run database migrations
+### 6. Verify
 
 ```bash
-docker compose exec api sh -c "cd /app/packages/db && npx prisma migrate deploy"
+# All services healthy in Consul
+curl -s http://127.0.0.1:8500/v1/catalog/services | jq 'keys'
+
+# API responding
+curl http://172.30.186.74:3001/
+
+# Registry reachable
+curl http://registry.service.consul:5000/v2/_catalog
 ```
 
-Open [http://localhost](http://localhost).
+---
+
+## Redeploying After Code Changes
+
+```bash
+export NOMAD_TOKEN=<your-nomad-token>
+
+podman build -t registry.service.consul:5000/hangar-api:latest -f apps/api/Dockerfile .
+podman push registry.service.consul:5000/hangar-api:latest --tls-verify=false
+
+nomad job stop -purge hangar-api
+sudo kill -9 $(sudo ss -tlnp | grep ':3001' | grep -o 'pid=[0-9]*' | cut -d= -f2) 2>/dev/null
+sudo kill -9 $(sudo ss -ulnp | grep ':3001' | grep -o 'pid=[0-9]*' | cut -d= -f2) 2>/dev/null
+nomad job run nomad/jobs/hangar-api.nomad.hcl
+```
+
+> **Note:** Always kill stale `conmon` processes after stopping a Nomad job before redeploying. Stale processes hold ports and will cause the new alloc to fail with `address already in use`.
 
 ---
 
 ## Deploying an App
 
-### Via UI
-
-1. Open [http://localhost](http://localhost)
-2. Paste a Git URL
-3. Optionally add environment variables and resource limits
-4. Click Deploy
-5. Watch logs stream in real time
-6. App goes live at `http://{deploymentId}.localhost`
-
 ### Via API
 
 ```bash
-curl -X POST http://localhost/api/deployments \
+curl -X POST http://172.30.186.74:3001/deployments \
   -H "Content-Type: application/json" \
   -d '{
     "sourceType": "git",
-    "sourceUrl": "https://github.com/render-examples/express-hello-world",
-    "env": {
-      "MY_SECRET": "value"
-    },
-    "resources": {
-      "cpu": 500,
-      "memoryMb": 512
-    }
+    "sourceUrl": "https://github.com/render-examples/express-hello-world"
   }'
+```
+
+Stream logs:
+
+```bash
+curl -s http://172.30.186.74:3001/deployments/<id>/logs
 ```
 
 ### Test Apps
 
-These work out of the box:
-
-- `https://github.com/render-examples/express-hello-world` — Node.js Express
-- `https://github.com/render-examples/flask` — Python Flask
-- Any Node.js/Python/Go app that Railpack can detect automatically
+- `https://github.com/render-examples/express-hello-world` — Node.js/Express
+- Any Node.js, Python, or Go app that Railpack can auto-detect
 
 ---
 
 ## API Reference
 
-Interactive docs are available at `http://localhost/api/docs` when `SWAGGER_ENABLED=true`.
-
 ### Deployments
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/api/deployments` | List all deployments |
-| `POST` | `/api/deployments` | Create a deployment |
-| `GET` | `/api/deployments/:id` | Get a single deployment |
-| `DELETE` | `/api/deployments/:id` | Stop and delete a deployment |
-| `POST` | `/api/deployments/:id/redeploy` | Redeploy from the same source |
-| `GET` | `/api/deployments/:id/health` | Check deployment health via Nomad |
-| `GET` | `/api/deployments/:id/logs` | Stream build + deploy logs over SSE |
-
-### Auth
-
-| Method | Path | Description |
-|---|---|---|
-| `GET` | `/api/auth/github` | Redirect to GitHub OAuth |
-| `GET` | `/api/auth/github/callback` | OAuth callback — sets session cookie |
-| `GET` | `/api/auth/me` | Get the current authenticated user |
-| `POST` | `/api/auth/logout` | Clear session |
-
-### Create Deployment
-
-```bash
-curl -X POST http://localhost/api/deployments \
-  -H "Content-Type: application/json" \
-  -d '{
-    "sourceType": "git",
-    "sourceUrl": "https://github.com/render-examples/express-hello-world",
-    "env": {
-      "MY_SECRET": "value",
-      "API_KEY": "abc123"
-    },
-    "resources": {
-      "cpu": 500,
-      "memoryMb": 512
-    }
-  }'
-```
-
-**Response:**
-
-```json
-{
-  "id": "dep-abc12345",
-  "status": "pending",
-  "sourceType": "git",
-  "sourceUrl": "https://github.com/render-examples/express-hello-world",
-  "imageTag": null,
-  "containerId": null,
-  "port": null,
-  "liveUrl": null,
-  "createdAt": "2026-04-26T00:00:00.000Z",
-  "updatedAt": "2026-04-26T00:00:00.000Z"
-}
-```
+| `GET` | `/deployments` | List all deployments |
+| `POST` | `/deployments` | Create a deployment |
+| `GET` | `/deployments/:id` | Get a single deployment |
+| `DELETE` | `/deployments/:id` | Stop and delete a deployment |
+| `POST` | `/deployments/:id/redeploy` | Redeploy from the same source |
+| `GET` | `/deployments/:id/health` | Check deployment health via Nomad |
+| `GET` | `/deployments/:id/logs` | Stream build + deploy logs over SSE |
 
 ### Deployment Status Values
 
@@ -380,39 +357,16 @@ curl -X POST http://localhost/api/deployments \
 | `deploying` | Nomad job submitted, waiting for health check |
 | `running` | App is live |
 | `failed` | Pipeline error |
-| `stopped` | Manually stopped via DELETE |
+| `stopped` | Manually stopped |
 
 ### Resource Limits
 
-Resource limits are ephemeral — specified per deploy request, not stored in the database. Defaults apply if omitted.
+Specified per deploy request. Defaults apply if omitted.
 
-| Field | Default | Min | Max | Unit |
-|---|---|---|---|---|
-| `cpu` | `500` | `100` | `8000` | MHz |
-| `memoryMb` | `512` | `128` | `32768` | MB |
-
-### Redeploy
-
-Creates a brand new deployment from the same source and env. Once the new deployment reaches `running`, the previous deployment is automatically stopped and its Caddy route removed.
-
-```bash
-curl -X POST http://localhost/api/deployments/dep-abc12345/redeploy
-```
-
-### Health Check
-
-Returns the current Nomad alloc status for a running deployment.
-
-```bash
-curl http://localhost/api/deployments/dep-abc12345/health
-```
-
-```json
-{
-  "status": "running",
-  "allocId": "abc-def-123"
-}
-```
+| Field | Default | Unit |
+|---|---|---|
+| `cpu` | `500` | MHz |
+| `memoryMb` | `512` | MB |
 
 ---
 
@@ -424,235 +378,69 @@ Each deployment gets its own subdomain:
 http://{deploymentId}.localhost
 ```
 
-Routes are added and removed dynamically via the Caddy admin API — no Caddyfile edits required. The subdomain approach means deployed apps receive requests at `/` and all framework-generated asset paths (Next.js `/_next/static/`, Vite `/@vite/`, etc.) resolve correctly without any `basePath` configuration.
-
-On **Linux** and in **Chrome/Firefox**, `*.localhost` resolves automatically to `127.0.0.1`. On **Windows**, add entries to `C:\Windows\System32\drivers\etc\hosts`:
-
-```
-127.0.0.1 dep-abc12345.localhost
-```
-
-Or use a local DNS tool like `dnsmasq` to resolve `*.localhost` globally.
-
----
-
-# Provisioning a New Server from Scratch
-
-## Prerequisites
-
-- Ubuntu 24 server with SSH access
-- Your Ansible Vault password
-
-## Step 1: Bootstrap
-
-SSH into the server and run:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/AdedigbaOluwad1/hangar/main/bootstrap.sh | bash
-```
-
-Or manually:
-
-```bash
-git clone https://github.com/AdedigbaOluwad1/hangar.git ~/documents/hangar
-cd ~/documents/hangar
-chmod +x bootstrap.sh
-./bootstrap.sh
-```
-
-`bootstrap.sh` installs: `curl`, `git`, `unzip`, `ansible`, `terraform`, Ansible collections. Then hands off to `deploy.sh`.
-
-## Step 2: deploy.sh
-
-`deploy.sh` runs automatically from `bootstrap.sh`. It prompts once for your Ansible Vault password, then runs the full provisioning stack unattended:
-
-```
-bootstrap.sh
-  └── deploy.sh
-        ├── setup.yml
-        │     ├── installs Docker, Node, NVM, pnpm, tsx
-        │     ├── installs Nomad, Consul, Vault
-        │     ├── generates TLS certs for Consul + Vault
-        │     ├── starts all systemd services
-        │     ├── runs vault operator init (first time only)
-        │     ├── saves unseal keys + root token to /etc/vault.d/keys/init.json
-        │     ├── unseals Vault
-        │     └── enables + starts vault-unseal.service
-        │
-        ├── deploy.yml
-        │     └── docker compose up
-        │
-        └── vault-init.yml
-              ├── reads root token from /etc/vault.d/keys/init.json
-              ├── enables KV secrets engine at hangar/
-              ├── seeds hangar/config secrets
-              ├── creates hangar-api policy + token
-              └── writes VAULT_TOKEN to .env
-```
-
-Zero manual steps. The server is fully provisioned and the app is live when `deploy.sh` exits.
-
-## What Happens on Reboot
-
-Systemd brings everything back up automatically in the correct order:
-
-```
-consul.service → nomad.service → vault.service → vault-unseal.service
-```
-
-`vault-unseal.service` reads unseal keys from `/etc/vault.d/keys/init.json` and unseals Vault automatically. No human intervention required.
-
-## Known Issues & Notes
-
-- **Vault init is idempotent** — `setup.yml` checks if Vault is already initialized before running `vault operator init`. Re-running `bootstrap.sh` on an existing server is safe.
-- **`/etc/vault.d/keys/init.json`** contains your unseal keys and root token. It is root-owned, `0600`, and never leaves the server. Back it up somewhere secure (password manager, secrets manager) after first provision.
-- **Ansible Vault password** — never goes in the repo. It lives in your password manager for manual runs and in `ANSIBLE_VAULT_PASSWORD` as a GitHub secret for CI/CD.
-- **Vault sealed after restart** — if `vault-unseal.service` fails for any reason: `export VAULT_ADDR=https://127.0.0.1:8200 && export VAULT_SKIP_VERIFY=true && vault operator unseal`.
-
-## Remote Mode (Terraform)
-
-To provision a fresh Hetzner or DigitalOcean server automatically:
-
-```bash
-export HANGAR_MODE=remote
-export HETZNER_TOKEN=your-token
-export HETZNER_SSH_KEY_NAME=your-key-name
-./deploy.sh
-```
-
-`deploy.sh` will:
-
-1. Run `terraform apply` to create the server
-2. Wait for SSH to become available
-3. Generate `inventory.ini` with the server IP
-4. Run all Ansible playbooks against it
-
-## GitHub Actions
-
-### CI (`ci.yml`)
-
-Runs on every PR and push to `main`: type check and lint.
-
-### Deploy (`deploy.yml`)
-
-Runs on push to `main`: SSHes into the server, `git pull origin main`, `docker compose up -d --build`.
-
-### Provision (`provision.yml`)
-
-Manual trigger (`workflow_dispatch`): installs Ansible, reads `ANSIBLE_VAULT_PASSWORD` from GitHub secrets, runs full `setup.yml` playbook.
-
-### Required GitHub Secrets
-
-| Secret | Description |
-|---|---|
-| `ANSIBLE_VAULT_PASSWORD` | Password to decrypt `ansible/group_vars/hangar/vault.yml` |
-| `SERVER_HOST` | Server IP or hostname |
-| `SERVER_USER` | SSH username |
-| `SERVER_SSH_KEY` | Private SSH key for the server |
-| `HANGAR_REPO_URL` | Full Git URL of the repository to clone and deploy |
-| `HETZNER_TOKEN` | Hetzner API token for Terraform to provision servers |
-| `HETZNER_SSH_KEY_NAME` | Name of the SSH key registered in your Hetzner account |
-
----
-
-## GitHub Actions
-
-### CI (`ci.yml`)
-
-Runs on every PR and push to `main`: type check and lint.
-
-### Deploy (`deploy.yml`)
-
-Runs on push to `main`: SSHes into the server, `git pull origin main`, `docker compose up -d --build`.
-
-### Provision (`provision.yml`)
-
-Manual trigger (`workflow_dispatch`): installs Ansible, reads `ANSIBLE_VAULT_PASSWORD` from GitHub secrets, runs full `setup.yml` playbook.
-
-### Required GitHub Secrets
-
-| Secret | Description |
-|---|---|
-| `ANSIBLE_VAULT_PASSWORD` | Password to decrypt `ansible/group_vars/hangar/vault.yml` |
-| `SERVER_HOST` | Server IP or hostname |
-| `SERVER_USER` | SSH username |
-| `SERVER_SSH_KEY` | Private SSH key for the server |
-
----
-
-## Infrastructure Details
-
-### Nomad
-
-| Setting | Value |
-|---|---|
-| Version | v2.0.0 |
-| Data dir | `/opt/nomad/data` |
-| Config | `/etc/nomad.d/nomad.hcl` |
-| Consul address | `127.0.0.1:8500` (HTTP, for fingerprinting) |
-| Docker driver | `allow_privileged = true`, `allow_caps = ["ALL"]` |
-
-Jobs use dynamic ports (assigned by Consul) mapped to container port 3000. Services are registered in Consul with an HTTP health check on `/`. Resource limits default to 500 MHz CPU and 512 MB RAM, configurable per deployment.
-
-### Consul
-
-| Setting | Value |
-|---|---|
-| Version | v1.22.7 |
-| Data dir | `/opt/consul/data` |
-| Config | `/etc/consul.d/consul.hcl` |
-| HTTP port | `8500` (for Nomad fingerprinting) |
-| HTTPS port | `8501` (TLS, self-signed cert) |
-| TLS cert | `/opt/consul/tls/consul.crt` |
-
-### Vault
-
-| Setting | Value |
-|---|---|
-| Version | v2.0.0 |
-| Data dir | `/opt/vault/data` |
-| Config | `/etc/vault.d/vault.hcl` |
-| Address | `https://0.0.0.0:8200` |
-| TLS cert | `/opt/vault/tls/vault.crt` |
-| Auto-unseal | `vault-unseal.service` reads from `/etc/vault.d/keys/unseal.env` |
-| Secrets engine | `kv-v2` at path `hangar/` |
-
-### Vault Secrets
-
-**`hangar/data/config`** — platform config:
-
-```
-database_url           postgresql://hangar:hangar@postgres:5432/hangar
-redis_url              redis://redis:6379
-nomad_addr             http://host.docker.internal:4646
-consul_addr            http://host.docker.internal:8500
-caddy_admin_url        http://caddy:2019
-buildkit_host          tcp://buildkit:1234
-github_client_id       (your GitHub OAuth App client ID)
-github_client_secret   (your GitHub OAuth App client secret)
-```
-
-**`hangar/data/deployments/{id}/env`** — per-deployment user secrets. Created at deploy time, deleted when deployment is stopped.
-
-### Caddy
-
-Caddy runs in Docker and is the single point of ingress. Routes are managed dynamically via the admin API at `http://caddy:2019`.
+Routes are patched live into Caddy via its admin API at port 2019 — no Caddyfile edits, no restarts. The Caddyfile is rendered by Consul template at Caddy startup and handles base routing:
 
 | Traffic | Handler |
 |---|---|
-| `localhost/api/*` | API (`api:3001`) — prefix stripped before proxying |
-| `localhost` | Frontend (`web:5173`) |
-| `{deploymentId}.localhost` | Deployed container (injected dynamically) |
+| `*/api/*` | API container (port 3001), prefix stripped |
+| `*` (catch-all) | Web frontend (port 5173) |
+| `{deploymentId}.localhost` | Deployed app container (injected dynamically) |
 
-### Local Registry
+On Linux, `*.localhost` resolves to `127.0.0.1` automatically in most browsers.
 
-A local Docker registry runs at `localhost:5000`. After BuildKit builds an image, Hangar loads it into the Docker daemon, tags it as `localhost:5000/hangar-{id}:latest`, and pushes it. Nomad pulls from `localhost:5000` at job start.
+---
 
-The registry is a host-level service, not part of `docker-compose.yml`. Start it once:
+## Known Issues & Operational Notes
+
+### Stale conmon processes
+
+Nomad's Podman driver leaves `conmon` processes holding ports after a job is stopped. Always kill them before redeploying:
 
 ```bash
-docker run -d -p 5000:5000 --restart always --name registry registry:2
+sudo kill -9 $(sudo ss -tlnp | grep ':<PORT>' | grep -o 'pid=[0-9]*' | cut -d= -f2) 2>/dev/null
+sudo kill -9 $(sudo ss -ulnp | grep ':<PORT>' | grep -o 'pid=[0-9]*' | cut -d= -f2) 2>/dev/null
 ```
+
+Ports to watch: `80`, `2019`, `3001`, `5000`, `5173`, `5432`, `6379`, `1234`.
+
+### BuildKit stale lockfile
+
+BuildKit writes a lockfile at `/opt/hangar/data/buildkit/buildkitd.lock`. If BuildKit fails to start, delete it:
+
+```bash
+sudo rm -f /opt/hangar/data/buildkit/buildkitd.lock
+```
+
+### Vault JWT expiry
+
+Nomad workload identity tokens expire (TTL: 1h). If the API alloc is killed with `failed to derive Vault token: token is expired`, stop-purge and redeploy the job. Make sure Vault is unsealed first.
+
+### Caddy health check
+
+The Caddy Consul health check targets port 2019 (TCP), not port 80. This ensures Caddy registers as healthy in Consul regardless of upstream app status. `CADDY_ADMIN_URL` is only injected into the API via Consul template when Caddy is healthy — if it's missing, Caddy's health check is the first thing to check.
+
+### DNS in Nomad containers
+
+`/etc/containers/containers.conf.d/dns.conf` is not respected by Nomad-managed containers. Every Nomad job file must include:
+
+```hcl
+network {
+  dns {
+    servers = ["10.88.0.1"]
+  }
+  ...
+}
+```
+
+Without this, `.service.consul` hostnames will not resolve inside containers.
+
+### HCL heredoc indentation
+
+Consul template blocks in Nomad job files must use `<<EOT` (not `<<-EOT`) with zero indentation on all lines including the closing `EOT`. Indentation causes silent template rendering failures.
+
+### Nomad service address_mode
+
+All `service` and `check` blocks in Nomad job files must include `address_mode = "driver"`. Without it, Consul registers the eth0 IP instead of the Podman container IP.
 
 ---
 
@@ -704,60 +492,17 @@ model Log {
 
 ---
 
-## TLS
-
-Self-signed certificates are generated by Ansible (`community.crypto`) and stored at `/opt/vault/tls/` and `/opt/consul/tls/`. The API uses `VAULT_SKIP_VERIFY=true` for self-signed certs.
-
-### Switching to Let's Encrypt
-
-Update `vault/config/vault.hcl`:
-
-```hcl
-listener "tcp" {
-  address       = "0.0.0.0:8200"
-  tls_cert_file = "/etc/letsencrypt/live/yourdomain.com/fullchain.pem"
-  tls_key_file  = "/etc/letsencrypt/live/yourdomain.com/privkey.pem"
-}
-```
-
-Update `consul/config/consul.hcl`:
-
-```hcl
-tls {
-  defaults {
-    cert_file = "/etc/letsencrypt/live/yourdomain.com/fullchain.pem"
-    key_file  = "/etc/letsencrypt/live/yourdomain.com/privkey.pem"
-  }
-}
-```
-
-Remove `VAULT_SKIP_VERIFY=true` from `docker-compose.yml` and the unseal script.
-
----
-
 ## What's Next
 
+- **Ansible provisioning** — codify manual setup into idempotent playbooks for the Nomad/Podman stack
+- **Scoped Nomad token** — replace bootstrap token with a least-privilege policy token
+- **Windows access** — set `networkingMode=mirrored` in `.wslconfig` for direct host access
+- **Caddy race condition** — auto-restart Caddy alloc when Consul template renders with empty upstreams
+- **Registry GC** — delete old images from the local registry after successful redeploy
 - **GitHub OAuth** — private repo support, user-scoped deployments
 - **Custom domains** — user-provided domains beyond `.localhost`
-- **Auto cert renewal** — Ansible task for Let's Encrypt cert rotation
-- **Rollback** — redeploy a previous image tag (data model already supports it)
 - **Build cache reuse** — BuildKit cache persistence across deployments
-- **Billing/limits** — CPU, memory, deployment count per user
-
----
-
-## Contributing
-
-```bash
-git clone https://github.com/AdedigbaOluwad1/hangar.git
-cd hangar
-pnpm install
-cp .env.example .env
-# follow dev setup above
-docker compose up
-```
-
-PRs welcome. Open an issue first for large changes.
+- **Rollback** — redeploy a previous image tag
 
 ---
 

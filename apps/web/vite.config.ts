@@ -7,4 +7,7 @@ export default defineConfig({
   resolve: {
     tsconfigPaths: true,
   },
+  server: {
+    allowedHosts: ["hangar.local", "localhost"],
+  },
 });

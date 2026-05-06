@@ -7,8 +7,9 @@ export async function build(
   deploymentId: string,
   dir: string,
 ): Promise<string> {
-  const registryTag = `registry:5000/hangar-${deploymentId}:latest`;
-  const pullTag = `localhost:5000/hangar-${deploymentId}:latest`
+  const registryHost = process.env.REGISTRY_HOST ?? 'registry.hangar.local:5000'
+  const registryTag = `${registryHost}/hangar-${deploymentId}:latest`
+  const pullTag = registryTag
   const planPath = join(dir, 'railpack-plan.json')
 
   // step 1 — prepare
@@ -33,7 +34,7 @@ export async function build(
   await writeLog(deploymentId, 'build', `🔨 Building image ${registryTag}`)
   await emitLog(deploymentId, 'build', `🔨 Building image ${registryTag}`)
   const buildProc = execa('buildctl', [
-    '--addr', 'tcp://buildkit:1234',
+    '--addr', process.env.BUILDKIT_HOST!,
     'build',
     '--local', `context=${dir}`,
     '--local', `dockerfile=${dir}`,
