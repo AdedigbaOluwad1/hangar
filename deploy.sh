@@ -101,15 +101,27 @@ wait_for_service() {
 deploy_job() {
   local job_file=$1
   local service_name=$2
+  local job_name
+  job_name=$(basename "$job_file" .nomad.hcl)
 
-  echo "🐳 Deploying $(basename $job_file)..."
+  echo "🐳 Deploying $job_name..."
 
+  # Stop and purge existing Nomad job
+  NOMAD_TOKEN="$NOMAD_TOKEN" nomad job stop -purge "$job_name" 2>/dev/null || true
+
+  # Force remove any stuck Podman containers for this job
+  sudo podman ps -a --format '{{.ID}} {{.Names}}' | grep "$job_name" | awk '{print $1}' | \
+    xargs -r sudo podman rm -f 2>/dev/null || true
+
+  # Kill anything holding the port
   local port
   port=$(grep -oP 'static\s*=\s*\K[0-9]+' "$job_file" | head -1)
   if [ -n "$port" ]; then
     sudo kill -9 "$(sudo ss -tlnp | grep ":$port" | grep -o 'pid=[0-9]*' | cut -d= -f2)" 2>/dev/null || true
     sudo kill -9 "$(sudo ss -ulnp | grep ":$port" | grep -o 'pid=[0-9]*' | cut -d= -f2)" 2>/dev/null || true
   fi
+
+  sleep 2
 
   NOMAD_TOKEN="$NOMAD_TOKEN" nomad job run "$job_file"
 
