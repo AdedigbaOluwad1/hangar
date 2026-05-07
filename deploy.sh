@@ -175,14 +175,6 @@ ansible-playbook \
   "$ANSIBLE_DIR/playbooks/deploy.yml" \
   --vault-password-file "$VAULT_PASS_FILE"
 
-# ── 6. Run database migrations ────────────────────────────────────────────────
-
-echo ""
-echo "🗄️  Running database migrations..."
-ansible-playbook \
-  -i "$ANSIBLE_DIR/inventory.ini" \
-  "$ANSIBLE_DIR/playbooks/migrate.yml" \
-  --vault-password-file "$VAULT_PASS_FILE"
 
 # ── Done ──────────────────────────────────────────────────────────────────────
 
