@@ -1,10 +1,8 @@
 job "hangar-buildkit" {
   datacenters = ["dc1"]
   type        = "service"
-
   group "buildkit" {
     count = 1
-
     network {
       dns {
         servers = ["10.88.0.1"]
@@ -15,9 +13,24 @@ job "hangar-buildkit" {
       }
     }
 
+    task "cleanup-lockfile" {
+      driver = "raw_exec"
+      lifecycle {
+        hook    = "prestart"
+        sidecar = false
+      }
+      config {
+        command = "/bin/sh"
+        args    = ["-c", "rm -f /opt/hangar/data/buildkit/buildkitd.lock && echo 'lockfile cleared'"]
+      }
+      resources {
+        cpu    = 50
+        memory = 32
+      }
+    }
+
     task "buildkit" {
       driver = "podman"
-
       config {
         image      = "docker.io/moby/buildkit:latest"
         privileged = true
@@ -33,12 +46,10 @@ job "hangar-buildkit" {
           "/opt/hangar/data/buildkit:/var/lib/buildkit",
         ]
       }
-
       service {
         name         = "buildkit"
         port         = "daemon"
         address_mode = "driver"
-
         check {
           type         = "tcp"
           port         = "daemon"
@@ -47,7 +58,6 @@ job "hangar-buildkit" {
           timeout      = "2s"
         }
       }
-
       resources {
         cpu    = 1024
         memory = 1024
