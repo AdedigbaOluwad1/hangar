@@ -106,10 +106,10 @@ deploy_job() {
 
   echo "🐳 Deploying $job_name..."
 
-  # Stop and purge existing Nomad job
-  NOMAD_TOKEN="$NOMAD_TOKEN" nomad job stop -purge "$job_name" 2>/dev/null || true
+  # Stop and purge existing Nomad job — wait for it to actually finish
+  NOMAD_TOKEN="$NOMAD_TOKEN" nomad job stop -purge -detach=false "$job_name" 2>/dev/null || true
 
-  # Force remove any stuck Podman containers for this job
+  # Now force remove any stuck Podman containers
   sudo podman ps -a --format '{{.ID}} {{.Names}}' | grep "$job_name" | awk '{print $1}' | \
     xargs -r sudo podman rm -f 2>/dev/null || true
 
