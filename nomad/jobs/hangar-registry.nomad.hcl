@@ -35,7 +35,7 @@ job "hangar-registry" {
       service {
         name         = "registry"
         port         = "http"
-        address_mode = "host"
+        address_mode = "driver"
         provider     = "consul"
 
         check {
@@ -43,7 +43,7 @@ job "hangar-registry" {
           path         = "/v2/"
           interval     = "10s"
           timeout      = "3s"
-          address_mode = "host"
+          address_mode = "driver"
         }
       }
     }
