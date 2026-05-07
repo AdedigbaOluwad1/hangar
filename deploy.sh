@@ -132,14 +132,6 @@ deploy_job() {
   fi
 }
 
-# ── 0. Ensure dnsmasq is running ─────────────────────────────────────────────
-
-if ! sudo systemctl is-active --quiet dnsmasq; then
-  echo "🔄 Starting dnsmasq..."
-  sudo systemctl start dnsmasq
-fi
-echo "✅ dnsmasq is running"
-
 # ── 1. Infrastructure setup ───────────────────────────────────────────────────
 
 echo ""
