@@ -686,6 +686,24 @@
         enabled: true
         daemon_reload: true
 
+    - name: Unseal Vault if sealed (existing install)
+      shell: |
+        VAULT_ADDR=https://127.0.0.1:8200 VAULT_SKIP_VERIFY=true \
+          vault status -format=json | jq -e '.sealed == true' > /dev/null || exit 0
+        bash {{ hangar_dir }}/vault/scripts/unseal.sh
+      when: vault_initialized.stdout == "true"
+      no_log: true
+
+    - name: Wait for Vault to be unsealed
+      shell: |
+        VAULT_ADDR=https://127.0.0.1:8200 VAULT_SKIP_VERIFY=true \
+          vault status -format=json | jq -e '.sealed == false' > /dev/null
+      register: vault_unseal_check
+      retries: 10
+      delay: 3
+      until: vault_unseal_check.rc == 0
+      changed_when: false
+
     # ── Nomad ACL Bootstrap ──────────────────────────────────────────────────
 
     - name: Check if Nomad ACL bootstrap token exists
@@ -741,7 +759,7 @@
         url: https://127.0.0.1:8200/v1/sys/health
         validate_certs: false
         return_content: true
-        status_code: [ 200, 429, 472, 473 ]
+        status_code: [ 200, 429, 472, 473, 503 ]
       register: vault_status
 
     - name: Verify .consul DNS resolves
