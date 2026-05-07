@@ -6,14 +6,18 @@
   vars:
     hangar_dir: "{{ ansible_env.HOME }}/documents/hangar"
     repo_url: "{{ lookup('env', 'HANGAR_REPO_URL') }}"
+    registry: "registry.service.consul:5000"
 
   tasks:
+
+    # ── Repo ─────────────────────────────────────────────────────────────────
+
     - name: Check if repo exists
       stat:
         path: "{{ hangar_dir }}"
       register: repo_check
 
-    - name: Clone repo if not exists
+    - name: Clone repo
       git:
         repo: "{{ repo_url }}"
         dest: "{{ hangar_dir }}"
@@ -25,10 +29,12 @@
         repo: "{{ repo_url }}"
         dest: "{{ hangar_dir }}"
         version: main
-        force: yes
+        force: true
       when: repo_check.stat.exists
 
-    - name: Install dependencies
+    # ── Dependencies ──────────────────────────────────────────────────────────
+
+    - name: Install Node dependencies
       shell: |
         export NVM_DIR="{{ ansible_env.HOME }}/.nvm"
         source "$NVM_DIR/nvm.sh"
@@ -37,33 +43,123 @@
         executable: /bin/bash
         chdir: "{{ hangar_dir }}"
 
-    - name: Build and start services
-      shell: docker compose up -d --build
+    # ── Build + Push Images ───────────────────────────────────────────────────
+
+    - name: Load Nomad token
+      become: true
+      shell: cat /etc/nomad.d/bootstrap.json | jq -r '.SecretID'
+      register: nomad_token
+      changed_when: false
+      no_log: true
+
+    - name: Build API image
+      become: true
+      shell: |
+        podman build \
+          -t {{ registry }}/hangar-api:latest \
+          -f apps/api/Dockerfile \
+          .
       args:
         chdir: "{{ hangar_dir }}"
 
-    - name: Wait for postgres to be healthy
-      shell: docker compose exec postgres pg_isready -U hangar
-      args:
-        chdir: "{{ hangar_dir }}"
-      register: pg_check
-      retries: 10
-      delay: 3
-      until: pg_check.rc == 0
+    - name: Push API image
+      become: true
+      shell: podman push {{ registry }}/hangar-api:latest --tls-verify=false
 
-    - name: Run database migrations
-      shell: docker compose exec api sh -c "cd /app/packages/db && npx prisma migrate
-        deploy"
+    - name: Build web image
+      become: true
+      shell: |
+        podman build \
+          -t {{ registry }}/hangar-web:latest \
+          -f apps/web/Dockerfile \
+          .
       args:
         chdir: "{{ hangar_dir }}"
 
-    - name: Check services are running
-      shell: docker compose ps
-      args:
-        chdir: "{{ hangar_dir }}"
-      register: services
+    - name: Push web image
+      become: true
+      shell: podman push {{ registry }}/hangar-web:latest --tls-verify=false
+
+    # ── Redeploy API ──────────────────────────────────────────────────────────
+
+    - name: Stop hangar-api
+      shell: |
+        NOMAD_TOKEN={{ nomad_token.stdout }} \
+          nomad job stop -purge hangar-api || true
+      no_log: true
+
+    - name: Kill stale conmon on port 3001 (TCP)
+      become: true
+      shell: |
+        kill -9 $(ss -tlnp | grep ':3001' | grep -o 'pid=[0-9]*' | cut -d= -f2) 2>/dev/null || true
       changed_when: false
 
-    - name: Show running services
+    - name: Kill stale conmon on port 3001 (UDP)
+      become: true
+      shell: |
+        kill -9 $(ss -ulnp | grep ':3001' | grep -o 'pid=[0-9]*' | cut -d= -f2) 2>/dev/null || true
+      changed_when: false
+
+    - name: Deploy hangar-api
+      shell: |
+        NOMAD_TOKEN={{ nomad_token.stdout }} \
+          nomad job run {{ hangar_dir }}/nomad/jobs/hangar-api.nomad.hcl
+      no_log: true
+
+    # ── Redeploy Web ──────────────────────────────────────────────────────────
+
+    - name: Stop hangar-web
+      shell: |
+        NOMAD_TOKEN={{ nomad_token.stdout }} \
+          nomad job stop -purge hangar-web || true
+      no_log: true
+
+    - name: Kill stale conmon on port 5173 (TCP)
+      become: true
+      shell: |
+        kill -9 $(ss -tlnp | grep ':5173' | grep -o 'pid=[0-9]*' | cut -d= -f2) 2>/dev/null || true
+      changed_when: false
+
+    - name: Kill stale conmon on port 5173 (UDP)
+      become: true
+      shell: |
+        kill -9 $(ss -ulnp | grep ':5173' | grep -o 'pid=[0-9]*' | cut -d= -f2) 2>/dev/null || true
+      changed_when: false
+
+    - name: Deploy hangar-web
+      shell: |
+        NOMAD_TOKEN={{ nomad_token.stdout }} \
+          nomad job run {{ hangar_dir }}/nomad/jobs/hangar-web.nomad.hcl
+      no_log: true
+
+    # ── Run DB Migrations ─────────────────────────────────────────────────────
+
+    - name: Wait for API to be reachable
+      wait_for:
+        port: 3001
+        delay: 5
+        timeout: 60
+
+    - name: Run database migrations
+      shell: |
+        export NVM_DIR="{{ ansible_env.HOME }}/.nvm"
+        source "$NVM_DIR/nvm.sh"
+        cd packages/db && npx prisma migrate deploy
+      args:
+        executable: /bin/bash
+        chdir: "{{ hangar_dir }}"
+
+    # ── Verify ────────────────────────────────────────────────────────────────
+
+    - name: Check API is responding
+      uri:
+        url: http://127.0.0.1:3001/
+        status_code: [ 200, 404 ]
+      register: api_check
+
+    - name: Show deploy result
       debug:
-        msg: "{{ services.stdout_lines }}"
+        msg:
+          - "✅ API deployed and responding ({{ api_check.status }})"
+          - "✅ Web deployed"
+          - "✅ DB migrations complete"
