@@ -669,11 +669,6 @@
 
     # ── Nomad ACL Bootstrap ──────────────────────────────────────────────────
 
-    - name: Check if Nomad ACL bootstrap token exists
-      stat:
-        path: /etc/nomad.d/bootstrap.json
-      register: nomad_bootstrap_check
-
     - name: Bootstrap Nomad ACL
       shell: NOMAD_ADDR=http://127.0.0.1:4646 nomad acl bootstrap -json
       register: nomad_bootstrap_raw
@@ -681,6 +676,11 @@
         not nomad_bootstrap_check.stat.exists or
         (nomad_bootstrap_check.stat.exists and nomad_bootstrap_check.stat.size == 0)
       failed_when: false
+
+    - name: Debug bootstrap output
+      debug:
+        msg: "rc={{ nomad_bootstrap_raw.rc }} stdout={{ nomad_bootstrap_raw.stdout }}"
+      when: nomad_bootstrap_raw is defined
 
     - name: Save Nomad bootstrap token
       become: true
@@ -693,8 +693,7 @@
       when: >
         nomad_bootstrap_raw is defined and
         nomad_bootstrap_raw.stdout is defined and
-        nomad_bootstrap_raw.stdout != "" and
-        nomad_bootstrap_raw.stdout | from_json is mapping
+        nomad_bootstrap_raw.stdout != ""
 
     # ── Verify Stack ─────────────────────────────────────────────────────────
 
