@@ -679,7 +679,7 @@
       register: nomad_bootstrap_raw
       when: >
         not nomad_bootstrap_check.stat.exists or
-        nomad_bootstrap_check.stat.size == 0
+        (nomad_bootstrap_check.stat.exists and nomad_bootstrap_check.stat.size == 0)
       failed_when: false
 
     - name: Save Nomad bootstrap token
