@@ -258,32 +258,32 @@
     - name: Create Hangar data directories
       become: true
       file:
-        path: "{{ hangar_data_dir }}/{{ item }}"
+        path: "{{ hangar_data_dir }}/{{ item.path }}"
         state: directory
-        owner: "{{ ansible_user_id }}"
-        group: "{{ ansible_user_id }}"
+        owner: "{{ item.owner }}"
+        group: "{{ item.owner }}"
         mode: "0755"
       loop:
-        - registry
-        - buildkit
-        - caddy
-        - postgres
-        - redis
+        - { path: registry, owner: "{{ ansible_user_id }}" }
+        - { path: buildkit, owner: "{{ ansible_user_id }}" }
+        - { path: caddy,    owner: "{{ ansible_user_id }}" }
+        - { path: postgres, owner: "999" }
+        - { path: redis,    owner: "999" }
 
     - name: Fix Hangar data directory ownership (recursive)
       become: true
       file:
-        path: "{{ hangar_data_dir }}/{{ item }}"
+        path: "{{ hangar_data_dir }}/{{ item.path }}"
         state: directory
-        owner: "{{ ansible_user_id }}"
-        group: "{{ ansible_user_id }}"
+        owner: "{{ item.owner }}"
+        group: "{{ item.owner }}"
         recurse: yes
       loop:
-        - registry
-        - buildkit
-        - caddy
-        - postgres
-        - redis
+        - { path: registry, owner: "{{ ansible_user_id }}" }
+        - { path: buildkit, owner: "{{ ansible_user_id }}" }
+        - { path: caddy,    owner: "{{ ansible_user_id }}" }
+        - { path: postgres, owner: "999" }
+        - { path: redis,    owner: "999" }
       failed_when: false
 
     # ── HashiCorp Apt Repo ───────────────────────────────────────────────────
