@@ -6,6 +6,9 @@ job "hangar-registry" {
     count = 1
 
     network {
+      dns {
+        servers = ["10.88.0.1"]
+      }
       port "http" {
         static = 5000
         to     = 5000
