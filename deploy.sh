@@ -132,6 +132,19 @@ deploy_job() {
   fi
 }
 
+# ── 0. Ensure Podman bridge is up (dnsmasq needs 10.88.0.1) ─────────────────
+
+if ! ip addr show | grep -q '10.88.0.1'; then
+  echo "🌉 Bringing up Podman bridge..."
+  sudo podman run --rm -d --name dns-bridge-init alpine sleep 15 2>/dev/null || true
+  sleep 4
+fi
+
+if ! sudo systemctl is-active --quiet dnsmasq; then
+  echo "🔄 Starting dnsmasq..."
+  sudo systemctl start dnsmasq
+fi
+
 # ── 1. Infrastructure setup ───────────────────────────────────────────────────
 
 echo ""
