@@ -127,22 +127,27 @@
 
     # ── Node.js ──────────────────────────────────────────────────────────────
 
-    - name: Check if Node.js 22 is installed
+    - name: Check if Node.js 24 is installed
       shell: |
         export NVM_DIR="{{ ansible_env.HOME }}/.nvm"
         source "$NVM_DIR/nvm.sh"
-        node --version 2>/dev/null | grep -q "^v22" && echo "ok" || echo "missing"
+        if node --version 2>/dev/null | grep -q "^v24"; then
+          echo "ok"
+        else
+          echo "missing"
+        fi
       args:
         executable: /bin/bash
       register: node_check
       changed_when: false
 
-    - name: Install Node.js 22 via NVM
+    - name: Install Node.js 24 via NVM
       shell: |
         export NVM_DIR="{{ ansible_env.HOME }}/.nvm"
         source "$NVM_DIR/nvm.sh"
-        nvm install 22
-        nvm alias default 22
+        nvm install 24
+        nvm alias default 24
+        nvm use 24
       args:
         executable: /bin/bash
       when: node_check.stdout == "missing"
@@ -279,6 +284,7 @@
         - caddy
         - postgres
         - redis
+      failed_when: false
 
     # ── HashiCorp Apt Repo ───────────────────────────────────────────────────
 
