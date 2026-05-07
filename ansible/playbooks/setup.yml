@@ -438,8 +438,6 @@
           server=8.8.8.8
           server=8.8.4.4
 
-          # Listen on loopback and Podman bridge gateway
-          listen-address={{ podman_bridge_gateway }}
           listen-address=127.0.0.1
           bind-interfaces
 
