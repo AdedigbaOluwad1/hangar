@@ -268,11 +268,17 @@
     - name: Fix Hangar data directory ownership (recursive)
       become: true
       file:
-        path: "{{ hangar_data_dir }}"
+        path: "{{ hangar_data_dir }}/{{ item }}"
         state: directory
         owner: "{{ ansible_user_id }}"
         group: "{{ ansible_user_id }}"
         recurse: yes
+      loop:
+        - registry
+        - buildkit
+        - caddy
+        - postgres
+        - redis
 
     # ── HashiCorp Apt Repo ───────────────────────────────────────────────────
 
