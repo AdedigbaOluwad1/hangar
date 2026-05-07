@@ -110,7 +110,9 @@ deploy_job() {
   NOMAD_TOKEN="$NOMAD_TOKEN" nomad job stop -purge -detach=false "$job_name" 2>/dev/null || true
 
   # Now force remove any stuck Podman containers
-  sudo podman ps -a --format '{{.ID}} {{.Names}}' | grep "$job_name" | awk '{print $1}' | \
+  local short_name
+  short_name=$(echo "$job_name" | sed 's/^hangar-//')
+  sudo podman ps -a --format '{{.ID}} {{.Names}}' | grep "$short_name" | awk '{print $1}' | \
     xargs -r sudo podman rm -f 2>/dev/null || true
 
   # Kill anything holding the port
