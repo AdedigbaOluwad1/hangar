@@ -265,6 +265,15 @@
         - postgres
         - redis
 
+    - name: Fix Hangar data directory ownership (recursive)
+      become: true
+      file:
+        path: "{{ hangar_data_dir }}"
+        state: directory
+        owner: "{{ ansible_user_id }}"
+        group: "{{ ansible_user_id }}"
+        recurse: yes
+
     # ── HashiCorp Apt Repo ───────────────────────────────────────────────────
 
     - name: Check if HashiCorp GPG key exists
