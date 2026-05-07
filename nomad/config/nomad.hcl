@@ -1,4 +1,5 @@
 data_dir  = "/opt/nomad/data"
+plugin_dir = "/opt/nomad/plugins"
 log_level = "INFO"
 bind_addr = "0.0.0.0"
 
@@ -19,7 +20,6 @@ server {
 
 client {
   enabled    = true
-  plugin_dir = "/opt/nomad/plugins"
 
   host_volume "postgres-data" {
     path      = "/opt/hangar/data/postgres"

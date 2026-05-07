@@ -5,9 +5,15 @@
 
   vars:
     hangar_dir: "{{ ansible_env.HOME }}/documents/hangar"
+    # These can be overridden via group_vars or --extra-vars
+    nomad_addr: "http://127.0.0.1:4646"
+    consul_addr: "http://127.0.0.1:8500"
 
   tasks:
-    - name: Read vault init data
+
+    # ── Load root token ──────────────────────────────────────────────────────
+
+    - name: Read Vault init data
       become: true
       slurp:
         src: /etc/vault.d/keys/init.json
@@ -18,45 +24,94 @@
         vault_root_token: "{{ (vault_init_raw.content | b64decode | from_json).root_token }}"
       no_log: true
 
+    # ── Wait for Vault to be unsealed ────────────────────────────────────────
+
     - name: Wait for Vault to be unsealed
       shell: |
-        export VAULT_ADDR=https://127.0.0.1:8200
-        export VAULT_SKIP_VERIFY=true
-        vault status | grep "Sealed.*false"
-      register: vault_sealed
+        VAULT_ADDR=https://127.0.0.1:8200 VAULT_SKIP_VERIFY=true \
+          vault status -format=json | jq -e '.sealed == false' > /dev/null
+      register: vault_unsealed
       retries: 10
       delay: 5
-      until: vault_sealed.rc == 0
+      until: vault_unsealed.rc == 0
       changed_when: false
 
-    - name: Enable KV secrets engine
-      shell: |
-        export VAULT_ADDR=https://127.0.0.1:8200
-        export VAULT_SKIP_VERIFY=true
-        export VAULT_TOKEN={{ vault_root_token }}
-        vault secrets enable -path=hangar kv-v2 || true
-      changed_when: false
+    # ── KV secrets engine ────────────────────────────────────────────────────
 
-    - name: Seed hangar config secrets
+    - name: Check if KV secrets engine is already enabled
       shell: |
-        export VAULT_ADDR=https://127.0.0.1:8200
-        export VAULT_SKIP_VERIFY=true
-        export VAULT_TOKEN={{ vault_root_token }}
-        vault kv put hangar/config \
-          database_url="{{ database_url }}" \
-          redis_url="{{ redis_url }}" \
-          nomad_addr="{{ nomad_addr }}" \
-          consul_addr="{{ consul_addr }}" \
-          caddy_admin_url="{{ caddy_admin_url }}" \
-          buildkit_host="{{ buildkit_host }}"
+        VAULT_ADDR=https://127.0.0.1:8200 VAULT_SKIP_VERIFY=true \
+          VAULT_TOKEN={{ vault_root_token }} \
+          vault secrets list -format=json | jq -e '."hangar/"' > /dev/null 2>&1 \
+          && echo "ok" || echo "missing"
+      register: kv_check
       changed_when: false
+      no_log: true
 
-    - name: Create hangar-api policy
+    - name: Enable KV v2 secrets engine at hangar/
       shell: |
-        export VAULT_ADDR=https://127.0.0.1:8200
-        export VAULT_SKIP_VERIFY=true
-        export VAULT_TOKEN={{ vault_root_token }}
-        vault policy write hangar-api - <<EOF
+        VAULT_ADDR=https://127.0.0.1:8200 VAULT_SKIP_VERIFY=true \
+          VAULT_TOKEN={{ vault_root_token }} \
+          vault secrets enable -path=hangar kv-v2
+      when: kv_check.stdout == "missing"
+      no_log: true
+
+    # ── Seed hangar/config ───────────────────────────────────────────────────
+
+    - name: Load Nomad bootstrap token
+      become: true
+      shell: cat /etc/nomad.d/bootstrap.json | jq -r '.SecretID'
+      register: nomad_token
+      changed_when: false
+      no_log: true
+
+    - name: Seed hangar/config secret
+      shell: |
+        VAULT_ADDR=https://127.0.0.1:8200 VAULT_SKIP_VERIFY=true \
+          VAULT_TOKEN={{ vault_root_token }} \
+          vault kv put hangar/config \
+            nomad_addr="{{ nomad_addr }}" \
+            consul_addr="{{ consul_addr }}" \
+            nomad_token="{{ nomad_token.stdout }}"
+      changed_when: false
+      no_log: true
+
+    # ── Nomad workload identity JWT auth ─────────────────────────────────────
+
+    - name: Check if JWT auth is already enabled
+      shell: |
+        VAULT_ADDR=https://127.0.0.1:8200 VAULT_SKIP_VERIFY=true \
+          VAULT_TOKEN={{ vault_root_token }} \
+          vault auth list -format=json | jq -e '."jwt-nomad/"' > /dev/null 2>&1 \
+          && echo "ok" || echo "missing"
+      register: jwt_auth_check
+      changed_when: false
+      no_log: true
+
+    - name: Enable Vault JWT auth at jwt-nomad
+      shell: |
+        VAULT_ADDR=https://127.0.0.1:8200 VAULT_SKIP_VERIFY=true \
+          VAULT_TOKEN={{ vault_root_token }} \
+          vault auth enable -path=jwt-nomad jwt
+      when: jwt_auth_check.stdout == "missing"
+      no_log: true
+
+    - name: Configure Nomad JWT auth method
+      shell: |
+        VAULT_ADDR=https://127.0.0.1:8200 VAULT_SKIP_VERIFY=true \
+          VAULT_TOKEN={{ vault_root_token }} \
+          vault write auth/jwt-nomad/config \
+            jwks_url="http://127.0.0.1:4646/.well-known/jwks.json" \
+            jwt_supported_algs="RS256,EdDSA" \
+            default_role="nomad-workloads"
+      changed_when: false
+      no_log: true
+
+    - name: Create Vault policy for Nomad workloads
+      shell: |
+        VAULT_ADDR=https://127.0.0.1:8200 VAULT_SKIP_VERIFY=true \
+          VAULT_TOKEN={{ vault_root_token }} \
+          vault policy write nomad-workloads - <<'EOF'
         path "hangar/data/*" {
           capabilities = ["read"]
         }
@@ -65,24 +120,32 @@
         }
         EOF
       changed_when: false
+      no_log: true
 
-    - name: Create hangar-api token
+    - name: Create Nomad JWT auth role
       shell: |
-        export VAULT_ADDR=https://127.0.0.1:8200
-        export VAULT_SKIP_VERIFY=true
-        export VAULT_TOKEN={{ vault_root_token }}
-        vault token create -policy=hangar-api -display-name=hangar-api -format=json | jq -r '.auth.client_token'
-      register: api_token
+        VAULT_ADDR=https://127.0.0.1:8200 VAULT_SKIP_VERIFY=true \
+          VAULT_TOKEN={{ vault_root_token }} \
+          vault write auth/jwt-nomad/role/nomad-workloads \
+            role_type="jwt" \
+            bound_audiences="vault.io" \
+            user_claim="/nomad_job_id" \
+            user_claim_json_pointer=true \
+            claim_mappings="/nomad_job_id=nomad_job_id" \
+            claim_mappings="/nomad_task=nomad_task" \
+            token_policies="nomad-workloads" \
+            token_period="1h" \
+            token_type="service"
       changed_when: false
+      no_log: true
 
-    - name: Show API token
+    # ── Done ─────────────────────────────────────────────────────────────────
+
+    - name: Confirm vault-init complete
       debug:
-        msg: "VAULT_TOKEN for hangar-api: {{ api_token.stdout }}"
-
-    - name: Write API token to .env
-      lineinfile:
-        path: "{{ hangar_dir }}/.env"
-        regexp: "^VAULT_TOKEN="
-        line: "VAULT_TOKEN={{ api_token.stdout }}"
-        create: true
-        mode: "0600"
+        msg:
+          - "✅ KV engine enabled at hangar/"
+          - "✅ hangar/config seeded"
+          - "✅ JWT auth configured at jwt-nomad"
+          - "✅ nomad-workloads policy + role created"
+          - "✅ Vault ready for Nomad workload identity"

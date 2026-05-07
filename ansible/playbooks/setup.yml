@@ -1,17 +1,53 @@
 ---
-- name: Setup Hangar
+- name: Setup Hangar Infrastructure
   hosts: hangar
   become: false
 
   vars:
     hangar_dir: "{{ ansible_env.HOME }}/documents/hangar"
+    hangar_data_dir: /opt/hangar/data
+    podman_bridge_gateway: "10.88.0.1"
+    consul_dns_port: 8600
 
   tasks:
+
+    # ── Detect Environment ───────────────────────────────────────────────────
+
+    - name: Detect if running inside WSL2
+      shell: grep -qi microsoft /proc/version && echo "wsl" || echo "bare"
+      register: env_type
+      changed_when: false
+
+    - name: Set is_wsl fact
+      set_fact:
+        is_wsl: "{{ env_type.stdout == 'wsl' }}"
+
+    - name: Show environment
+      debug:
+        msg: "Running in {{ 'WSL2' if is_wsl else 'bare metal' }} mode"
+
+    # ── Single apt update upfront ────────────────────────────────────────────
+
+    - name: Update apt cache
+      become: true
+      apt:
+        update_cache: true
+        cache_valid_time: 3600
+
+    # ── Base Packages ────────────────────────────────────────────────────────
+
     - name: Check if git is installed
       command: git --version
       register: git_check
       ignore_errors: true
       changed_when: false
+
+    - name: Install git
+      become: true
+      apt:
+        name: git
+        state: present
+      when: git_check.rc != 0
 
     - name: Check if curl is installed
       command: curl --version
@@ -19,61 +55,63 @@
       ignore_errors: true
       changed_when: false
 
-    - name: Install base dependencies
+    - name: Install curl
       become: true
       apt:
-        name: "{{ item }}"
+        name: curl
         state: present
-      loop:
-        - git
-        - curl
-      when: >
-        (item == 'git' and git_check.rc != 0) or (item == 'curl' and
-        curl_check.rc != 0)
+      when: curl_check.rc != 0
 
-    - name: Check if Docker is installed
-      command: docker --version
-      register: docker_check
+    - name: Check if unzip is installed
+      command: unzip -v
+      register: unzip_check
       ignore_errors: true
       changed_when: false
 
-    - name: Install Docker
+    - name: Install unzip
       become: true
-      block:
-        - name: Add Docker GPG key
-          shell: |
-            curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-          args:
-            creates: /etc/apt/keyrings/docker.gpg
+      apt:
+        name: unzip
+        state: present
+      when: unzip_check.rc != 0
 
-        - name: Add Docker repository
-          shell: |
-            echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+    - name: Check if jq is installed
+      command: jq --version
+      register: jq_check
+      ignore_errors: true
+      changed_when: false
 
-        - name: Install Docker packages
-          apt:
-            name:
-              - docker-ce
-              - docker-ce-cli
-              - containerd.io
-              - docker-compose-plugin
-            update_cache: true
-            state: present
-      when: docker_check.rc != 0
-
-    - name: Add user to docker group
+    - name: Install jq
       become: true
-      user:
-        name: "{{ ansible_user_id }}"
-        groups: docker
-        append: true
+      apt:
+        name: jq
+        state: present
+      when: jq_check.rc != 0
 
-    - name: Ensure Docker is running
+    - name: Check if dnsmasq is installed
+      command: dnsmasq --version
+      register: dnsmasq_check
+      ignore_errors: true
+      changed_when: false
+
+    - name: Install dnsmasq
       become: true
-      service:
-        name: docker
-        state: started
-        enabled: true
+      apt:
+        name: dnsmasq
+        state: present
+      when: dnsmasq_check.rc != 0
+
+    - name: Install apt transport dependencies
+      become: true
+      apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - gnupg
+          - lsb-release
+        state: present
+
+    # ── NVM ──────────────────────────────────────────────────────────────────
 
     - name: Check if NVM is installed
       stat:
@@ -81,36 +119,44 @@
       register: nvm_check
 
     - name: Install NVM
-      shell: |
-        curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+      shell: curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh
+        | bash
       args:
         creates: "{{ ansible_env.HOME }}/.nvm/nvm.sh"
       when: not nvm_check.stat.exists
 
-    - name: Check if Node.js is installed via NVM
-      stat:
-        path: "{{ ansible_env.HOME }}/.nvm/alias/default"
-      register: node_check
+    # ── Node.js ──────────────────────────────────────────────────────────────
 
-    - name: Install Node.js LTS via NVM
+    - name: Check if Node.js 22 is installed
       shell: |
         export NVM_DIR="{{ ansible_env.HOME }}/.nvm"
         source "$NVM_DIR/nvm.sh"
-        nvm install --lts
-        nvm alias default lts/*
+        node --version 2>/dev/null | grep -q "^v22" && echo "ok" || echo "missing"
       args:
         executable: /bin/bash
-      when: not node_check.stat.exists
+      register: node_check
+      changed_when: false
+
+    - name: Install Node.js 22 via NVM
+      shell: |
+        export NVM_DIR="{{ ansible_env.HOME }}/.nvm"
+        source "$NVM_DIR/nvm.sh"
+        nvm install 22
+        nvm alias default 22
+      args:
+        executable: /bin/bash
+      when: node_check.stdout == "missing"
+
+    # ── pnpm ─────────────────────────────────────────────────────────────────
 
     - name: Check if pnpm is installed
       shell: |
         export NVM_DIR="{{ ansible_env.HOME }}/.nvm"
         source "$NVM_DIR/nvm.sh"
-        command -v pnpm
+        command -v pnpm && echo "ok" || echo "missing"
       args:
         executable: /bin/bash
       register: pnpm_check
-      ignore_errors: true
       changed_when: false
 
     - name: Install pnpm globally
@@ -120,27 +166,106 @@
         npm install -g pnpm
       args:
         executable: /bin/bash
-      when: pnpm_check.rc != 0
+      when: pnpm_check.stdout == "missing"
 
-    - name: Check if tsx is installed
-      shell: |
-        export NVM_DIR="{{ ansible_env.HOME }}/.nvm"
-        source "$NVM_DIR/nvm.sh"
-        command -v tsx
-      args:
-        executable: /bin/bash
-      register: tsx_check
+    # ── Podman ───────────────────────────────────────────────────────────────
+
+    - name: Check if Podman is installed
+      command: podman --version
+      register: podman_check
       ignore_errors: true
       changed_when: false
 
-    - name: Install tsx globally
-      shell: |
-        export NVM_DIR="{{ ansible_env.HOME }}/.nvm"
-        source "$NVM_DIR/nvm.sh"
-        npm install -g tsx
-      args:
-        executable: /bin/bash
-      when: tsx_check.rc != 0
+    - name: Install Podman and container networking tools
+      become: true
+      apt:
+        name:
+          - podman
+          - netavark
+          - aardvark-dns
+          - uidmap
+          - slirp4netns
+        state: present
+      when: podman_check.rc != 0
+
+    - name: Enable and start rootful podman.socket
+      become: true
+      systemd:
+        name: podman.socket
+        state: started
+        enabled: true
+        daemon_reload: true
+
+    - name: Create Podman containers.conf.d directory
+      become: true
+      file:
+        path: /etc/containers/containers.conf.d
+        state: directory
+        mode: "0755"
+
+    - name: Configure Podman container DNS
+      become: true
+      copy:
+        dest: /etc/containers/containers.conf.d/dns.conf
+        content: |
+          [containers]
+          dns_servers = ["{{ podman_bridge_gateway }}"]
+        mode: "0644"
+
+    - name: Create Podman registries.conf.d directory
+      become: true
+      file:
+        path: /etc/containers/registries.conf.d
+        state: directory
+        mode: "0755"
+
+    - name: Configure local registry as insecure
+      become: true
+      copy:
+        dest: /etc/containers/registries.conf.d/local.conf
+        content: |
+          [[registry]]
+          location = "registry.service.consul:5000"
+          insecure = true
+        mode: "0644"
+
+    # ── BuildKit config (daemon runs as Nomad job, only toml needed on host) ─
+
+    - name: Create BuildKit config directory
+      become: true
+      file:
+        path: /etc/buildkit
+        state: directory
+        mode: "0755"
+
+    - name: Write BuildKit daemon config
+      become: true
+      copy:
+        dest: /etc/buildkit/buildkitd.toml
+        content: |
+          [registry."registry.service.consul:5000"]
+            http = true
+            insecure = true
+        mode: "0644"
+
+    # ── Hangar Data Directories ──────────────────────────────────────────────
+
+    - name: Create Hangar data directories
+      become: true
+      file:
+        path: "{{ hangar_data_dir }}/{{ item }}"
+        state: directory
+        owner: "{{ ansible_user_id }}"
+        group: "{{ ansible_user_id }}"
+        mode: "0755"
+      loop:
+        - registry
+        - buildkit
+        - caddy
+        - postgres
+        - redis
+
+    # ── HashiCorp Apt Repo ───────────────────────────────────────────────────
 
     - name: Check if HashiCorp GPG key exists
       stat:
@@ -150,60 +275,29 @@
     - name: Add HashiCorp GPG key
       become: true
       shell: |
-        curl -fsSL https://apt.releases.hashicorp.com/gpg | gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+        curl -fsSL https://apt.releases.hashicorp.com/gpg | \
+          gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
       when: not hashicorp_gpg.stat.exists
 
-    - name: Add HashiCorp repository
-      become: true
-      shell: |
-        echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | tee /etc/apt/sources.list.d/hashicorp.list
-      args:
-        creates: /etc/apt/sources.list.d/hashicorp.list
+    - name: Check if HashiCorp apt repo exists
+      stat:
+        path: /etc/apt/sources.list.d/hashicorp.list
+      register: hashicorp_repo
 
-    # ── Nomad ────────────────────────────────────────────────────────────────
-
-    - name: Check if Nomad is installed
-      command: nomad version
-      register: nomad_check
-      ignore_errors: true
-      changed_when: false
-
-    - name: Install Nomad
-      become: true
-      apt:
-        name: nomad
-        update_cache: true
-        state: present
-      when: nomad_check.rc != 0
-
-    - name: Create Nomad data directory
-      become: true
-      file:
-        path: /opt/nomad/data
-        state: directory
-        owner: "{{ ansible_user_id }}"
-        group: "{{ ansible_user_id }}"
-        mode: "0755"
-
-    - name: Copy Nomad config
+    - name: Add HashiCorp apt repository
       become: true
       copy:
-        src: "{{ hangar_dir }}/nomad/config/nomad.hcl"
-        dest: /etc/nomad.d/nomad.hcl
+        dest: /etc/apt/sources.list.d/hashicorp.list
+        content: |
+          deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com {{ ansible_distribution_release }} main
+        mode: "0644"
+      when: not hashicorp_repo.stat.exists
 
-    - name: Deploy Nomad systemd service
+    - name: Update apt cache after adding HashiCorp repo
       become: true
-      template:
-        src: nomad.service.j2
-        dest: /etc/systemd/system/nomad.service
-
-    - name: Start Nomad
-      become: true
-      systemd:
-        name: nomad
-        state: started
-        enabled: true
-        daemon_reload: true
+      apt:
+        update_cache: true
+      when: not hashicorp_repo.stat.exists
 
     # ── Consul ───────────────────────────────────────────────────────────────
 
@@ -217,7 +311,6 @@
       become: true
       apt:
         name: consul
-        update_cache: true
         state: present
       when: consul_check.rc != 0
 
@@ -239,6 +332,12 @@
         owner: root
         group: root
 
+    - name: Check if Consul TLS cert exists
+      become: true
+      stat:
+        path: /opt/consul/tls/consul.crt
+      register: consul_tls_check
+
     - name: Generate Consul TLS private key
       become: true
       community.crypto.openssl_privatekey:
@@ -247,6 +346,7 @@
         mode: "0600"
         owner: root
         group: root
+      when: not consul_tls_check.stat.exists
 
     - name: Generate Consul TLS CSR
       become: true
@@ -255,12 +355,13 @@
         privatekey_path: /opt/consul/tls/consul.key
         common_name: consul.hangar.local
         subject_alt_name:
-          - IP:127.0.0.1
-          - DNS:localhost
-          - DNS:consul.hangar.local
-          # - DNS:yourdomain.com  ← uncomment for Let's Encrypt
+          - "IP:127.0.0.1"
+          - "IP:{{ podman_bridge_gateway }}"
+          - "DNS:localhost"
+          - "DNS:consul.service.consul"
+      when: not consul_tls_check.stat.exists
 
-    - name: Generate Consul TLS certificate
+    - name: Generate Consul self-signed TLS certificate
       become: true
       community.crypto.x509_certificate:
         path: /opt/consul/tls/consul.crt
@@ -272,18 +373,21 @@
         mode: "0644"
         owner: root
         group: root
+      when: not consul_tls_check.stat.exists
 
     - name: Copy Consul config
       become: true
       copy:
         src: "{{ hangar_dir }}/consul/config/consul.hcl"
         dest: /etc/consul.d/consul.hcl
+        mode: "0644"
 
     - name: Deploy Consul systemd service
       become: true
       template:
-        src: consul.service.j2
+        src: "{{ hangar_dir }}/ansible/playbooks/templates/consul.service.j2"
         dest: /etc/systemd/system/consul.service
+        mode: "0644"
 
     - name: Start Consul
       become: true
@@ -292,6 +396,109 @@
         state: started
         enabled: true
         daemon_reload: true
+
+    - name: Wait for Consul to be ready
+      wait_for:
+        port: 8500
+        delay: 2
+        timeout: 30
+
+    # ── dnsmasq ──────────────────────────────────────────────────────────────
+
+    - name: Write dnsmasq config
+      become: true
+      copy:
+        dest: /etc/dnsmasq.conf
+        content: |
+          # Forward .consul queries to Consul DNS
+          server=/consul/{{ podman_bridge_gateway }}#{{ consul_dns_port }}
+
+          # Forward everything else to upstream DNS
+          server=8.8.8.8
+          server=8.8.4.4
+
+          # Listen on loopback and Podman bridge gateway
+          listen-address={{ podman_bridge_gateway }}
+          listen-address=127.0.0.1
+          bind-interfaces
+
+          # Don't use /etc/hosts for .consul resolution
+          no-hosts
+        mode: "0644"
+
+    - name: Point resolv.conf at dnsmasq
+      become: true
+      copy:
+        dest: /etc/resolv.conf
+        content: |
+          nameserver 127.0.0.1
+        mode: "0644"
+
+    - name: Restart dnsmasq
+      become: true
+      systemd:
+        name: dnsmasq
+        state: restarted
+        enabled: true
+        daemon_reload: true
+
+    - name: Verify .consul DNS resolves from host
+      shell: dig +short consul.service.consul A @127.0.0.1
+      register: consul_dns_check
+      changed_when: false
+      failed_when: consul_dns_check.stdout == ""
+
+    # ── Nomad ────────────────────────────────────────────────────────────────
+
+    - name: Check if Nomad is installed
+      command: nomad version
+      register: nomad_check
+      ignore_errors: true
+      changed_when: false
+
+    - name: Install Nomad
+      become: true
+      apt:
+        name: nomad
+        state: present
+      when: nomad_check.rc != 0
+
+    - name: Create Nomad data directory
+      become: true
+      file:
+        path: /opt/nomad/data
+        state: directory
+        owner: "{{ ansible_user_id }}"
+        group: "{{ ansible_user_id }}"
+        mode: "0755"
+
+    - name: Copy Nomad config
+      become: true
+      copy:
+        src: "{{ hangar_dir }}/nomad/config/nomad.hcl"
+        dest: /etc/nomad.d/nomad.hcl
+        mode: "0644"
+
+    - name: Deploy Nomad systemd service
+      become: true
+      template:
+        src: "{{ hangar_dir }}/ansible/playbooks/templates/nomad.service.j2"
+        dest: /etc/systemd/system/nomad.service
+        mode: "0644"
+
+    - name: Start Nomad
+      become: true
+      systemd:
+        name: nomad
+        state: started
+        enabled: true
+        daemon_reload: true
+
+    - name: Wait for Nomad to be ready
+      wait_for:
+        port: 4646
+        delay: 3
+        timeout: 30
 
     # ── Vault ────────────────────────────────────────────────────────────────
 
@@ -305,7 +512,6 @@
       become: true
       apt:
         name: vault
-        update_cache: true
         state: present
       when: vault_check.rc != 0
 
@@ -327,6 +533,12 @@
         owner: root
         group: root
 
+    - name: Check if Vault TLS cert exists
+      become: true
+      stat:
+        path: /opt/vault/tls/vault.crt
+      register: vault_tls_check
+
     - name: Generate Vault TLS private key
       become: true
       community.crypto.openssl_privatekey:
@@ -335,6 +547,7 @@
         mode: "0600"
         owner: root
         group: root
+      when: not vault_tls_check.stat.exists
 
     - name: Generate Vault TLS CSR
       become: true
@@ -343,12 +556,12 @@
         privatekey_path: /opt/vault/tls/vault.key
         common_name: vault.hangar.local
         subject_alt_name:
-          - IP:127.0.0.1
-          - DNS:localhost
-          - DNS:vault.hangar.local
-          # - DNS:yourdomain.com  ← uncomment for Let's Encrypt
+          - "IP:127.0.0.1"
+          - "DNS:localhost"
+          - "DNS:vault.hangar.local"
+      when: not vault_tls_check.stat.exists
 
-    - name: Generate Vault TLS certificate
+    - name: Generate Vault self-signed TLS certificate
       become: true
       community.crypto.x509_certificate:
         path: /opt/vault/tls/vault.crt
@@ -360,20 +573,16 @@
         mode: "0644"
         owner: root
         group: root
+      when: not vault_tls_check.stat.exists
 
     - name: Copy Vault config
       become: true
       copy:
         src: "{{ hangar_dir }}/vault/config/vault.hcl"
         dest: /etc/vault.d/vault.hcl
+        mode: "0644"
 
-    - name: Deploy Vault systemd service
-      become: true
-      template:
-        src: vault.service.j2
-        dest: /etc/systemd/system/vault.service
-
-    - name: Create vault keys directory
+    - name: Create Vault keys directory
       become: true
       file:
         path: /etc/vault.d/keys
@@ -381,6 +590,13 @@
         mode: "0700"
         owner: root
         group: root
+
+    - name: Deploy Vault systemd service
+      become: true
+      template:
+        src: "{{ hangar_dir }}/ansible/playbooks/templates/vault.service.j2"
+        dest: /etc/systemd/system/vault.service
+        mode: "0644"
 
     - name: Start Vault
       become: true
@@ -390,31 +606,31 @@
         enabled: true
         daemon_reload: true
 
-    - name: Wait for Vault to start
+    - name: Wait for Vault to be ready
       wait_for:
         port: 8200
         delay: 3
         timeout: 30
 
+    # ── Vault Init + Unseal ──────────────────────────────────────────────────
+
     - name: Check if Vault is already initialized
       shell: |
-        export VAULT_ADDR=https://127.0.0.1:8200
-        export VAULT_SKIP_VERIFY=true
-        vault operator init -status -format=json | jq -r '.Initialized'
+        VAULT_ADDR=https://127.0.0.1:8200 VAULT_SKIP_VERIFY=true \
+          vault operator init -status -format=json | jq -r '.Initialized'
       register: vault_initialized
       changed_when: false
       failed_when: false
 
     - name: Initialize Vault
       shell: |
-        export VAULT_ADDR=https://127.0.0.1:8200
-        export VAULT_SKIP_VERIFY=true
-        vault operator init -key-shares=5 -key-threshold=3 -format=json
+        VAULT_ADDR=https://127.0.0.1:8200 VAULT_SKIP_VERIFY=true \
+          vault operator init -key-shares=5 -key-threshold=3 -format=json
       register: vault_init_raw
       when: vault_initialized.stdout == "false"
       no_log: true
 
-    - name: Save init output to disk
+    - name: Save Vault init output to disk
       become: true
       copy:
         content: "{{ vault_init_raw.stdout }}"
@@ -424,51 +640,95 @@
         group: root
       when: vault_initialized.stdout == "false"
 
-    - name: Parse init output
+    - name: Parse Vault init output
       set_fact:
         vault_init_data: "{{ vault_init_raw.stdout | from_json }}"
       when: vault_initialized.stdout == "false"
 
-    - name: Unseal Vault (first time)
+    - name: Unseal Vault (first time only)
       shell: |
-        export VAULT_ADDR=https://127.0.0.1:8200
-        export VAULT_SKIP_VERIFY=true
-        vault operator unseal {{ item }}
+        VAULT_ADDR=https://127.0.0.1:8200 VAULT_SKIP_VERIFY=true \
+          vault operator unseal {{ item }}
       loop: "{{ vault_init_data.unseal_keys_b64[:3] }}"
       when: vault_initialized.stdout == "false"
       no_log: true
 
-    - name: Deploy vault unseal service
+    - name: Deploy Vault auto-unseal systemd service
       become: true
       template:
-        src: vault-unseal.service.j2
+        src: "{{ hangar_dir }}/ansible/playbooks/templates/vault-unseal.service.j2"
         dest: /etc/systemd/system/vault-unseal.service
+        mode: "0644"
 
-    - name: Enable vault unseal service
+    - name: Enable Vault auto-unseal service
       become: true
       systemd:
         name: vault-unseal
         enabled: true
         daemon_reload: true
 
-    # ── Versions ─────────────────────────────────────────────────────────────
+    # ── Nomad ACL Bootstrap ──────────────────────────────────────────────────
 
-    - name: Print installed versions
-      shell: |
-        export NVM_DIR="{{ ansible_env.HOME }}/.nvm"
-        source "$NVM_DIR/nvm.sh"
-        echo "Docker: $(docker --version)"
-        echo "Node.js: $(node --version)"
-        echo "pnpm: $(pnpm --version)"
-        echo "tsx: $(tsx --version)"
-        echo "Nomad: $(nomad version | head -1)"
-        echo "Consul: $(consul version | head -1)"
-        echo "Vault: $(vault version)"
-      args:
-        executable: /bin/bash
-      register: versions
+    - name: Check if Nomad ACL bootstrap token exists
+      stat:
+        path: /etc/nomad.d/bootstrap.json
+      register: nomad_bootstrap_check
+
+    - name: Bootstrap Nomad ACL
+      shell: NOMAD_ADDR=http://127.0.0.1:4646 nomad acl bootstrap -format=json
+      register: nomad_bootstrap_raw
+      when: not nomad_bootstrap_check.stat.exists
+      failed_when: false
+
+    - name: Save Nomad bootstrap token
+      become: true
+      copy:
+        content: "{{ nomad_bootstrap_raw.stdout }}"
+        dest: /etc/nomad.d/bootstrap.json
+        mode: "0600"
+        owner: root
+        group: root
+      when: >
+        not nomad_bootstrap_check.stat.exists and nomad_bootstrap_raw is defined
+        and nomad_bootstrap_raw.stdout is defined and nomad_bootstrap_raw.stdout
+        != ""
+
+    # ── Verify Stack ─────────────────────────────────────────────────────────
+
+    - name: Verify Consul is reachable
+      uri:
+        url: http://127.0.0.1:8500/v1/status/leader
+        return_content: true
+      register: consul_status
+      failed_when: consul_status.status != 200
+
+    - name: Verify Nomad is reachable
+      uri:
+        url: http://127.0.0.1:4646/v1/status/leader
+        return_content: true
+      register: nomad_status
+      failed_when: nomad_status.status != 200
+
+    - name: Verify Vault is reachable
+      uri:
+        url: https://127.0.0.1:8200/v1/sys/health
+        validate_certs: false
+        return_content: true
+        status_code: [ 200, 429, 472, 473 ]
+      register: vault_status
+
+    - name: Verify .consul DNS resolves
+      shell: dig +short consul.service.consul A @127.0.0.1
+      register: dns_verify
       changed_when: false
+      failed_when: dns_verify.stdout == ""
 
-    - name: Show versions
+    - name: Print stack summary
       debug:
-        msg: "{{ versions.stdout_lines }}"
+        msg:
+          - "✅ Consul:   {{ consul_status.status }}"
+          - "✅ Nomad:    {{ nomad_status.status }}"
+          - "✅ Vault:    {{ vault_status.status }}"
+          - "✅ dnsmasq:  .consul resolves to {{ dns_verify.stdout }}"
+          - "✅ Podman:   installed"
+          - "✅ Infrastructure ready — vault-init.yml runs next"

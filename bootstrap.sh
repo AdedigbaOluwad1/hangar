@@ -3,42 +3,43 @@ set -e
 
 echo "🚀 Bootstrapping Hangar..."
 
-# install curl if missing
+# ── Base dependencies ────────────────────────────────────────────────────────
+
 if ! command -v curl &>/dev/null; then
   echo "Installing curl..."
   sudo apt-get update && sudo apt-get install -y curl
 fi
 
-# install git if missing
 if ! command -v git &>/dev/null; then
   echo "Installing git..."
   sudo apt-get update && sudo apt-get install -y git
 fi
 
-# install unzip if missing
 if ! command -v unzip &>/dev/null; then
   echo "Installing unzip..."
   sudo apt-get update && sudo apt-get install -y unzip
 fi
 
-# install ansible if missing
+if ! command -v jq &>/dev/null; then
+  echo "Installing jq..."
+  sudo apt-get update && sudo apt-get install -y jq
+fi
+
 if ! command -v ansible &>/dev/null; then
   echo "Installing ansible..."
   sudo apt-get update && sudo apt-get install -y ansible
 fi
 
-# install terraform if missing
-if ! command -v terraform &>/dev/null; then
-  echo "Installing terraform..."
-  TERRAFORM_VERSION="1.7.0"
-  curl -fsSL "https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip" -o /tmp/terraform.zip
-  unzip -o /tmp/terraform.zip -d /tmp
-  sudo mv /tmp/terraform /usr/local/bin/
-  rm /tmp/terraform.zip
-  echo "✅ Terraform $(terraform --version | head -1) installed"
+# ── Detect environment ───────────────────────────────────────────────────────
+
+if grep -qi microsoft /proc/version 2>/dev/null; then
+  echo "🖥️  Detected WSL2 environment"
+else
+  echo "🖥️  Detected bare metal environment"
 fi
 
-# clone or pull repo
+# ── Clone or pull repo ───────────────────────────────────────────────────────
+
 REPO_URL="${HANGAR_REPO_URL:-https://github.com/adedigbaoluwad1/hangar.git}"
 DEST="${HOME}/documents/hangar"
 
@@ -47,19 +48,20 @@ if [ -d "$DEST/.git" ]; then
   git -C "$DEST" pull
 else
   echo "📦 Cloning repo..."
+  mkdir -p "${HOME}/documents"
   git clone "$REPO_URL" "$DEST"
 fi
 
 cd "$DEST"
 
-# install ansible collections
+# ── Ansible collections ──────────────────────────────────────────────────────
+
 echo "📦 Installing Ansible collections..."
 ansible-galaxy collection install -r ansible/requirements.yml
 
-# hand off to deploy.sh
-cd "$DEST"
-chmod +x deploy.sh
+# ── Hand off to deploy.sh ────────────────────────────────────────────────────
 
+chmod +x deploy.sh
 export HANGAR_REPO_URL="$REPO_URL"
 
 read -s -p "🔐 Enter Ansible Vault password: " VAULT_PASS < /dev/tty
