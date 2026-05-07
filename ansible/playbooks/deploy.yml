@@ -52,6 +52,20 @@
       changed_when: false
       no_log: true
 
+    - name: Wait for registry to be healthy in Consul
+      shell: |
+        for i in $(seq 1 30); do
+          status=$(curl -s http://127.0.0.1:8500/v1/health/service/registry | jq -r '.[].Checks[] | select(.Name != "Serf Health Status") | .Status' 2>/dev/null)
+          if [ "$status" = "passing" ]; then
+            echo "healthy"
+            exit 0
+          fi
+          sleep 3
+        done
+        echo "timed out waiting for registry"
+        exit 1
+      changed_when: false
+
     - name: Build API image
       become: true
       shell: |
