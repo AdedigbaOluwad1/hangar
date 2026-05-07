@@ -155,15 +155,6 @@
         delay: 15
         timeout: 90
 
-    - name: Run database migrations
-      shell: |
-        export NVM_DIR="{{ ansible_env.HOME }}/.nvm"
-        source "$NVM_DIR/nvm.sh"
-        cd packages/db && npx prisma migrate deploy
-      args:
-        executable: /bin/bash
-        chdir: "{{ hangar_dir }}"
-
     # ── Verify ────────────────────────────────────────────────────────────────
 
     - name: Check API is responding
