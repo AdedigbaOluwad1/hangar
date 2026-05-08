@@ -5,9 +5,6 @@
 
   vars:
     hangar_dir: "{{ ansible_env.HOME }}/documents/hangar"
-    # These can be overridden via group_vars or --extra-vars
-    nomad_addr: "http://127.0.0.1:4646"
-    consul_addr: "http://127.0.0.1:8500"
 
   tasks:
 
