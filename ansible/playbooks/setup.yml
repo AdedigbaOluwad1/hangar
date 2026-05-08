@@ -10,7 +10,6 @@
     consul_dns_port: 8600
 
   tasks:
-
     # ── Detect Environment ───────────────────────────────────────────────────
 
     - name: Detect if running inside WSL2
@@ -119,7 +118,8 @@
       register: nvm_check
 
     - name: Install NVM
-      shell: curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh
+      shell:
+        curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh
         | bash
       args:
         creates: "{{ ansible_env.HOME }}/.nvm/nvm.sh"
@@ -266,9 +266,9 @@
       loop:
         - { path: registry, owner: "{{ ansible_user_id }}" }
         - { path: buildkit, owner: "{{ ansible_user_id }}" }
-        - { path: caddy,    owner: "{{ ansible_user_id }}" }
+        - { path: caddy, owner: "{{ ansible_user_id }}" }
         - { path: postgres, owner: "999" }
-        - { path: redis,    owner: "999" }
+        - { path: redis, owner: "999" }
 
     - name: Fix Hangar data directory ownership (recursive)
       become: true
@@ -281,9 +281,9 @@
       loop:
         - { path: registry, owner: "{{ ansible_user_id }}" }
         - { path: buildkit, owner: "{{ ansible_user_id }}" }
-        - { path: caddy,    owner: "{{ ansible_user_id }}" }
+        - { path: caddy, owner: "{{ ansible_user_id }}" }
         - { path: postgres, owner: "999" }
-        - { path: redis,    owner: "999" }
+        - { path: redis, owner: "999" }
       failed_when: false
 
     # ── HashiCorp Apt Repo ───────────────────────────────────────────────────
@@ -506,10 +506,10 @@
         group: "{{ ansible_user_id }}"
         mode: "0755"
 
-    - name: Copy Nomad config
+    - name: Deploy Nomad config
       become: true
-      copy:
-        src: "{{ hangar_dir }}/nomad/config/nomad.hcl"
+      template:
+        src: "{{ hangar_dir }}/ansible/playbooks/templates/nomad.hcl.j2"
         dest: /etc/nomad.d/nomad.hcl
         mode: "0644"
 
@@ -774,7 +774,7 @@
         url: https://127.0.0.1:8200/v1/sys/health
         validate_certs: false
         return_content: true
-        status_code: [ 200, 429, 472, 473, 503 ]
+        status_code: [200, 429, 472, 473, 503]
       register: vault_status
 
     - name: Verify .consul DNS resolves
