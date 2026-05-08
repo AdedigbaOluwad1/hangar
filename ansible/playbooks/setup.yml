@@ -450,11 +450,11 @@
         content: |
           # Forward .consul queries to Consul DNS
           server=/consul/{{ podman_bridge_gateway }}#{{ consul_dns_port }}
-
           # Forward everything else to upstream DNS
           server=8.8.8.8
           server=8.8.4.4
-          except-interface=lo
+          listen-address=127.0.0.1
+          listen-address={{ podman_bridge_gateway }}
           bind-dynamic
           # Don't use /etc/hosts for .consul resolution
           no-hosts
