@@ -1,28 +1,24 @@
 # Hangar
 
-A self-hosted Platform-as-a-Service running on the HashiCorp stack. Push a Git URL — Hangar clones it, builds it into a container image with Railpack, schedules it on Nomad, registers it with Consul, secrets via Vault, and fronts it with Caddy. Build and deploy logs stream to the UI in real time over SSE.
+A self-hosted Platform-as-a-Service built on the HashiCorp stack. Push a Git URL — Hangar clones it, builds it into a container image with Railpack + BuildKit, schedules it on Nomad, registers it with Consul, manages secrets via Vault, and fronts it with Caddy. Build and deploy logs stream to the UI in real time over SSE.
 
 ---
 
 ## What This Is
 
-Hangar is what Railway, Render, and Brimble look like under the hood — minus the managed cloud. It runs entirely on bare metal (or any Ubuntu server). Every component runs as a **Nomad job** with the **Podman driver** — no Docker daemon, no Docker Compose.
+Hangar is what Railway, Render, and Brimble look like under the hood — minus the managed cloud. It runs entirely on bare metal (or any Ubuntu 24 server). Every workload runs as a **Nomad job** with the **Podman driver** — no Docker daemon, no Docker Compose, no Kubernetes.
 
-The production stack is:
+The production stack:
 
 - **Nomad** — container orchestration; all workloads are Nomad jobs
-- **Consul** — service discovery and DNS (`.service.consul` resolves across all containers)
-- **Vault** — secrets management with workload identity JWT auth
-- **Caddy** — dynamic reverse proxy; one subdomain per deployment, patched live via admin API
-- **BuildKit + Railpack** — zero-Dockerfile image builds
-- **BullMQ + Redis** — async deployment queue
-- **Podman** — rootful container runtime (replaces Docker)
-- **dnsmasq** — forwards `.consul` DNS queries into Consul from host and containers
-- **Ansible** — idempotent server provisioning *(provisioning playbooks are WIP — see note below)*
-- **Terraform** — infrastructure provisioning *(WIP)*
-- **GitHub Actions** — CI, deploy, provision pipelines *(WIP)*
-
-> **Note:** The Ansible playbooks, Terraform config, `bootstrap.sh`, `deploy.sh`, and GitHub Actions workflows are not yet updated to reflect the Nomad/Podman stack. The provisioning section of this README describes the target state. Current setup is manual — see the [Manual Setup](#manual-setup) section.
+- **Consul** — service discovery and DNS (`.service.consul` resolves across all containers automatically)
+- **Vault** — secrets management with Nomad workload identity JWT auth (no static tokens in job files)
+- **Caddy** — dynamic reverse proxy; one subdomain per deployment, routes patched live via admin API
+- **BuildKit + Railpack** — zero-Dockerfile image builds; Railpack auto-detects language and generates the build plan
+- **BullMQ + Redis** — async deployment queue with real-time log streaming
+- **Podman** — rootful container runtime (replaces Docker; no daemon required)
+- **dnsmasq** — forwards `.consul` DNS queries to Consul from both host and containers
+- **Ansible** — idempotent server provisioning via `deploy.sh`
 
 ---
 
@@ -33,30 +29,27 @@ User submits Git URL via UI
           ↓
 POST /api/deployments
   → deployment record created in Postgres
-  → job added to BullMQ queue
+  → job enqueued in BullMQ (Redis)
           ↓
 BullMQ worker picks up job
           ↓
-┌───────────────────────────────────────────┐
-│              Pipeline                     │
-│                                           │
-│  clone.ts   — git clone to /tmp           │
-│  build.ts   — Railpack + BuildKit         │
-│               → image built by BuildKit   │
-│               → pushed directly to        │
-│                 registry.service.consul   │
-│                 :5000 (local registry)    │
-│  run.ts     — reads user env from Vault   │
-│               → submitJob to Nomad        │
-│  caddy.ts   — polls Consul until alloc    │
-│               is healthy                  │
-│               → patches Caddy admin API   │
-└───────────────────────────────────────────┘
+┌─────────────────────────────────────────────────┐
+│                   Pipeline                      │
+│                                                 │
+│  clone.ts    — git clone to /tmp                │
+│  build.ts    — Railpack detect + BuildKit build │
+│                → image pushed to               │
+│                  registry.service.consul:5000   │
+│  run.ts      — read user env from Vault         │
+│                → submit Nomad job               │
+│  caddy.ts    — poll Consul until alloc healthy  │
+│                → patch Caddy admin API          │
+│                → update deployment liveUrl      │
+└─────────────────────────────────────────────────┘
           ↓
 App live at http://{deploymentId}.localhost
+Logs streamed to UI over SSE from Redis pub/sub
 ```
-
-Logs are written to Postgres and published to Redis pub/sub simultaneously at every pipeline stage. The SSE endpoint subscribes to the relevant Redis channel and streams log lines to the client in real time.
 
 ---
 
@@ -66,31 +59,75 @@ All workloads run as Nomad jobs with the Podman driver. There is no Docker daemo
 
 ### Nomad Jobs
 
-| Job | Type | Port |
-|---|---|---|
-| `hangar-registry` | system | 5000 |
-| `hangar-postgres` | service | 5432 (dynamic) |
-| `hangar-redis` | service | 6379 (dynamic) |
-| `hangar-buildkit` | service | 1234 |
-| `hangar-api` | service | 3001 |
-| `hangar-web` | service | 5173 |
-| `hangar-caddy` | service | 80, 2019 |
+| Job | Type | Port | Notes |
+|---|---|---|---|
+| `hangar-registry` | service | 5000 (static) | Local OCI registry |
+| `hangar-postgres` | service | 5432 (dynamic) | App database |
+| `hangar-redis` | service | 6379 (dynamic) | Queue + pub/sub |
+| `hangar-buildkit` | service | 1234 (static) | Image builder |
+| `hangar-api` | service | 3001 (static) | Hono API server |
+| `hangar-web` | service | 5173 (static) | React frontend |
+| `hangar-caddy` | service | 80, 2019 (static) | Reverse proxy |
 
 ### Networking
 
-- **Podman bridge subnet:** `10.88.0.0/16`, gateway `10.88.0.1`
-- **Static ports** bind to the host eth0 IP — used only for external access, never for inter-service communication
-- **Inter-service communication** uses Consul DNS: `<service>.service.consul`
-- **dnsmasq** forwards `.consul` queries to `10.88.0.1:8600` (Consul DNS) from both host and containers
-- All Nomad jobs have `dns { servers = ["10.88.0.1"] }` in their network block so containers resolve `.consul` hostnames
+- **Podman bridge subnet:** `10.88.0.0/16`, gateway `10.88.0.1` — this is Podman's default and is the same on every machine running rootful Podman
+- **Static ports** bind to the host's primary eth0 IP — used only for external access, never for inter-service communication
+- **Inter-service communication** exclusively uses Consul DNS: `<service>.service.consul`
+- **dnsmasq** listens on `127.0.0.1` and `10.88.0.1` with `bind-dynamic` — starts without the bridge being up and picks it up automatically when the first container runs
+- All Nomad jobs include `dns { servers = ["10.88.0.1"] }` in their network block so containers resolve `.consul` hostnames
 
-### Registry
+> **Critical:** `/etc/containers/containers.conf.d/dns.conf` is NOT respected by Nomad-managed containers. Every Nomad job file must include the `dns { servers = ["10.88.0.1"] }` block explicitly. Without it, `.service.consul` hostnames will not resolve inside containers.
 
-Runs as a Nomad system job. Always reachable at `registry.service.consul:5000` regardless of container restarts. Configured as an insecure registry in `/etc/containers/registries.conf.d/local.conf` and in BuildKit's `buildkitd.toml`.
+### DNS Resolution Chain
 
-### Secrets
+```
+Container needs postgres.service.consul
+  → queries 10.88.0.1:53 (dnsmasq on bridge gateway)
+  → dnsmasq forwards *.consul to 10.88.0.1:8600 (Consul DNS)
+  → Consul returns current Podman IP of postgres container
+  → container connects directly to 10.88.x.x
+```
 
-Vault uses Nomad workload identity (JWT) for auth — no static tokens in job files. Secrets are read via Consul template at job start and injected as environment variables. The template block in each job file reads from `hangar/data/config`.
+### Service Registration
+
+All Nomad jobs use `address_mode = "driver"` on their `service` and `check` blocks. This registers the container's Podman IP (`10.88.x.x`) in Consul rather than the host eth0 IP. Without this, inter-container communication breaks.
+
+### Caddy Dynamic Routing
+
+Caddy uses `dynamic srv` upstream resolution backed by Consul DNS — no IPs are ever hardcoded in the Caddyfile:
+
+```caddyfile
+reverse_proxy {
+  dynamic srv {
+    name "api.service.consul"
+    resolvers 10.88.0.1:8600
+    refresh 5s
+  }
+}
+```
+
+On every request, Caddy resolves the current healthy IP from Consul directly. When a container is redeployed and gets a new Podman IP, Caddy picks it up automatically within 5 seconds — no restarts, no SIGHUP, no config changes.
+
+For user-deployed apps, routes are injected at runtime via Caddy's admin API at port 2019.
+
+### Secrets Flow
+
+Vault uses Nomad workload identity (JWT) for auth — no static tokens anywhere in job files:
+
+```
+Nomad mints a JWT for each alloc (TTL: 1h)
+  → API job presents JWT to Vault at jwt-nomad auth mount
+  → Vault validates against Nomad's JWKS endpoint
+  → Vault issues a service token scoped to nomad-workloads policy
+  → Consul template reads secrets from hangar/data/config
+  → Secrets injected as env vars into the container
+```
+
+Secrets stored in Vault at `hangar/data/config`:
+- `nomad_addr` — Nomad API address reachable from containers
+- `consul_addr` — Consul API address reachable from containers
+- `nomad_token` — Nomad ACL bootstrap token (used by API to submit user deployment jobs)
 
 ---
 
@@ -101,32 +138,32 @@ apps/
   api/                        — Hono API server (TypeScript)
     src/
       lib/
-        config.ts             — Vault client, getConfig(), getVault()
+        config.ts             — Vault client, getConfig(), env loading
         nomad.ts              — submitJob, stopJob, getJobStatus
         emitter.ts            — Redis pub/sub log emitter
-        queue.ts              — BullMQ worker
+        queue.ts              — BullMQ worker setup
         session.ts            — Redis session management
       middleware/
         auth.ts               — requireAuth middleware
       pipeline/
         index.ts              — runPipeline orchestrator
         clone.ts              — git clone
-        build.ts              — Railpack + BuildKit image build
-        run.ts                — getUserEnv from Vault, submitJob
-        caddy.ts              — waitForService, patchCaddy, unpatchCaddy
+        build.ts              — Railpack detect + BuildKit build + registry push
+        run.ts                — getUserEnv from Vault, submitJob to Nomad
+        caddy.ts              — waitForService in Consul, patchCaddy, unpatchCaddy
       routes/
-        deployments.ts        — deployment CRUD + health + redeploy
-        logs.ts               — SSE log streaming
+        deployments.ts        — deployment CRUD, health, redeploy
+        logs.ts               — SSE log streaming from Redis
         auth.ts               — GitHub OAuth routes
       schemas/
         deployments.ts        — Zod + OpenAPI schemas
-  web/                        — Vite + TanStack Router + TanStack Query
+  web/                        — Vite + React Router + TanStack Query frontend
 
 packages/
-  db/                         — Prisma client + shared queries
+  db/                         — Prisma client + shared DB queries
 
 nomad/
-  jobs/                       — all Nomad job files (.nomad.hcl)
+  jobs/                       — all Nomad job HCL files
     hangar-api.nomad.hcl
     hangar-web.nomad.hcl
     hangar-caddy.nomad.hcl
@@ -135,7 +172,7 @@ nomad/
     hangar-redis.nomad.hcl
     hangar-registry.nomad.hcl
   config/
-    nomad.hcl                 — Nomad agent config
+    nomad.hcl                 — Nomad agent config (ACL, Podman plugin, Vault integration)
 
 consul/
   config/
@@ -145,101 +182,235 @@ vault/
   config/
     vault.hcl                 — Vault server config
   scripts/
-    unseal.sh                 — auto-unseal script
+    unseal.sh                 — reads unseal keys from /etc/vault.d/keys/init.json (sudo jq)
 
-ansible/                      — WIP: not yet updated for Nomad/Podman stack
-terraform/                    — WIP: not yet updated
-.github/workflows/            — WIP: not yet updated
+ansible/
+  playbooks/
+    setup.yml                 — full server provisioning (packages, DNS, Nomad, Consul, Vault, ACL bootstrap)
+    vault-init.yml            — seed Vault secrets from group_vars
+    deploy.yml                — build + push API/web images, run Nomad jobs, health check
+  group_vars/
+    hangar/
+      vault.yml               — ansible-vault encrypted secrets (nomad_addr, consul_addr, caddy_admin_url, etc.)
+  inventory.ini               — generated at deploy time (localhost or remote)
+
+deploy.sh                     — single entrypoint: runs setup → vault-init → nomad jobs → deploy
 ```
 
 ---
 
-## Manual Setup
-
-> This is the current dev/production setup path. Ansible provisioning is not yet complete.
+## Deploying (Production / Staging)
 
 ### Prerequisites
 
-- Ubuntu 24 (WSL2 or bare metal)
-- Nomad, Consul, Vault installed
-- Podman (rootful) + aardvark-dns + netavark
-- dnsmasq
-- Node.js 22+, pnpm
+- Ubuntu 24 (bare metal or WSL2)
+- `ansible`, `ansible-playbook`, `jq`, `curl`, `git`, `nomad` installed on the deploying machine
+- An Ansible Vault password
 
-### 1. DNS Setup
+### One Command Deploy
 
-Install and configure dnsmasq to forward `.consul` queries to Consul:
-
+```bash
+./deploy.sh
 ```
-# /etc/dnsmasq.conf
+
+`deploy.sh` does everything in order:
+
+1. **Auto-unseals Vault** if it's sealed (reads keys from `/etc/vault.d/keys/init.json`)
+2. **Runs `setup.yml`** — installs all packages, configures dnsmasq, Podman, Consul, Nomad, Vault, bootstraps ACLs
+3. **Runs `vault-init.yml`** — enables KV engine, seeds `hangar/config` secrets, configures JWT auth for Nomad workload identity
+4. **Deploys Nomad infrastructure jobs** in startup order: registry → postgres → redis → buildkit
+5. **Runs `deploy.yml`** — builds and pushes `hangar-api` and `hangar-web` images, deploys them as Nomad jobs, waits for health checks
+6. **Deploys Caddy** — after API and web are registered healthy in Consul
+
+### Environment Variables
+
+| Variable | Default | Description |
+|---|---|---|
+| `HANGAR_MODE` | `local` | Set to `remote` for remote server deploy |
+| `SERVER_HOST` | — | Required in remote mode |
+| `SERVER_USER` | — | Required in remote mode |
+| `ANSIBLE_VAULT_PASSWORD` | — | If set, skips the vault password prompt |
+
+### Remote Deploy
+
+```bash
+export HANGAR_MODE=remote
+export SERVER_HOST=your.server.ip
+export SERVER_USER=ubuntu
+./deploy.sh
+```
+
+### Secrets (group_vars)
+
+Secrets are stored encrypted in `ansible/group_vars/hangar/vault.yml`. To edit:
+
+```bash
+ansible-vault edit ansible/group_vars/hangar/vault.yml
+```
+
+Current secrets:
+
+| Key | Value |
+|---|---|
+| `nomad_addr` | `http://10.88.0.1:4646` |
+| `consul_addr` | `http://10.88.0.1:8500` |
+| `caddy_admin_url` | `http://caddy.service.consul:2019` |
+| `buildkit_host` | `tcp://buildkit.service.consul:1234` |
+| `database_url` | `postgresql://hangar:hangar@postgres.service.consul:5432/hangar` |
+| `redis_url` | `redis://redis.service.consul:6379` |
+
+---
+
+## Developer Setup (Contributing)
+
+This section covers running Hangar locally for development without using `deploy.sh`. You'll run the infrastructure (Nomad jobs) once and then run the API and web servers directly on the host for fast iteration.
+
+### 1. Prerequisites
+
+Install the following on Ubuntu 24 (or WSL2 on Ubuntu 24):
+
+```bash
+# HashiCorp tools
+curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
+sudo apt update && sudo apt install -y nomad consul vault
+
+# Podman
+sudo apt install -y podman netavark aardvark-dns uidmap
+
+# dnsmasq
+sudo apt install -y dnsmasq
+
+# Node.js via NVM
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+source ~/.nvm/nvm.sh
+nvm install 24 && nvm use 24
+
+# pnpm
+npm install -g pnpm
+```
+
+### 2. DNS Setup
+
+Configure dnsmasq to forward `.consul` queries to Consul:
+
+```bash
+sudo tee /etc/dnsmasq.conf << 'EOF'
 server=/consul/10.88.0.1#8600
-listen-address=10.88.0.1
+server=8.8.8.8
+server=8.8.4.4
 listen-address=127.0.0.1
-bind-interfaces
+listen-address=10.88.0.1
+bind-dynamic
+no-hosts
+EOF
 ```
 
-Point `/etc/resolv.conf` at `127.0.0.1`. Configure Podman containers to use `10.88.0.1` as DNS:
+Disable systemd-resolved (conflicts with dnsmasq on port 53):
 
-```toml
-# /etc/containers/containers.conf.d/dns.conf
+```bash
+sudo systemctl disable --now systemd-resolved
+sudo rm /etc/resolv.conf
+echo "nameserver 127.0.0.1" | sudo tee /etc/resolv.conf
+sudo systemctl restart dnsmasq
+```
+
+Configure Podman containers to use the bridge gateway as DNS:
+
+```bash
+sudo mkdir -p /etc/containers/containers.conf.d
+sudo tee /etc/containers/containers.conf.d/dns.conf << 'EOF'
 [containers]
 dns_servers = ["10.88.0.1"]
+EOF
 ```
 
-> **Important:** The `dns_servers` setting in `containers.conf.d` is not respected by Nomad-launched containers. Each Nomad job must include an explicit `dns { servers = ["10.88.0.1"] }` block in its `network` stanza.
+Configure the local registry as insecure:
 
-### 2. Registry
-
-Configure Podman to treat the local registry as insecure:
-
-```toml
-# /etc/containers/registries.conf.d/local.conf
+```bash
+sudo mkdir -p /etc/containers/registries.conf.d
+sudo tee /etc/containers/registries.conf.d/local.conf << 'EOF'
 [[registry]]
 location = "registry.service.consul:5000"
 insecure = true
+EOF
 ```
 
-Configure BuildKit to push to the insecure registry:
+Configure BuildKit:
 
-```toml
-# /etc/buildkit/buildkitd.toml
+```bash
+sudo mkdir -p /etc/buildkit
+sudo tee /etc/buildkit/buildkitd.toml << 'EOF'
 [registry."registry.service.consul:5000"]
   http = true
   insecure = true
+EOF
 ```
 
-### 3. Start Services
+### 3. Start Infrastructure Services
 
 ```bash
-# Start in this order
+# Enable rootful Podman socket
+sudo systemctl enable --now podman.socket
+
+# Start HashiCorp services
 sudo systemctl start consul
+sleep 3
 sudo systemctl start nomad
+sleep 5
 sudo systemctl start vault
-sudo systemctl start dnsmasq
 ```
 
-Unseal Vault:
+### 4. Initialize Vault (First Time Only)
 
 ```bash
 export VAULT_ADDR=https://127.0.0.1:8200
 export VAULT_SKIP_VERIFY=true
-export VAULT_TOKEN=$(cat /etc/vault.d/keys/init.json | jq -r '.root_token')
-vault operator unseal <key1>
-vault operator unseal <key2>
-vault operator unseal <key3>
+
+# Initialize
+vault operator init -key-shares=5 -key-threshold=3 -format=json | \
+  sudo tee /etc/vault.d/keys/init.json
+sudo chmod 600 /etc/vault.d/keys/init.json
+
+# Unseal (run 3 times with different keys)
+export VAULT_TOKEN=$(sudo cat /etc/vault.d/keys/init.json | jq -r '.root_token')
+sudo cat /etc/vault.d/keys/init.json | jq -r '.unseal_keys_b64[0]' | xargs vault operator unseal
+sudo cat /etc/vault.d/keys/init.json | jq -r '.unseal_keys_b64[1]' | xargs vault operator unseal
+sudo cat /etc/vault.d/keys/init.json | jq -r '.unseal_keys_b64[2]' | xargs vault operator unseal
 ```
 
-### 4. Seed Vault Secrets
+### 5. Bootstrap Nomad ACL (First Time Only)
 
 ```bash
+export NOMAD_ADDR=http://127.0.0.1:4646
+nomad acl bootstrap -json | sudo tee /etc/nomad.d/bootstrap.json
+sudo chmod 600 /etc/nomad.d/bootstrap.json
+export NOMAD_TOKEN=$(sudo cat /etc/nomad.d/bootstrap.json | jq -r '.SecretID')
+```
+
+### 6. Seed Vault Secrets
+
+```bash
+export VAULT_ADDR=https://127.0.0.1:8200
+export VAULT_SKIP_VERIFY=true
+export VAULT_TOKEN=$(sudo cat /etc/vault.d/keys/init.json | jq -r '.root_token')
+export NOMAD_TOKEN=$(sudo cat /etc/nomad.d/bootstrap.json | jq -r '.SecretID')
+
 vault secrets enable -path=hangar kv-v2
 
 vault kv put hangar/config \
-  nomad_addr="http://127.0.0.1:4646" \
-  consul_addr="http://127.0.0.1:8500" \
-  nomad_token="<your-nomad-token>"
+  nomad_addr="http://10.88.0.1:4646" \
+  consul_addr="http://10.88.0.1:8500" \
+  nomad_token="$NOMAD_TOKEN"
 
-vault policy write nomad-workloads - <<EOF
+# Configure JWT auth for workload identity
+vault auth enable -path=jwt-nomad jwt
+vault write auth/jwt-nomad/config \
+  jwks_url="http://127.0.0.1:4646/.well-known/jwks.json" \
+  jwt_supported_algs="RS256,EdDSA" \
+  default_role="nomad-workloads"
+
+vault policy write nomad-workloads - <<'EOF'
 path "hangar/data/*" {
   capabilities = ["read"]
 }
@@ -247,73 +418,220 @@ path "hangar/data/deployments/*" {
   capabilities = ["create", "update", "read", "delete"]
 }
 EOF
+
+vault write auth/jwt-nomad/role/nomad-workloads \
+  role_type="jwt" \
+  bound_audiences="vault.io" \
+  user_claim="/nomad_job_id" \
+  user_claim_json_pointer=true \
+  token_policies="nomad-workloads" \
+  token_period="1h" \
+  token_type="service"
 ```
 
-### 5. Deploy Nomad Jobs
+### 7. Create Data Directories
 
 ```bash
-export NOMAD_TOKEN=<your-nomad-token>
+sudo mkdir -p /opt/hangar/data/{registry,buildkit,caddy,postgres,redis}
+sudo chown -R $USER:$USER /opt/hangar/data/{registry,buildkit,caddy}
+sudo chown -R 999:999 /opt/hangar/data/{postgres,redis}
+```
 
-# Deploy in startup order
+### 8. Deploy Infrastructure Nomad Jobs
+
+```bash
+export NOMAD_TOKEN=$(sudo cat /etc/nomad.d/bootstrap.json | jq -r '.SecretID')
+
 nomad job run nomad/jobs/hangar-registry.nomad.hcl
 nomad job run nomad/jobs/hangar-postgres.nomad.hcl
-nomad job run nomad/jobs/hangar-redis.nomad.hcl
 nomad job run nomad/jobs/hangar-buildkit.nomad.hcl
+nomad job run nomad/jobs/hangar-redis.nomad.hcl
 nomad job run nomad/jobs/hangar-caddy.nomad.hcl
 ```
 
-Build and push the API and web images, then deploy:
+Wait for all jobs to be healthy:
 
 ```bash
-podman build -t registry.service.consul:5000/hangar-api:latest -f apps/api/Dockerfile .
-podman push registry.service.consul:5000/hangar-api:latest --tls-verify=false
-
-podman build -t registry.service.consul:5000/hangar-web:latest -f apps/web/Dockerfile .
-podman push registry.service.consul:5000/hangar-web:latest --tls-verify=false
-
-nomad job run nomad/jobs/hangar-api.nomad.hcl
-nomad job run nomad/jobs/hangar-web.nomad.hcl
+# Check Consul for healthy services
+curl -s http://127.0.0.1:8500/v1/health/service/registry?passing=true | jq '.[0].Service.ID'
+curl -s http://127.0.0.1:8500/v1/health/service/postgres?passing=true | jq '.[0].Service.ID'
+curl -s http://127.0.0.1:8500/v1/health/service/redis?passing=true | jq '.[0].Service.ID'
+curl -s http://127.0.0.1:8500/v1/health/service/buildkit?passing=true | jq '.[0].Service.ID'
+curl -s http://127.0.0.1:8500/v1/health/service/caddy?passing=true | jq '.[0].Service.ID'
 ```
 
-### 6. Verify
+### 9. Run Migrations
 
 ```bash
-# All services healthy in Consul
-curl -s http://127.0.0.1:8500/v1/catalog/services | jq 'keys'
+cd packages/db
+pnpm prisma migrate deploy
+```
 
-# API responding
-curl http://172.30.186.74:3001/
+### 10. Run API and Web Dev Servers
 
-# Registry reachable
-curl http://registry.service.consul:5000/v2/_catalog
+Open two terminals:
+
+**Terminal 1 — API:**
+
+```bash
+export VAULT_ADDR=https://127.0.0.1:8200
+export VAULT_SKIP_VERIFY=true
+export VAULT_TOKEN=$(sudo cat /etc/vault.d/keys/init.json | jq -r '.root_token')
+export NOMAD_TOKEN=$(sudo cat /etc/nomad.d/bootstrap.json | jq -r '.SecretID')
+export NOMAD_ADDR=http://10.88.0.1:4646
+export CONSUL_ADDR=http://10.88.0.1:8500
+export DATABASE_URL="postgresql://hangar:hangar@postgres.service.consul:5432/hangar"
+export REDIS_URL="redis://redis.service.consul:6379"
+export CADDY_ADMIN_URL="http://caddy.service.consul:2019"
+export BUILDKIT_HOST="tcp://buildkit.service.consul:1234"
+export REGISTRY_HOST="registry.service.consul:5000"
+
+cd apps/api
+pnpm dev
+```
+
+**Terminal 2 — Web:**
+
+```bash
+cd apps/web
+pnpm dev
+```
+
+The API runs on `http://localhost:3001` and the web on `http://localhost:5173`.
+
+> **Note:** When running the API directly on the host (not as a Nomad job), Vault workload identity JWT auth is not available. Set `VAULT_TOKEN` directly as shown above. The API's `config.ts` falls back to `VAULT_TOKEN` env var when not running inside a Nomad alloc.
+
+### 11. Restarting After a Reboot
+
+After a reboot (or WSL restart), services need to be brought back up in order:
+
+```bash
+# Load env
+export NOMAD_TOKEN=$(sudo cat /etc/nomad.d/bootstrap.json | jq -r '.SecretID')
+export VAULT_ADDR=https://127.0.0.1:8200
+export VAULT_SKIP_VERIFY=true
+export VAULT_TOKEN=$(sudo cat /etc/vault.d/keys/init.json | jq -r '.root_token')
+
+# Start services
+sudo systemctl start consul
+sleep 3
+sudo systemctl start nomad
+sleep 3
+sudo systemctl start vault
+sleep 3
+
+# Unseal Vault
+bash vault/scripts/unseal.sh
+
+# Restart dnsmasq (Podman bridge needs to be up first)
+sudo systemctl restart dnsmasq
+
+# Redeploy Nomad jobs (or just run deploy.sh)
+./deploy.sh
 ```
 
 ---
 
-## Redeploying After Code Changes
+## Operational Reference
+
+### Environment Variables (Session Setup)
+
+Always load these before running any `nomad` or `vault` CLI commands:
 
 ```bash
-export NOMAD_TOKEN=<your-nomad-token>
-
-podman build -t registry.service.consul:5000/hangar-api:latest -f apps/api/Dockerfile .
-podman push registry.service.consul:5000/hangar-api:latest --tls-verify=false
-
-nomad job stop -purge hangar-api
-sudo kill -9 $(sudo ss -tlnp | grep ':3001' | grep -o 'pid=[0-9]*' | cut -d= -f2) 2>/dev/null
-sudo kill -9 $(sudo ss -ulnp | grep ':3001' | grep -o 'pid=[0-9]*' | cut -d= -f2) 2>/dev/null
-nomad job run nomad/jobs/hangar-api.nomad.hcl
+export NOMAD_TOKEN=$(sudo cat /etc/nomad.d/bootstrap.json | jq -r '.SecretID')
+export VAULT_ADDR=https://127.0.0.1:8200
+export VAULT_SKIP_VERIFY=true
+export VAULT_TOKEN=$(sudo cat /etc/vault.d/keys/init.json | jq -r '.root_token')
 ```
 
-> **Note:** Always kill stale `conmon` processes after stopping a Nomad job before redeploying. Stale processes hold ports and will cause the new alloc to fail with `address already in use`.
+### Manually Redeploying a Job
+
+```bash
+export NOMAD_TOKEN=$(sudo cat /etc/nomad.d/bootstrap.json | jq -r '.SecretID')
+
+# Stop and purge (wait for completion)
+nomad job stop -purge -detach=false <job-name>
+
+# Force remove any stuck containers
+SHORT=<job-name-without-hangar-prefix>  # e.g. "api" not "hangar-api"
+sudo podman ps -a --format '{{.ID}} {{.Names}}' | grep "$SHORT" | awk '{print $1}' | xargs -r sudo podman rm -f
+
+# Kill anything holding the port
+sudo kill -9 $(sudo ss -tlnp | grep ':<PORT>' | grep -o 'pid=[0-9]*' | cut -d= -f2) 2>/dev/null
+
+# Redeploy
+nomad job run nomad/jobs/<job-name>.nomad.hcl
+```
+
+> **Important:** Podman container names are `<shortname>-<uuid>`, NOT `hangar-<shortname>-<uuid>`. Always strip the `hangar-` prefix when grepping for containers.
+
+### Checking Service Health
+
+```bash
+# All registered services
+curl -s http://127.0.0.1:8500/v1/catalog/services | jq 'keys'
+
+# Specific service health
+curl -s "http://127.0.0.1:8500/v1/health/service/<service>?passing=true" | jq '.[0].Service | {Address, Port}'
+
+# Nomad job status
+nomad job status <job-name>
+
+# Nomad alloc logs
+nomad alloc logs $(nomad job allocs <job-name> | grep running | awk '{print $1}') <task-name>
+```
+
+### Checking What Caddy Is Routing
+
+```bash
+# Full Caddy config
+curl -s http://<host-ip>:2019/config/ | jq .
+
+# Just the routes
+curl -s http://<host-ip>:2019/config/apps/http/servers/srv0/routes | jq .
+```
+
+### Vault Operations
+
+```bash
+# Check seal status
+vault status
+
+# Unseal manually
+bash vault/scripts/unseal.sh
+
+# Read current secrets
+vault kv get hangar/config
+
+# Update a secret
+vault kv patch hangar/config nomad_token="<new-token>"
+```
+
+### Nomad ACL Reset (if bootstrap token is lost)
+
+```bash
+sudo systemctl stop nomad
+sudo sh -c 'echo N > /opt/nomad/data/server/acl-bootstrap-reset'
+sudo systemctl start nomad
+sleep 8
+until curl -sf http://127.0.0.1:4646/v1/status/leader > /dev/null; do sleep 2; done
+sudo NOMAD_ADDR=http://127.0.0.1:4646 nomad acl bootstrap -json | sudo tee /etc/nomad.d/bootstrap.json
+sudo chmod 600 /etc/nomad.d/bootstrap.json
+```
 
 ---
 
 ## Deploying an App
 
-### Via API
+### Via the UI
+
+Navigate to `http://<host-ip>` and paste a public Git URL into the deployment form.
+
+### Via the API
 
 ```bash
-curl -X POST http://172.30.186.74:3001/deployments \
+curl -X POST http://<host-ip>/api/deployments \
   -H "Content-Type: application/json" \
   -d '{
     "sourceType": "git",
@@ -324,13 +642,12 @@ curl -X POST http://172.30.186.74:3001/deployments \
 Stream logs:
 
 ```bash
-curl -s http://172.30.186.74:3001/deployments/<id>/logs
+curl -s http://<host-ip>/api/deployments/<id>/logs
 ```
 
 ### Test Apps
 
-- `https://github.com/render-examples/express-hello-world` — Node.js/Express
-- Any Node.js, Python, or Go app that Railpack can auto-detect
+- `https://github.com/render-examples/express-hello-world` — Node.js/Express, detected and built automatically by Railpack
 
 ---
 
@@ -340,13 +657,13 @@ curl -s http://172.30.186.74:3001/deployments/<id>/logs
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/deployments` | List all deployments |
-| `POST` | `/deployments` | Create a deployment |
-| `GET` | `/deployments/:id` | Get a single deployment |
-| `DELETE` | `/deployments/:id` | Stop and delete a deployment |
-| `POST` | `/deployments/:id/redeploy` | Redeploy from the same source |
-| `GET` | `/deployments/:id/health` | Check deployment health via Nomad |
-| `GET` | `/deployments/:id/logs` | Stream build + deploy logs over SSE |
+| `GET` | `/api/deployments` | List all deployments |
+| `POST` | `/api/deployments` | Create a deployment |
+| `GET` | `/api/deployments/:id` | Get a single deployment |
+| `DELETE` | `/api/deployments/:id` | Stop and delete a deployment |
+| `POST` | `/api/deployments/:id/redeploy` | Redeploy from the same source |
+| `GET` | `/api/deployments/:id/health` | Check deployment health via Nomad |
+| `GET` | `/api/deployments/:id/logs` | Stream build + deploy logs over SSE |
 
 ### Deployment Status Values
 
@@ -361,8 +678,6 @@ curl -s http://172.30.186.74:3001/deployments/<id>/logs
 
 ### Resource Limits
 
-Specified per deploy request. Defaults apply if omitted.
-
 | Field | Default | Unit |
 |---|---|---|
 | `cpu` | `500` | MHz |
@@ -370,42 +685,21 @@ Specified per deploy request. Defaults apply if omitted.
 
 ---
 
-## Subdomain Routing
-
-Each deployment gets its own subdomain:
-
-```
-http://{deploymentId}.localhost
-```
-
-Routes are patched live into Caddy via its admin API at port 2019 — no Caddyfile edits, no restarts. The Caddyfile is rendered by Consul template at Caddy startup and handles base routing:
-
-| Traffic | Handler |
-|---|---|
-| `*/api/*` | API container (port 3001), prefix stripped |
-| `*` (catch-all) | Web frontend (port 5173) |
-| `{deploymentId}.localhost` | Deployed app container (injected dynamically) |
-
-On Linux, `*.localhost` resolves to `127.0.0.1` automatically in most browsers.
-
----
-
-## Known Issues & Operational Notes
+## Known Issues & Gotchas
 
 ### Stale conmon processes
 
-Nomad's Podman driver leaves `conmon` processes holding ports after a job is stopped. Always kill them before redeploying:
+Nomad's Podman driver can leave `conmon` processes holding ports after a job is stopped. `deploy.sh` and `deploy_job()` handle this automatically. If doing manual redeployments:
 
 ```bash
 sudo kill -9 $(sudo ss -tlnp | grep ':<PORT>' | grep -o 'pid=[0-9]*' | cut -d= -f2) 2>/dev/null
-sudo kill -9 $(sudo ss -ulnp | grep ':<PORT>' | grep -o 'pid=[0-9]*' | cut -d= -f2) 2>/dev/null
 ```
 
 Ports to watch: `80`, `2019`, `3001`, `5000`, `5173`, `5432`, `6379`, `1234`.
 
 ### BuildKit stale lockfile
 
-BuildKit writes a lockfile at `/opt/hangar/data/buildkit/buildkitd.lock`. If BuildKit fails to start, delete it:
+BuildKit writes a lockfile at `/opt/hangar/data/buildkit/buildkitd.lock`. If BuildKit fails to start after a crash, the `hangar-buildkit` job has a `prestart` lifecycle task using `raw_exec` that deletes it automatically. If it persists:
 
 ```bash
 sudo rm -f /opt/hangar/data/buildkit/buildkitd.lock
@@ -413,34 +707,29 @@ sudo rm -f /opt/hangar/data/buildkit/buildkitd.lock
 
 ### Vault JWT expiry
 
-Nomad workload identity tokens expire (TTL: 1h). If the API alloc is killed with `failed to derive Vault token: token is expired`, stop-purge and redeploy the job. Make sure Vault is unsealed first.
+Nomad workload identity tokens expire after 1 hour. If the API alloc reports `failed to derive Vault token: token is expired`, stop-purge and redeploy the job. Ensure Vault is unsealed first.
 
-### Caddy health check
+### dnsmasq and the Podman bridge
 
-The Caddy Consul health check targets port 2019 (TCP), not port 80. This ensures Caddy registers as healthy in Consul regardless of upstream app status. `CADDY_ADMIN_URL` is only injected into the API via Consul template when Caddy is healthy — if it's missing, Caddy's health check is the first thing to check.
-
-### DNS in Nomad containers
-
-`/etc/containers/containers.conf.d/dns.conf` is not respected by Nomad-managed containers. Every Nomad job file must include:
-
-```hcl
-network {
-  dns {
-    servers = ["10.88.0.1"]
-  }
-  ...
-}
-```
-
-Without this, `.service.consul` hostnames will not resolve inside containers.
+dnsmasq is configured with `bind-dynamic` and listens on both `127.0.0.1` and `10.88.0.1`. The `10.88.0.1` address only exists when at least one Podman container is running (it's the bridge gateway). With `bind-dynamic`, dnsmasq starts without it and binds to it automatically when the bridge comes up. This means DNS from containers works as soon as the first Nomad job starts.
 
 ### HCL heredoc indentation
 
-Consul template blocks in Nomad job files must use `<<EOT` (not `<<-EOT`) with zero indentation on all lines including the closing `EOT`. Indentation causes silent template rendering failures.
+Consul template blocks in Nomad job files must use `<<EOT` (not `<<-EOT`) with zero indentation on the closing `EOT` tag. Indentation causes silent template rendering failures where env vars are empty.
 
-### Nomad service address_mode
+### Nomad job stop is async by default
 
-All `service` and `check` blocks in Nomad job files must include `address_mode = "driver"`. Without it, Consul registers the eth0 IP instead of the Podman container IP.
+Always use `-detach=false` when stopping jobs in scripts:
+
+```bash
+nomad job stop -purge -detach=false <job-name>
+```
+
+Without it, the shell returns immediately while Nomad is still stopping the job, causing race conditions with container cleanup.
+
+### Static ports bind to eth0, not 127.0.0.1
+
+On WSL2, static Nomad ports bind to the WSL eth0 IP (e.g. `172.30.186.74`), not `localhost`. Use the actual IP when accessing services from the host. For localhost access, set `networkingMode=mirrored` in `~/.wslconfig` (Windows) and restart WSL.
 
 ---
 
@@ -494,15 +783,16 @@ model Log {
 
 ## What's Next
 
-- **Ansible provisioning** — codify manual setup into idempotent playbooks for the Nomad/Podman stack
 - **Scoped Nomad token** — replace bootstrap token with a least-privilege policy token
-- **Windows access** — set `networkingMode=mirrored` in `.wslconfig` for direct host access
-- **Caddy race condition** — auto-restart Caddy alloc when Consul template renders with empty upstreams
+- **Windows localhost access** — set `networkingMode=mirrored` in `.wslconfig`
 - **Registry GC** — delete old images from the local registry after successful redeploy
 - **GitHub OAuth** — private repo support, user-scoped deployments
 - **Custom domains** — user-provided domains beyond `.localhost`
 - **Build cache reuse** — BuildKit cache persistence across deployments
 - **Rollback** — redeploy a previous image tag
+- **GitHub Actions CI/CD** — automated deploy pipeline on push
+- **Terraform** — infrastructure provisioning for cloud bare metal
+- **Multinode** — `dns { servers = ["10.88.0.1"] }` is currently single-node specific; needs abstraction for multi-node clusters
 
 ---
 
