@@ -50,6 +50,7 @@ job "hangar-buildkit" {
         name         = "buildkit"
         port         = "daemon"
         address_mode = "driver"
+        provider     = "consul"
         check {
           type         = "tcp"
           port         = "daemon"
