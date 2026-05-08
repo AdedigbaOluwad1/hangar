@@ -4,6 +4,9 @@ job "hangar-caddy" {
   group "caddy" {
     count = 1
     network {
+      dns {
+        servers = ["10.88.0.1"]
+      }
       port "http" {
         static = 80
         to     = 80
@@ -16,7 +19,7 @@ job "hangar-caddy" {
     task "caddy" {
       driver = "podman"
       config {
-        image = "docker.io/library/caddy:2-alpine"
+        image   = "docker.io/library/caddy:2-alpine"
         ports   = ["http", "admin"]
         volumes = [
           "local/Caddyfile:/etc/caddy/Caddyfile",
@@ -33,16 +36,27 @@ job "hangar-caddy" {
 :80 {
   handle /api/* {
     uri strip_prefix /api
-    reverse_proxy {{ range service "api" }}{{ .Address }}:{{ .Port }}{{ end }}
+    reverse_proxy {
+      dynamic srv {
+        name "api.service.consul"
+        resolvers 10.88.0.1:8600
+        refresh 5s
+      }
+    }
   }
   handle {
-    reverse_proxy {{ range service "web" }}{{ .Address }}:{{ .Port }}{{ end }}
+    reverse_proxy {
+      dynamic srv {
+        name "web.service.consul"
+        resolvers 10.88.0.1:8600
+        refresh 5s
+      }
+    }
   }
 }
 EOT
-        destination   = "local/Caddyfile"
-        change_mode   = "signal"
-        change_signal = "SIGHUP"
+        destination = "local/Caddyfile"
+        change_mode = "noop"
       }
       resources {
         cpu    = 128

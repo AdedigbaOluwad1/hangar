@@ -19,9 +19,9 @@ job "hangar-api" {
       driver = "podman"
 
       config {
-        image = "registry.service.consul:5000/hangar-api:latest"
+        image      = "registry.service.consul:5000/hangar-api:latest"
         force_pull = true
-        ports = ["http"]
+        ports      = ["http"]
       }
 
       identity {
@@ -44,23 +44,17 @@ NOMAD_TOKEN={{ .Data.data.nomad_token }}
 {{- end }}
 BUILDKIT_HOST=tcp://buildkit.service.consul:1234
 REGISTRY_HOST=registry.service.consul:5000
-{{- range service "caddy" }}
-CADDY_ADMIN_URL=http://{{ .Address }}:2019
-{{- end }}
-{{- range service "postgres" }}
-DATABASE_URL=postgresql://hangar:hangar@{{ .Address }}:{{ .Port }}/hangar
-{{- end }}
-{{- range service "redis" }}
-REDIS_URL=redis://{{ .Address }}:{{ .Port }}
-{{- end }}
+DATABASE_URL=postgresql://hangar:hangar@postgres.service.consul:5432/hangar
+REDIS_URL=redis://redis.service.consul:6379
 EOT
         destination = "secrets/config.env"
         env         = true
-        change_mode = "noop"
+        change_mode = "restart"
       }
 
       env {
         VAULT_ADDR        = "https://10.88.0.1:8200"
+        CADDY_ADMIN_URL   = "http://10.88.0.1:2019"
         VAULT_SKIP_VERIFY = "true"
       }
 
