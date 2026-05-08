@@ -6,6 +6,9 @@ job "hangar-postgres" {
     count = 1
 
     network {
+      dns {
+        servers = ["10.88.0.1"]
+      }
       port "db" {
         static = 5432
         to     = 5432
@@ -39,9 +42,8 @@ job "hangar-postgres" {
         provider     = "consul"
 
         check {
-          type         = "script"
-          command      = "pg_isready"
-          args         = ["-U", "hangar"]
+          type         = "tcp"
+          port         = "db"
           interval     = "10s"
           timeout      = "3s"
           address_mode = "driver"
