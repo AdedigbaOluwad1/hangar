@@ -424,6 +424,23 @@
         delay: 2
         timeout: 30
 
+    # ── Disable systemd-resolved (conflicts with dnsmasq on port 53) ────────
+
+    - name: Disable and stop systemd-resolved
+      become: true
+      systemd:
+        name: systemd-resolved
+        state: stopped
+        enabled: false
+      failed_when: false
+
+    - name: Remove systemd-resolved resolv.conf symlink
+      become: true
+      file:
+        path: /etc/resolv.conf
+        state: absent
+      failed_when: false
+
     # ── dnsmasq ──────────────────────────────────────────────────────────────
 
     - name: Write dnsmasq config
@@ -437,10 +454,8 @@
           # Forward everything else to upstream DNS
           server=8.8.8.8
           server=8.8.4.4
-
-          listen-address=127.0.0.1
-          bind-interfaces
-
+          except-interface=lo
+          bind-dynamic
           # Don't use /etc/hosts for .consul resolution
           no-hosts
         mode: "0644"
