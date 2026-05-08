@@ -64,16 +64,40 @@ if [ "$MODE" = "remote" ]; then
   done
 
   cat > "$ANSIBLE_DIR/inventory.ini" << EOF
-[hangar]
+[nomad_servers]
 $SERVER_HOST ansible_user=$SERVER_USER
+
+[nomad_clients]
+
+[hangar:children]
+nomad_servers
+nomad_clients
+
+[nomad_servers:vars]
+nomad_server_count=1
+
+[nomad_clients:vars]
+nomad_server_count=0
 EOF
 
 else
   echo "💻 Local mode — deploying to localhost..."
 
   cat > "$ANSIBLE_DIR/inventory.ini" << 'EOF'
-[hangar]
+[nomad_servers]
 localhost ansible_connection=local
+
+[nomad_clients]
+
+[hangar:children]
+nomad_servers
+nomad_clients
+
+[nomad_servers:vars]
+nomad_server_count=1
+
+[nomad_clients:vars]
+nomad_server_count=0
 EOF
 fi
 
