@@ -35,6 +35,7 @@ elif [ -n "$ANSIBLE_VAULT_PASSWORD" ]; then
   trap "rm -f $VAULT_PASS_FILE" EXIT
 elif [ -f "$SCRIPT_DIR/.vault-pass" ]; then
   VAULT_PASS_FILE="$SCRIPT_DIR/.vault-pass"
+  trap "rm -f $VAULT_PASS_FILE" EXIT
 else
   read -s -p "🔐 Enter Ansible Vault password: " VAULT_PASS < /dev/tty
   echo
