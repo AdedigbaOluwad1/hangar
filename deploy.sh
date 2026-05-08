@@ -164,7 +164,6 @@ deploy_job "$NOMAD_JOBS_DIR/hangar-registry.nomad.hcl"  "registry"
 deploy_job "$NOMAD_JOBS_DIR/hangar-postgres.nomad.hcl"  "postgres"
 deploy_job "$NOMAD_JOBS_DIR/hangar-redis.nomad.hcl"     "redis"
 deploy_job "$NOMAD_JOBS_DIR/hangar-buildkit.nomad.hcl"  "buildkit"
-deploy_job "$NOMAD_JOBS_DIR/hangar-caddy.nomad.hcl"     "caddy"
 
 # ── 5. Build + push images, deploy api + web ──────────────────────────────────
 
@@ -174,6 +173,12 @@ ansible-playbook \
   -i "$ANSIBLE_DIR/inventory.ini" \
   "$ANSIBLE_DIR/playbooks/deploy.yml" \
   --vault-password-file "$VAULT_PASS_FILE"
+
+# ── 6. Deploy Caddy after api + web are registered in Consul ─────────────────
+
+echo ""
+echo "🌐 Deploying Caddy..."
+deploy_job "$NOMAD_JOBS_DIR/hangar-caddy.nomad.hcl" "caddy"
 
 
 # ── Done ──────────────────────────────────────────────────────────────────────
