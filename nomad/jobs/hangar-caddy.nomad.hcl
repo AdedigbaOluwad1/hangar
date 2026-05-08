@@ -41,12 +41,8 @@ job "hangar-caddy" {
 }
 EOT
         destination   = "local/Caddyfile"
-        change_mode   = "script"
-        change_script {
-          command = "/bin/sh"
-          args    = ["-c", "caddy reload --config /etc/caddy/Caddyfile --address localhost:2019"]
-          timeout = "10s"
-        }
+        change_mode   = "signal"
+        change_signal = "SIGHUP"
       }
       resources {
         cpu    = 128

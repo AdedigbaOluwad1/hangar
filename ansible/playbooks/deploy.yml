@@ -99,7 +99,7 @@
     - name: Stop hangar-api
       shell: |
         NOMAD_TOKEN={{ nomad_token.stdout }} \
-          nomad job stop -purge hangar-api || true
+          nomad job stop -purge -detach=false hangar-api || true
       no_log: true
 
     - name: Kill stale conmon on port 3001 (TCP)
@@ -125,7 +125,7 @@
     - name: Stop hangar-web
       shell: |
         NOMAD_TOKEN={{ nomad_token.stdout }} \
-          nomad job stop -purge hangar-web || true
+          nomad job stop -purge -detach=false hangar-web || true
       no_log: true
 
     - name: Kill stale conmon on port 5173 (TCP)
