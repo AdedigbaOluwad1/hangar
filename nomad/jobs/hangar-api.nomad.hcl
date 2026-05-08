@@ -54,7 +54,7 @@ EOT
 
       env {
         VAULT_ADDR        = "https://10.88.0.1:8200"
-        CADDY_ADMIN_URL   = "http://10.88.0.1:2019"
+        CADDY_ADMIN_URL   = "http://caddy.service.consul:2019"
         VAULT_SKIP_VERIFY = "true"
       }
 
