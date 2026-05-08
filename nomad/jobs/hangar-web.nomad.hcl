@@ -6,6 +6,9 @@ job "hangar-web" {
     count = 1
 
     network {
+      dns {
+        servers = ["10.88.0.1"]
+      }
       port "http" {
         static = 5173
         to     = 5173
@@ -16,8 +19,9 @@ job "hangar-web" {
       driver = "podman"
 
       config {
-        image = "registry.service.consul:5000/hangar-web:latest"
-        ports = ["http"]
+        image      = "registry.service.consul:5000/hangar-web:latest"
+        force_pull = true
+        ports      = ["http"]
       }
 
       resources {
