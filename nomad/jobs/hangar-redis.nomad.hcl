@@ -6,6 +6,9 @@ job "hangar-redis" {
     count = 1
 
     network {
+      dns {
+        servers = ["10.88.0.1"]
+      }
       port "db" {
         static = 6379
         to     = 6379
@@ -34,9 +37,8 @@ job "hangar-redis" {
         provider     = "consul"
 
         check {
-          type         = "script"
-          command      = "redis-cli"
-          args         = ["ping"]
+          type         = "tcp"
+          port         = "db"
           interval     = "10s"
           timeout      = "3s"
           address_mode = "driver"
