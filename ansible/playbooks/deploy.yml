@@ -159,7 +159,7 @@
 
     - name: Check API is responding
       uri:
-        url: "http://{{ ansible_default_ipv4.address }}:3001/"
+        url: "http://{{ ansible_default_ipv4.address }}:3001/health"
         status_code: [ 200, 404 ]
       register: api_check
 
