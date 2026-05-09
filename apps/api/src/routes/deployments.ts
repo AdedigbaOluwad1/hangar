@@ -10,9 +10,7 @@ import {
   getBuild,
   updateDeployment,
 } from '@hangar/db'
-import { deployQueue } from '../lib/queue'
-import { getVault } from '../lib/config'
-import { stopJob, getJobStatus } from '../lib/nomad'
+import { getVault, deployQueue, stopJob, getJobStatus } from '../lib'
 import { unpatchCaddy } from '../pipeline/caddy'
 import {
   DeploymentIdParam,
@@ -208,7 +206,7 @@ deployments.openapi(redeployRoute, async (c) => {
     buildId: build.id,
   })
 
-  return c.json(deployment, 200)
+  return c.json({ ...deployment, latestBuild: build }, 200)
 })
 
 // ── GET /:id/health ───────────────────────────────────────
@@ -346,7 +344,7 @@ deployments.openapi(rollbackRoute, async (c) => {
     rollbackImageTag: imageTag,
   })
 
-  return c.json(deployment, 200)
+  return c.json({ ...deployment, latestBuild: build }, 200)
 })
 
 // ── GET /:id/builds — list builds ─────────────────────────

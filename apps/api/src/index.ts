@@ -1,7 +1,6 @@
 import { OpenAPIHono } from '@hono/zod-openapi'
 import { swaggerUI } from '@hono/swagger-ui'
-import { deployments } from './routes/deployments'
-import { logs } from './routes/logs'
+import { logs, deployments } from './routes'
 import { cors } from 'hono/cors'
 import { serve } from '@hono/node-server'
 

@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { streamSSE } from 'hono/streaming'
 import { getLogs, getDeployment, getLatestBuild, getBuild } from '@hangar/db'
-import { subscribeToLogs } from '../lib/emitter'
+import { subscribeToLogs } from '../lib'
 
 export const logs = new Hono()
 

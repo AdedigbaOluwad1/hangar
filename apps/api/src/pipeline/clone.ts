@@ -3,7 +3,7 @@ import { mkdtemp } from 'fs/promises'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { writeLog, getDeployment } from '@hangar/db'
-import { emitLog } from '../lib/emitter'
+import { emitLog } from '../lib'
 
 export async function clone(deploymentId: string, buildId: string): Promise<string> {
   const deployment = await getDeployment(deploymentId)

@@ -1,5 +1,5 @@
 import { writeLog } from '@hangar/db'
-import { emitLog } from '../lib/emitter'
+import { emitLog } from '../lib'
 
 async function getCaddyAdmin(): Promise<string> {
   return process.env.CADDY_ADMIN_URL ?? 'http://127.0.0.1:2019'

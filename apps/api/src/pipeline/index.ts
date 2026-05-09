@@ -4,8 +4,7 @@ import { clone } from './clone'
 import { build } from './build'
 import { runContainer } from './run'
 import { patchCaddy, unpatchCaddy } from './caddy'
-import { emitDone, emitLog } from '../lib/emitter'
-import { stopJob } from '../lib/nomad'
+import { emitDone, emitLog, stopJob } from '../lib'
 
 export async function runPipeline(
   deploymentId: string,

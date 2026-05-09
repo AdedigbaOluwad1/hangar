@@ -1,42 +1,7 @@
 import { execa } from 'execa'
 import { join } from 'path'
 import { writeLog } from '@hangar/db'
-import { emitLog } from '../lib/emitter'
-
-const REGISTRY_KEEP = 3
-
-async function gcOldTags(registryHost: string, deploymentId: string): Promise<void> {
-  const name = `hangar-${deploymentId}`
-  const base = `http://${registryHost}/v2/${name}`
-
-  const res = await fetch(`${base}/tags/list`)
-  if (!res.ok) return // no tags yet — first build
-
-  const { tags } = await res.json() as { tags: string[] | null }
-  if (!tags) return
-
-  // versioned tags are uuidv7s — sort ascending (oldest first), exclude 'latest' and 'cache'
-  const versioned = tags
-    .filter(t => t !== 'latest' && t !== 'cache')
-    .sort() // uuidv7 is lexicographically time-ordered
-
-  const toDelete = versioned.slice(0, Math.max(0, versioned.length - REGISTRY_KEEP))
-
-  for (const tag of toDelete) {
-    const headRes = await fetch(`${base}/manifests/${tag}`, {
-      headers: { Accept: 'application/vnd.docker.distribution.manifest.v2+json' },
-    })
-    if (!headRes.ok) continue
-
-    const digest = headRes.headers.get('Docker-Content-Digest')
-    if (!digest) continue
-
-    const delRes = await fetch(`${base}/manifests/${digest}`, { method: 'DELETE' })
-    if (!delRes.ok && delRes.status !== 404) {
-      console.warn(`[gc] Failed to delete ${name}:${tag} (${digest}): ${delRes.status}`)
-    }
-  }
-}
+import { emitLog, gcOldTags } from '../lib'
 
 export async function build(
   deploymentId: string,
@@ -50,7 +15,6 @@ export async function build(
   const cacheTag = `${registryHost}/${name}:cache`
   const planPath = join(dir, 'railpack-plan.json')
 
-  // step 1 — prepare
   await writeLog(buildId, 'build', `📋 Analysing app...`)
   await emitLog(buildId, 'build', `📋 Analysing app...`)
   const prepareProc = execa('railpack', ['prepare', dir, '--plan-out', planPath])
@@ -68,10 +32,8 @@ export async function build(
   })
   await prepareProc
 
-  // step 2 — GC old versioned tags (keep last REGISTRY_KEEP)
   await gcOldTags(registryHost, deploymentId)
 
-  // step 3 — build, push versioned + latest, import/export cache
   await writeLog(buildId, 'build', `🔨 Building image ${versionedTag}`)
   await emitLog(buildId, 'build', `🔨 Building image ${versionedTag}`)
   const buildProc = execa('buildctl', [
@@ -103,6 +65,5 @@ export async function build(
   await writeLog(buildId, 'build', `✅ Image pushed: ${versionedTag}`)
   await emitLog(buildId, 'build', `✅ Image pushed: ${versionedTag}`)
 
-  // return the versioned tag — this is what gets stored in DB as imageTag
   return versionedTag
 }
