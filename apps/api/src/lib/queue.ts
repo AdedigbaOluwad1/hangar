@@ -8,12 +8,19 @@ const connection = {
   port: parseInt(redisUrl.port) || 6379,
 }
 
-export const deployQueue = new Queue('deployments', { connection })
+interface DeployJobData {
+  deploymentId: string
+  buildId: string
+  resources?: { cpu?: number; memoryMb?: number }
+  rollbackImageTag?: string
+}
 
-new Worker('deployments', async (job) => {
-  await runPipeline(job.data.deploymentId, {
+export const deployQueue = new Queue<DeployJobData>('deployments', { connection })
+
+new Worker<DeployJobData>('deployments', async (job) => {
+  await runPipeline(job.data.deploymentId, job.data.buildId, {
     resources: job.data.resources,
-    previousDeploymentId: job.data.previousDeploymentId,
+    rollbackImageTag: job.data.rollbackImageTag,
   })
 }, { connection })
 

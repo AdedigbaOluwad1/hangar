@@ -1,6 +1,5 @@
 import { writeLog } from '@hangar/db'
 import { emitLog } from '../lib/emitter'
-import { getConfig } from '../lib/config'
 
 async function getCaddyAdmin(): Promise<string> {
   return process.env.CADDY_ADMIN_URL ?? 'http://127.0.0.1:2019'
@@ -28,11 +27,11 @@ async function waitForService(deploymentId: string, retries = 20, delay = 3000):
   throw new Error(`Service hangar-${deploymentId} never became healthy`)
 }
 
-export async function patchCaddy(deploymentId: string): Promise<string> {
+export async function patchCaddy(deploymentId: string, buildId: string): Promise<string> {
   const CADDY_ADMIN = await getCaddyAdmin()
 
-  await writeLog(deploymentId, 'deploy', `🌐 Configuring Caddy route`)
-  emitLog(deploymentId, 'deploy', `🌐 Configuring Caddy route`)
+  await writeLog(buildId, 'deploy', `🌐 Configuring Caddy route`)
+  await emitLog(buildId, 'deploy', `🌐 Configuring Caddy route`)
 
   const address = await waitForService(deploymentId)
 
@@ -65,8 +64,8 @@ export async function patchCaddy(deploymentId: string): Promise<string> {
   }
 
   const liveUrl = `http://${deploymentId}.localhost`
-  await writeLog(deploymentId, 'deploy', `🔗 Live at ${liveUrl}`)
-  emitLog(deploymentId, 'deploy', `🔗 Live at ${liveUrl}`)
+  await writeLog(buildId, 'deploy', `🔗 Live at ${liveUrl}`)
+  await emitLog(buildId, 'deploy', `🔗 Live at ${liveUrl}`)
   return liveUrl
 }
 

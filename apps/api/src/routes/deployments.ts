@@ -1,18 +1,32 @@
 import { OpenAPIHono, createRoute } from '@hono/zod-openapi'
 import { nanoid } from 'nanoid'
-import { createDeployment, listDeployments, getDeployment, updateDeployment } from '@hangar/db'
+import { uuidv7 } from 'uuidv7'
+import {
+  createDeployment,
+  createBuild,
+  listDeployments,
+  listBuilds,
+  getDeployment,
+  getBuild,
+  updateDeployment,
+} from '@hangar/db'
 import { deployQueue } from '../lib/queue'
 import { getVault } from '../lib/config'
 import { stopJob, getJobStatus } from '../lib/nomad'
 import { unpatchCaddy } from '../pipeline/caddy'
 import {
   DeploymentIdParam,
+  BuildIdParam,
   DeploymentSchema,
   DeploymentListSchema,
+  BuildSchema,
+  BuildListSchema,
   CreateDeploymentBody,
   ErrorSchema,
   MessageSchema,
   HealthSchema,
+  TagsResponseSchema,
+  RollbackBodySchema,
 } from '../schemas/deployments'
 
 export const deployments = new OpenAPIHono()
@@ -108,8 +122,14 @@ deployments.openapi(createRoute_, async (c) => {
     })
   }
 
+  const build = await createBuild({
+    id: uuidv7(),
+    deploymentId: deployment.id,
+  })
+
   await deployQueue.add('deploy', {
     deploymentId: deployment.id,
+    buildId: build.id,
     resources: body.resources,
   })
 
@@ -141,16 +161,12 @@ deployments.openapi(deleteRoute, async (c) => {
   const deployment = await getDeployment(id)
   if (!deployment) return c.json({ error: 'Not found' }, 404)
 
-  // Stop Nomad job (also removes the container)
   try { await stopJob(id) } catch { /* already stopped */ }
-
-  // Remove Caddy route if it was live
   if (deployment.liveUrl) {
     try { await unpatchCaddy(id) } catch { /* route may not exist */ }
   }
 
   await updateDeployment(id, { status: 'stopped' })
-
   return c.json({ message: 'Deployment stopped' }, 200)
 })
 
@@ -160,53 +176,37 @@ const redeployRoute = createRoute({
   method: 'post',
   path: '/{id}/redeploy',
   tags: ['Deployments'],
-  summary: 'Redeploy from the same source — creates a new deployment, stops the old one on success',
+  summary: 'Redeploy from the same source — creates a new build under the same deployment',
   request: { params: DeploymentIdParam },
   responses: {
-    201: {
+    200: {
       content: { 'application/json': { schema: DeploymentSchema } },
-      description: 'New deployment created and queued',
+      description: 'New build queued',
     },
     404: {
       content: { 'application/json': { schema: ErrorSchema } },
-      description: 'Original deployment not found',
+      description: 'Deployment not found',
     },
   },
 })
 
 deployments.openapi(redeployRoute, async (c) => {
   const { id } = c.req.valid('param')
-  const old = await getDeployment(id)
-  if (!old) return c.json({ error: 'Not found' }, 404)
+  const deployment = await getDeployment(id)
+  if (!deployment) return c.json({ error: 'Not found' }, 404)
 
-  // Copy env from Vault into the new deployment
-  let existingEnv: Record<string, string> = {}
-  try {
-    const vault = getVault()
-    const result = await vault.read(`hangar/data/deployments/${id}/env`)
-    existingEnv = result?.data?.data ?? {}
-  } catch { /* no env stored */ }
-
-  const newDeployment = await createDeployment({
-    id: `dep-${nanoid(8).toLowerCase().replace(/[^a-z0-9-]/g, '')}`,
-    sourceType: old.sourceType as 'git' | 'zip',
-    sourceUrl: old.sourceUrl,
+  // create a new build under the same deployment — same registry repo, cache reused
+  const build = await createBuild({
+    id: uuidv7(),
+    deploymentId: id,
   })
 
-  if (Object.keys(existingEnv).length > 0) {
-    const vault = getVault()
-    await vault.write(`hangar/data/deployments/${newDeployment.id}/env`, {
-      data: existingEnv,
-    })
-  }
-
-  // Queue the new deployment — pass the old ID so the worker can stop it on success
   await deployQueue.add('deploy', {
-    deploymentId: newDeployment.id,
-    previousDeploymentId: id,
+    deploymentId: id,
+    buildId: build.id,
   })
 
-  return c.json(newDeployment, 201)
+  return c.json(deployment, 200)
 })
 
 // ── GET /:id/health ───────────────────────────────────────
@@ -239,4 +239,162 @@ deployments.openapi(healthRoute, async (c) => {
     { status: health?.status ?? 'unknown', allocId: health?.allocId ?? null },
     200
   )
+})
+
+// ── GET /:id/tags — list available rollback tags ──────────
+
+const tagsRoute = createRoute({
+  method: 'get',
+  path: '/{id}/tags',
+  tags: ['Deployments'],
+  summary: 'List available image tags for rollback (last 3, newest first)',
+  request: { params: DeploymentIdParam },
+  responses: {
+    200: {
+      content: { 'application/json': { schema: TagsResponseSchema } },
+      description: 'Available versioned tags',
+    },
+    404: {
+      content: { 'application/json': { schema: ErrorSchema } },
+      description: 'Deployment not found',
+    },
+  },
+})
+
+deployments.openapi(tagsRoute, async (c) => {
+  const { id } = c.req.valid('param')
+  const deployment = await getDeployment(id)
+  if (!deployment) return c.json({ error: 'Not found' }, 404)
+
+  const registryHost = process.env.REGISTRY_HOST ?? 'registry.hangar.local:5000'
+  const res = await fetch(`http://${registryHost}/v2/hangar-${id}/tags/list`)
+  if (!res.ok) return c.json({ tags: [] }, 200)
+
+  const { tags } = await res.json() as { tags: string[] | null }
+  if (!tags) return c.json({ tags: [] }, 200)
+
+  // uuidv7 is lexicographically time-ordered — sort descending, exclude latest + cache
+  const versioned = tags
+    .filter(t => t !== 'latest' && t !== 'cache')
+    .sort()
+    .reverse()
+    .slice(0, 3)
+
+  return c.json({ tags: versioned }, 200)
+})
+
+// ── POST /:id/rollback ────────────────────────────────────
+
+const rollbackRoute = createRoute({
+  method: 'post',
+  path: '/{id}/rollback',
+  tags: ['Deployments'],
+  summary: 'Roll back to a previous image tag — skips build, redeploys existing image',
+  request: {
+    params: DeploymentIdParam,
+    body: {
+      required: true,
+      content: { 'application/json': { schema: RollbackBodySchema } },
+    },
+  },
+  responses: {
+    200: {
+      content: { 'application/json': { schema: DeploymentSchema } },
+      description: 'Rollback queued',
+    },
+    404: {
+      content: { 'application/json': { schema: ErrorSchema } },
+      description: 'Deployment not found',
+    },
+    400: {
+      content: { 'application/json': { schema: ErrorSchema } },
+      description: 'Tag not found in registry',
+    },
+  },
+})
+
+deployments.openapi(rollbackRoute, async (c) => {
+  const { id } = c.req.valid('param')
+  const { tag } = c.req.valid('json')
+
+  const deployment = await getDeployment(id)
+  if (!deployment) return c.json({ error: 'Not found' }, 404)
+
+  // verify the tag actually exists in the registry before queuing
+  const registryHost = process.env.REGISTRY_HOST ?? 'registry.hangar.local:5000'
+  const checkRes = await fetch(
+    `http://${registryHost}/v2/hangar-${id}/manifests/${tag}`,
+    { headers: { Accept: 'application/vnd.docker.distribution.manifest.v2+json' } }
+  )
+  if (!checkRes.ok) return c.json({ error: `Tag ${tag} not found in registry` }, 400)
+
+  // create a build record for the rollback — no clone/build, just redeploy existing image
+  const build = await createBuild({
+    id: uuidv7(),
+    deploymentId: id,
+  })
+
+  const imageTag = `${registryHost}/hangar-${id}:${tag}`
+
+  await deployQueue.add('deploy', {
+    deploymentId: id,
+    buildId: build.id,
+    rollbackImageTag: imageTag,
+  })
+
+  return c.json(deployment, 200)
+})
+
+// ── GET /:id/builds — list builds ─────────────────────────
+
+const listBuildsRoute = createRoute({
+  method: 'get',
+  path: '/{id}/builds',
+  tags: ['Builds'],
+  summary: 'List all builds for a deployment',
+  request: { params: DeploymentIdParam },
+  responses: {
+    200: {
+      content: { 'application/json': { schema: BuildListSchema } },
+      description: 'List of builds, newest first',
+    },
+    404: {
+      content: { 'application/json': { schema: ErrorSchema } },
+      description: 'Deployment not found',
+    },
+  },
+})
+
+deployments.openapi(listBuildsRoute, async (c) => {
+  const { id } = c.req.valid('param')
+  const deployment = await getDeployment(id)
+  if (!deployment) return c.json({ error: 'Not found' }, 404)
+  return c.json(await listBuilds(id), 200)
+})
+
+// ── GET /:id/builds/:buildId — get one build ──────────────
+
+const getBuildRoute = createRoute({
+  method: 'get',
+  path: '/{id}/builds/{buildId}',
+  tags: ['Builds'],
+  summary: 'Get a single build',
+  request: { params: BuildIdParam },
+  responses: {
+    200: {
+      content: { 'application/json': { schema: BuildSchema } },
+      description: 'The build',
+    },
+    404: {
+      content: { 'application/json': { schema: ErrorSchema } },
+      description: 'Build not found',
+    },
+  },
+})
+
+deployments.openapi(getBuildRoute, async (c) => {
+  const { buildId } = c.req.valid('param')
+  const build = await getBuild(buildId)
+  if (!build) return c.json({ error: 'Not found' }, 404)
+  return c.json(build, 200)
 })

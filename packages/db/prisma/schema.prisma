@@ -8,11 +8,16 @@ datasource db {
 
 enum DeploymentStatus {
   pending
+  running
+  failed
+  stopped
+}
+
+enum BuildStatus {
   building
   deploying
   running
   failed
-  stopped
 }
 
 model Deployment {
@@ -23,20 +28,34 @@ model Deployment {
   imageTag    String?          @map("image_tag")
   containerId String?          @map("container_id")
   liveUrl     String?          @map("live_url")
+  userId      String?          @map("user_id")
   createdAt   DateTime         @default(now()) @map("created_at")
   updatedAt   DateTime         @updatedAt @map("updated_at")
-  logs        Log[]
+  builds      Build[]
 
   @@map("deployments")
 }
 
+model Build {
+  id           String      @id // uuidv7 — doubles as the image tag version
+  deploymentId String      @map("deployment_id")
+  status       BuildStatus @default(building)
+  imageTag     String?     @map("image_tag")
+  createdAt    DateTime    @default(now()) @map("created_at")
+  updatedAt    DateTime    @updatedAt @map("updated_at")
+  deployment   Deployment  @relation(fields: [deploymentId], references: [id])
+  logs         Log[]
+
+  @@map("builds")
+}
+
 model Log {
-  id           Int        @id @default(autoincrement())
-  deploymentId String     @map("deployment_id")
-  stream       String
-  line         String
-  createdAt    DateTime   @default(now()) @map("created_at")
-  deployment   Deployment @relation(fields: [deploymentId], references: [id])
+  id        Int      @id @default(autoincrement())
+  buildId   String   @map("build_id")
+  stream    String
+  line      String
+  createdAt DateTime @default(now()) @map("created_at")
+  build     Build    @relation(fields: [buildId], references: [id])
 
   @@map("logs")
 }

@@ -7,6 +7,17 @@ export const DeploymentIdParam = z.object({
   }),
 })
 
+export const BuildIdParam = z.object({
+  id: z.string().openapi({
+    param: { name: 'id', in: 'path' },
+    example: 'dep-a1b2c3d4',
+  }),
+  buildId: z.string().openapi({
+    param: { name: 'buildId', in: 'path' },
+    example: '01966a1e-7c4f-7000-8000-1234567890ab',
+  }),
+})
+
 export const ErrorSchema = z
   .object({
     error: z.string().openapi({ example: 'Not found' }),
@@ -30,19 +41,35 @@ export const DeploymentSchema = z
   .object({
     id: z.string().openapi({ example: 'dep-a1b2c3d4' }),
     status: z
-      .enum(['pending', 'building', 'deploying', 'running', 'failed', 'stopped'])
+      .enum(['pending', 'running', 'failed', 'stopped'])
       .openapi({ example: 'running' }),
     sourceType: z.string().openapi({ example: 'git' }),
     sourceUrl: z.string().nullable().openapi({ example: 'https://github.com/you/repo' }),
-    imageTag: z.string().nullable().openapi({ example: 'localhost:5000/hangar-dep-a1b2c3d4:latest' }),
+    imageTag: z.string().nullable().openapi({ example: 'registry.service.consul:5000/hangar-dep-a1b2c3d4:01966a1e-...' }),
     containerId: z.string().nullable().openapi({ example: null }),
-    liveUrl: z.string().nullable().openapi({ example: 'http://localhost/deploys/dep-a1b2c3d4' }),
+    liveUrl: z.string().nullable().openapi({ example: 'http://dep-a1b2c3d4.localhost' }),
+    userId: z.string().nullable().openapi({ example: null }),
     createdAt: z.coerce.date().openapi({ example: '2024-01-01T00:00:00.000Z' }),
     updatedAt: z.coerce.date().openapi({ example: '2024-01-01T00:00:00.000Z' }),
   })
   .openapi('Deployment')
 
 export const DeploymentListSchema = z.array(DeploymentSchema).openapi('DeploymentList')
+
+export const BuildSchema = z
+  .object({
+    id: z.string().openapi({ example: '01966a1e-7c4f-7000-8000-1234567890ab' }),
+    deploymentId: z.string().openapi({ example: 'dep-a1b2c3d4' }),
+    status: z
+      .enum(['building', 'deploying', 'running', 'failed'])
+      .openapi({ example: 'running' }),
+    imageTag: z.string().nullable().openapi({ example: 'registry.service.consul:5000/hangar-dep-a1b2c3d4:01966a1e-...' }),
+    createdAt: z.coerce.date().openapi({ example: '2024-01-01T00:00:00.000Z' }),
+    updatedAt: z.coerce.date().openapi({ example: '2024-01-01T00:00:00.000Z' }),
+  })
+  .openapi('Build')
+
+export const BuildListSchema = z.array(BuildSchema).openapi('BuildList')
 
 export const ResourcesSchema = z
   .object({
@@ -69,3 +96,15 @@ export const CreateDeploymentBody = z
     resources: ResourcesSchema.optional(),
   })
   .openapi('CreateDeploymentBody')
+
+export const TagsResponseSchema = z
+  .object({
+    tags: z.array(z.string()).openapi({ example: ['01966a1e-...', '01966a0b-...'] }),
+  })
+  .openapi('TagsResponse')
+
+export const RollbackBodySchema = z
+  .object({
+    tag: z.string().openapi({ example: '01966a1e-7c4f-7000-8000-1234567890ab' }),
+  })
+  .openapi('RollbackBody')

@@ -27,6 +27,7 @@
     "nanoid": "^5.1.9",
     "node-vault": "^0.12.0",
     "tar": "^7.5.13",
+    "uuidv7": "^1.2.1",
     "zod": "^4.3.6"
   },
   "devDependencies": {

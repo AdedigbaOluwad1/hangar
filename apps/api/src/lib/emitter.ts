@@ -8,27 +8,27 @@ const sub = new Redis(REDIS_URL)
 pub.on('error', (err) => console.error('Redis pub error:', err))
 sub.on('error', (err) => console.error('Redis sub error:', err))
 
-export async function emitLog(deploymentId: string, stream: string, line: string) {
-  await pub.publish(`log:${deploymentId}`, JSON.stringify({ stream, line }))
+export async function emitLog(buildId: string, stream: string, line: string) {
+  await pub.publish(`log:${buildId}`, JSON.stringify({ stream, line }))
 }
 
-export async function emitDone(deploymentId: string) {
-  await pub.publish(`done:${deploymentId}`, '1')
+export async function emitDone(buildId: string) {
+  await pub.publish(`done:${buildId}`, '1')
 }
 
 export function subscribeToLogs(
-  deploymentId: string,
+  buildId: string,
   onLog: (log: { stream: string; line: string }) => void,
   onDone: () => void
 ) {
   const client = sub.duplicate()
 
-  client.subscribe(`log:${deploymentId}`, `done:${deploymentId}`)
+  client.subscribe(`log:${buildId}`, `done:${buildId}`)
 
   client.on('message', (channel: string, message: string) => {
-    if (channel === `log:${deploymentId}`) {
+    if (channel === `log:${buildId}`) {
       onLog(JSON.parse(message))
-    } else if (channel === `done:${deploymentId}`) {
+    } else if (channel === `done:${buildId}`) {
       onDone()
       client.disconnect()
     }
