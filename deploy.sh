@@ -3,7 +3,7 @@ set -e
 
 # ── Guard ────────────────────────────────────────────────────────────────────
 
-for cmd in ansible ansible-playbook jq curl git nomad; do
+for cmd in ansible ansible-playbook jq curl git; do
   if ! command -v $cmd &>/dev/null; then
     echo "❌ $cmd is not installed. Run bootstrap.sh first."
     exit 1
