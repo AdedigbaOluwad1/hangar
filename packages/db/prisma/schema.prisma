@@ -18,6 +18,7 @@ enum BuildStatus {
   deploying
   running
   failed
+  stopped
 }
 
 model Deployment {

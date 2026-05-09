@@ -1,5 +1,6 @@
 import { prisma } from '.'
-import type { Deployment, Build, Log, BuildStatus, DeploymentStatus } from '@prisma/client'
+import type { Deployment, Build, Log } from '@prisma/client'
+import type { DeploymentStatus, BuildStatus } from '@hangar/types'
 
 // ── Deployments ──────────────────────────────────────────
 
@@ -67,6 +68,20 @@ export async function updateBuild(
   }>
 ): Promise<Build> {
   return prisma.build.update({ where: { id }, data })
+}
+
+export async function stopPreviousBuilds(
+  deploymentId: string,
+  currentBuildId: string,
+): Promise<void> {
+  await prisma.build.updateMany({
+    where: {
+      deploymentId,
+      id: { not: currentBuildId },
+      status: { in: ['building', 'deploying', 'running'] },
+    },
+    data: { status: 'stopped' },
+  })
 }
 
 // ── Logs ─────────────────────────────────────────────────

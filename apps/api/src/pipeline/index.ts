@@ -1,5 +1,5 @@
 import { rm } from 'fs/promises'
-import { updateDeployment, updateBuild, writeLog } from '@hangar/db'
+import { updateDeployment, updateBuild, stopPreviousBuilds, writeLog } from '@hangar/db'
 import { clone } from './clone'
 import { build } from './build'
 import { runContainer } from './run'
@@ -41,6 +41,7 @@ export async function runPipeline(
     await updateDeployment(deploymentId, { containerId, imageTag, status: 'running' })
     const liveUrl = await patchCaddy(deploymentId, buildId)
     await updateDeployment(deploymentId, { liveUrl })
+    await stopPreviousBuilds(deploymentId, buildId)
     await updateBuild(buildId, { status: 'running' })
     await emitLog(buildId, 'system', '✅ Deployment complete')
   } catch (err: any) {
