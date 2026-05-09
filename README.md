@@ -953,7 +953,6 @@ ansible-playbook -i inventory.ini deploy.yml
 ## What's Next
 
 - **Scoped Nomad token** — replace bootstrap token with a least-privilege policy token
-- **Windows localhost access** — set `networkingMode=mirrored` in `.wslconfig`
 - **Registry GC** — delete old images from the local registry after successful redeploy
 - **GitHub OAuth** — private repo support, user-scoped deployments
 - **Custom domains** — user-provided domains beyond `.localhost`

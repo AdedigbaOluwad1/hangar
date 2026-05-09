@@ -178,7 +178,7 @@ ansible-playbook \
 # ── 3. Load Nomad token ───────────────────────────────────────────────────────
 
 export NOMAD_TOKEN
-NOMAD_TOKEN=$(sudo cat /etc/nomad.d/bootstrap.json | jq -r '.SecretID')
+NOMAD_TOKEN=$(sudo cat /etc/nomad.d/deploy.json | jq -r '.SecretID')
 
 # ── 4. Deploy Nomad infrastructure jobs in startup order ─────────────────────
 

@@ -7,7 +7,6 @@
     hangar_dir: "{{ ansible_env.HOME }}/documents/hangar"
 
   tasks:
-
     # ── Load root token ──────────────────────────────────────────────────────
 
     - name: Read Vault init data
@@ -53,14 +52,109 @@
       when: kv_check.stdout == "missing"
       no_log: true
 
-    # ── Seed hangar/config ───────────────────────────────────────────────────
+    # ── Nomad ACL policies and tokens ────────────────────────────────────────
 
-    - name: Load Nomad bootstrap token
+    - name: Create Nomad deploy ACL policy
       become: true
-      shell: cat /etc/nomad.d/bootstrap.json | jq -r '.SecretID'
+      shell: |
+        NOMAD_TOKEN=$(cat /etc/nomad.d/bootstrap.json | jq -r '.SecretID') \
+        nomad acl policy apply -description "Deploy pipeline access" deploy - <<'EOF'
+        namespace "default" {
+          policy = "read"
+          capabilities = [
+            "submit-job",
+            "read-job",
+            "read-logs",
+            "read-fs",
+            "alloc-exec",
+            "alloc-lifecycle",
+          ]
+        }
+        node {
+          policy = "read"
+        }
+        EOF
+      changed_when: false
+
+    - name: Check if deploy token exists
+      stat:
+        path: /etc/nomad.d/deploy.json
+      register: deploy_token_check
+
+    - name: Create Nomad deploy ACL token
+      become: true
+      shell: |
+        NOMAD_TOKEN=$(cat /etc/nomad.d/bootstrap.json | jq -r '.SecretID') \
+        nomad acl token create -name "deploy" -policy deploy -ttl 0 -json
+      register: deploy_token_raw
+      when: not deploy_token_check.stat.exists
+      no_log: true
+
+    - name: Save deploy token to disk
+      become: true
+      copy:
+        content: "{{ deploy_token_raw.stdout }}"
+        dest: /etc/nomad.d/deploy.json
+        mode: "0600"
+        owner: root
+        group: root
+      when: not deploy_token_check.stat.exists
+
+    - name: Create Nomad operator ACL policy
+      become: true
+      shell: |
+        NOMAD_TOKEN=$(cat /etc/nomad.d/bootstrap.json | jq -r '.SecretID') \
+        nomad acl policy apply -description "Full operator access" operator - <<'EOF'
+        namespace "default" {
+          policy = "write"
+        }
+        agent {
+          policy = "write"
+        }
+        operator {
+          policy = "write"
+        }
+        node {
+          policy = "write"
+        }
+        host_volume "*" {
+          policy = "write"
+        }
+        EOF
+      changed_when: false
+
+    - name: Check if operator token exists
+      stat:
+        path: /etc/nomad.d/operator.json
+      register: operator_token_check
+
+    - name: Create Nomad operator ACL token
+      become: true
+      shell: |
+        NOMAD_TOKEN=$(cat /etc/nomad.d/bootstrap.json | jq -r '.SecretID') \
+        nomad acl token create -name "operator" -policy operator -ttl 0 -json
+      register: operator_token_raw
+      when: not operator_token_check.stat.exists
+      no_log: true
+
+    - name: Save operator token to disk
+      become: true
+      copy:
+        content: "{{ operator_token_raw.stdout }}"
+        dest: /etc/nomad.d/operator.json
+        mode: "0600"
+        owner: root
+        group: root
+      when: not operator_token_check.stat.exists
+
+    - name: Load Nomad deploy token
+      become: true
+      shell: cat /etc/nomad.d/deploy.json | jq -r '.SecretID'
       register: nomad_token
       changed_when: false
       no_log: true
+
+    # ── Seed hangar/config ───────────────────────────────────────────────────
 
     - name: Seed hangar/config secret
       shell: |
@@ -142,7 +236,8 @@
       debug:
         msg:
           - "✅ KV engine enabled at hangar/"
-          - "✅ hangar/config seeded"
+          - "✅ Nomad deploy + operator ACL policies and tokens created"
+          - "✅ hangar/config seeded with deploy token"
           - "✅ JWT auth configured at jwt-nomad"
           - "✅ nomad-workloads policy + role created"
           - "✅ Vault ready for Nomad workload identity"

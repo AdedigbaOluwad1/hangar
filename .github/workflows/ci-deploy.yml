@@ -201,7 +201,7 @@ jobs:
       - name: Debug — Nomad job statuses
         if: failure()
         run: |
-          export NOMAD_TOKEN=$(sudo cat /etc/nomad.d/bootstrap.json | jq -r '.SecretID')
+          export NOMAD_TOKEN=$(sudo cat /etc/nomad.d/deploy.json | jq -r '.SecretID')
           nomad status || true
 
       - name: Debug — Consul critical services
@@ -212,14 +212,14 @@ jobs:
       - name: Debug — hangar-api alloc logs
         if: failure()
         run: |
-          export NOMAD_TOKEN=$(sudo cat /etc/nomad.d/bootstrap.json | jq -r '.SecretID')
+          export NOMAD_TOKEN=$(sudo cat /etc/nomad.d/deploy.json | jq -r '.SecretID')
           ALLOC=$(nomad job allocs hangar-api 2>/dev/null | grep -v ID | head -1 | awk '{print $1}')
           [ -n "$ALLOC" ] && nomad alloc logs "$ALLOC" api || true
 
       - name: Debug — hangar-buildkit alloc logs
         if: failure()
         run: |
-          export NOMAD_TOKEN=$(sudo cat /etc/nomad.d/bootstrap.json | jq -r '.SecretID')
+          export NOMAD_TOKEN=$(sudo cat /etc/nomad.d/deploy.json | jq -r '.SecretID')
           ALLOC=$(nomad job allocs hangar-buildkit 2>/dev/null | grep -v ID | head -1 | awk '{print $1}')
           [ -n "$ALLOC" ] && nomad alloc logs "$ALLOC" buildkit || true
 
