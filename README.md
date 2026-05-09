@@ -28,21 +28,24 @@ The production stack:
 User submits Git URL via UI
           ↓
 POST /deployments
-  → deployment record created in Postgres
+  → Deployment + Build records created in Postgres
   → job enqueued in BullMQ (Redis)
           ↓
-BullMQ worker picks up job
+BullMQ worker picks up job (concurrency: 1 — builds are serialized)
           ↓
 ┌─────────────────────────────────────────────────┐
 │                   Pipeline                      │
 │                                                 │
-│  clone.ts    — git clone to /tmp                │
-│  build.ts    — Railpack detect + BuildKit build │
+│  clone.ts      — git clone to /tmp              │
+│  build.ts      — Railpack detect + BuildKit     │
+│                  build + registry GC            │
 │                → image pushed to                │
 │                  registry.service.consul:5000   │
-│  run.ts      — read user env from Vault         │
+│  registry.ts   — registry HTTP interactions,    │
+│                  tag listing, GC, tag existence │
+│  run.ts        — read user env from Vault       │
 │                → submit Nomad job               │
-│  caddy.ts    — poll Consul until alloc healthy  │
+│  caddy.ts      — poll Consul until alloc healthy│
 │                → patch Caddy admin API          │
 │                → update deployment liveUrl      │
 └─────────────────────────────────────────────────┘
@@ -113,13 +116,22 @@ For user-deployed apps, routes are injected at runtime via Caddy's admin API at 
 
 ### Image Tagging and Registry GC
 
-Each build pushes two tags to the local registry:
+Each build pushes three tags to the local registry:
 
-- `registry.service.consul:5000/hangar-<deploymentId>:<uuidv7>` — versioned, time-sortable
+- `registry.service.consul:5000/hangar-<deploymentId>:<buildId>` — versioned (uuidv7, time-sortable); the build ID IS the image tag version
 - `registry.service.consul:5000/hangar-<deploymentId>:latest` — always points to current
 - `registry.service.consul:5000/hangar-<deploymentId>:cache` — BuildKit layer cache (never GC'd)
 
-The last 3 versioned tags are retained per deployment. On each new build, tags beyond that limit are deleted from the registry before the new image is pushed. The `:cache` tag is excluded from GC and persists across builds to speed up subsequent builds via BuildKit's `--import-cache` / `--export-cache`.
+The last 3 versioned tags are retained per deployment. On each new build, tags beyond that limit are deleted from the registry — but only if no build record in the DB still references that tag. This prevents rollback tags from being GC'd even if they fall outside the last-3 window.
+
+The `:cache` tag is excluded from GC and persists across builds to speed up subsequent builds via BuildKit's `--import-cache` / `--export-cache`.
+
+### Rollback and Redeployment
+
+- **Redeploy** — creates a new `Build` under the same `Deployment`, clones fresh from source and rebuilds. Cache is reused automatically since the registry repo is the same.
+- **Rollback** — creates a new `Build` under the same `Deployment` with `trigger: 'rollback'` and `rollbackOf` pointing to the original build ID. Skips clone and build entirely — reuses the existing image from the registry and goes straight to `runContainer` → `patchCaddy`. The full build history is preserved; nothing is deleted.
+
+Builds are serialized via `concurrency: 1` on the BullMQ worker — a redeploy queued while a build is in progress waits until the current build completes.
 
 ### Secrets Flow
 
@@ -166,7 +178,7 @@ apps/
         config.ts             — Vault client, getConfig(), env loading
         nomad.ts              — submitJob, stopJob, getJobStatus
         emitter.ts            — Redis pub/sub log emitter
-        queue.ts              — BullMQ worker setup
+        queue.ts              — BullMQ worker setup (concurrency: 1)
         session.ts            — Redis session management
       middleware/
         auth.ts               — requireAuth middleware
@@ -174,10 +186,11 @@ apps/
         index.ts              — runPipeline orchestrator
         clone.ts              — git clone
         build.ts              — Railpack detect + BuildKit build + registry push
+        registry.ts           — registry HTTP interactions (tag list, GC, tag existence)
         run.ts                — getUserEnv from Vault, submitJob to Nomad
         caddy.ts              — waitForService in Consul, patchCaddy, unpatchCaddy
       routes/
-        deployments.ts        — deployment CRUD, health, redeploy, tags, rollback
+        deployments.ts        — deployment CRUD, builds, health, redeploy, tags, rollback
         logs.ts               — SSE log streaming from Redis
         auth.ts               — GitHub OAuth routes
       schemas/
@@ -188,18 +201,19 @@ apps/
 
 packages/
   db/                         — Prisma client + shared DB queries
-                                .env.local contains DATABASE_URL pointing to
-                                postgres.service.consul:5432
+    src/
+      index.ts                — re-exports everything
+      prisma.ts               — PrismaClient singleton
+      queries/
+        deployments.ts        — createDeployment, getDeployment, listDeployments, updateDeployment
+        builds.ts             — createBuild, getBuild, getLatestBuild, listBuilds,
+                                updateBuild, stopPreviousBuilds, isBuildTagInUse
+        logs.ts               — writeLog, getLogs
+    prisma/
+      schema.prisma
 
 nomad/
   jobs/                       — all Nomad job HCL files
-    hangar-api.nomad.hcl
-    hangar-web.nomad.hcl
-    hangar-caddy.nomad.hcl
-    hangar-buildkit.nomad.hcl
-    hangar-postgres.nomad.hcl
-    hangar-redis.nomad.hcl
-    hangar-registry.nomad.hcl
 
 consul/
   config/
@@ -220,7 +234,7 @@ ansible/
       nomad.hcl.j2            — Jinja2 Nomad config template (nomad_server_count configurable)
   group_vars/
     hangar/
-      vault.yml               — ansible-vault encrypted secrets (nomad_addr, consul_addr, caddy_admin_url, etc.)
+      vault.yml               — ansible-vault encrypted secrets
   inventory.ini               — generated at deploy time (localhost or remote)
 
 deploy.sh                     — production entrypoint: full stack provision + deploy
@@ -655,10 +669,10 @@ curl -X POST http://<host-ip>/deployments \
   }'
 ```
 
-Stream logs:
+Stream logs for a specific build:
 
 ```bash
-curl -s http://<host-ip>/deployments/<id>/logs
+curl -s "http://<host-ip>/deployments/<id>/logs?buildId=<buildId>"
 ```
 
 ### Test Apps
@@ -673,15 +687,53 @@ curl -s http://<host-ip>/deployments/<id>/logs
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/deployments` | List all deployments |
+| `GET` | `/deployments` | List all deployments (includes `latestBuild`) |
 | `POST` | `/deployments` | Create a deployment |
-| `GET` | `/deployments/:id` | Get a single deployment |
+| `GET` | `/deployments/:id` | Get a single deployment (includes `latestBuild`) |
 | `DELETE` | `/deployments/:id` | Stop and delete a deployment |
-| `POST` | `/deployments/:id/redeploy` | Redeploy from the same source |
+| `POST` | `/deployments/:id/redeploy` | Redeploy from the same source — creates new Build |
 | `GET` | `/deployments/:id/health` | Check deployment health via Nomad |
-| `GET` | `/deployments/:id/logs` | Stream build + deploy logs over SSE |
 | `GET` | `/deployments/:id/tags` | List available image tags for rollback (last 3, newest first) |
 | `POST` | `/deployments/:id/rollback` | Roll back to a previous image tag — skips build |
+
+### Builds
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/deployments/:id/builds` | List all builds for a deployment (newest first, max 100) |
+| `GET` | `/deployments/:id/builds/:buildId` | Get a single build |
+
+### Logs
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/deployments/:id/logs` | Stream latest build logs over SSE |
+| `GET` | `/deployments/:id/logs?buildId=<id>` | Stream logs for a specific build over SSE |
+| `GET` | `/deployments/:id/builds/:buildId/logs` | Stream logs for a specific build directly |
+
+### Deployment Response Shape
+
+All deployment endpoints return `latestBuild` inline — no separate request needed to get the current build status:
+
+```json
+{
+  "id": "dep-a1b2c3d4",
+  "status": "running",
+  "sourceType": "git",
+  "sourceUrl": "https://github.com/you/repo",
+  "imageTag": "registry.service.consul:5000/hangar-dep-a1b2c3d4:01966a1e-...",
+  "liveUrl": "http://dep-a1b2c3d4.localhost",
+  "latestBuild": {
+    "id": "01966a1e-7c4f-7000-8000-1234567890ab",
+    "status": "running",
+    "trigger": "deploy",
+    "rollbackOf": null,
+    "imageTag": "registry.service.consul:5000/hangar-dep-a1b2c3d4:01966a1e-...",
+    "createdAt": "2026-05-09T16:43:58.752Z",
+    "updatedAt": "2026-05-09T16:44:10.123Z"
+  }
+}
+```
 
 ### Rollback
 
@@ -695,18 +747,34 @@ curl -X POST http://<host-ip>/deployments/<id>/rollback \
   -d '{ "tag": "<uuidv7-tag>" }'
 ```
 
-Rollback skips clone and build entirely — it reuses the existing image from the registry and goes straight to `runContainer` → `patchCaddy`.
+Rollback skips clone and build entirely — it reuses the existing image from the registry and goes straight to `runContainer` → `patchCaddy`. A new `Build` record is created with `trigger: 'rollback'` and `rollbackOf` set to the original build ID.
 
 ### Deployment Status Values
 
 | Status | Meaning |
 |---|---|
-| `pending` | In queue, not yet started |
-| `building` | Cloning + building image |
-| `deploying` | Nomad job submitted, waiting for health check |
+| `pending` | Created, not yet picked up by worker |
 | `running` | App is live |
 | `failed` | Pipeline error |
 | `stopped` | Manually stopped |
+
+### Build Status Values
+
+| Status | Meaning |
+|---|---|
+| `building` | Cloning + building image |
+| `deploying` | Nomad job submitted, waiting for health check |
+| `running` | Build is live |
+| `failed` | Pipeline error |
+| `stopped` | Superseded by a newer build |
+
+### Build Trigger Values
+
+| Trigger | Meaning |
+|---|---|
+| `deploy` | Initial deployment |
+| `redeploy` | Triggered via redeploy endpoint |
+| `rollback` | Triggered via rollback endpoint; `rollbackOf` contains the original build ID |
 
 ### Resource Limits
 
@@ -714,6 +782,72 @@ Rollback skips clone and build entirely — it reuses the existing image from th
 |---|---|---|
 | `cpu` | `500` | MHz |
 | `memoryMb` | `512` | MB |
+
+---
+
+## Database Schema
+
+```prisma
+enum DeploymentStatus {
+  pending
+  running
+  failed
+  stopped
+}
+
+enum BuildStatus {
+  building
+  deploying
+  running
+  failed
+  stopped
+}
+
+enum BuildTrigger {
+  deploy
+  redeploy
+  rollback
+}
+
+model Deployment {
+  id          String           @id
+  status      DeploymentStatus @default(pending)
+  sourceType  String           @map("source_type")
+  sourceUrl   String?          @map("source_url")
+  imageTag    String?          @map("image_tag")
+  containerId String?          @map("container_id")
+  liveUrl     String?          @map("live_url")
+  userId      String?          @map("user_id")
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+  builds      Build[]
+  @@map("deployments")
+}
+
+model Build {
+  id           String       @id                    // uuidv7 — doubles as image tag version
+  deploymentId String       @map("deployment_id")
+  status       BuildStatus  @default(building)
+  trigger      BuildTrigger @default(deploy)
+  rollbackOf   String?      @map("rollback_of")    // build ID this rollback targets
+  imageTag     String?      @map("image_tag")
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
+  deployment   Deployment   @relation(fields: [deploymentId], references: [id])
+  logs         Log[]
+  @@map("builds")
+}
+
+model Log {
+  id        Int      @id @default(autoincrement())
+  buildId   String   @map("build_id")
+  stream    String
+  line      String
+  createdAt DateTime @default(now()) @map("created_at")
+  build     Build    @relation(fields: [buildId], references: [id])
+  @@map("logs")
+}
+```
 
 ---
 
@@ -791,53 +925,9 @@ source ~/.bashrc
 which railpack  # must return a path before running pnpm dev
 ```
 
----
+### BullMQ worker concurrency
 
-## Database Schema
-
-```prisma
-enum DeploymentStatus {
-  pending
-  building
-  deploying
-  running
-  failed
-  stopped
-}
-
-model User {
-  id          String       @id
-  githubId    Int          @unique
-  username    String       @unique
-  avatarUrl   String
-  accessToken String
-  createdAt   DateTime     @default(now())
-  deployments Deployment[]
-}
-
-model Deployment {
-  id          String           @id
-  status      DeploymentStatus @default(pending)
-  sourceType  String
-  sourceUrl   String?
-  imageTag    String?
-  containerId String?
-  port        Int?
-  liveUrl     String?
-  userId      String?
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
-  logs        Log[]
-}
-
-model Log {
-  id           Int        @id @default(autoincrement())
-  deploymentId String
-  stream       String
-  line         String
-  createdAt    DateTime   @default(now())
-}
-```
+The BullMQ worker runs with `concurrency: 1` — builds are strictly serialized. A redeploy or rollback triggered while a build is in progress will wait in the queue. This is intentional: concurrent builds for the same deployment would race on `stopPreviousBuilds` and result in multiple builds showing `running` simultaneously.
 
 ---
 
@@ -868,15 +958,15 @@ A production Hangar cluster looks like this:
 │  Redis          ── Queue + pub/sub    (pinned: node-1)   │
 └──────────────────────────────────────────────────────────┘
                             │
-               ┌────────────┼────────────┐
-               │            │            │
-     ┌─────────┴───┐ ┌──────┴──┐ ┌──────┴──┐
-     │  WORKER 1   │ │WORKER 2 │ │WORKER 3 │
-     │             │ │         │ │         │
-     │ Nomad Client│ │  same   │ │  same   │
-     │ Consul Clnt │ │         │ │         │
-     │ Podman      │ │         │ │         │
-     └─────────────┘ └─────────┘ └─────────┘
+            ┌───────────────┼─────────────┐
+            │               │             │
+     ┌──────┴──────┐   ┌────┴────┐   ┌────┴────┐
+     │  WORKER 1   │   │WORKER 2 │   │WORKER 3 │
+     │             │   │         │   │         │
+     │ Nomad Client│   │  same   │   │  same   │
+     │ Consul Clnt │   │         │   │         │
+     │ Podman      │   │         │   │         │
+     └─────────────┘   └─────────┘   └─────────┘
            ↑ user hangar-dep-* jobs scheduled here
 ```
 
