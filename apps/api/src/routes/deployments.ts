@@ -125,6 +125,7 @@ deployments.openapi(createRoute_, async (c) => {
   const build = await createBuild({
     id: uuidv7(),
     deploymentId: deployment.id,
+    trigger: 'deploy'
   })
 
   await deployQueue.add('deploy', {
@@ -199,6 +200,7 @@ deployments.openapi(redeployRoute, async (c) => {
   const build = await createBuild({
     id: uuidv7(),
     deploymentId: id,
+    trigger: 'redeploy'
   })
 
   await deployQueue.add('deploy', {
@@ -332,6 +334,8 @@ deployments.openapi(rollbackRoute, async (c) => {
   const build = await createBuild({
     id: uuidv7(),
     deploymentId: id,
+    rollbackOf: tag,
+    trigger: 'rollback'
   })
 
   const imageTag = `${registryHost}/hangar-${id}:${tag}`

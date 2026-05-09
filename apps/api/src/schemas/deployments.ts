@@ -75,6 +75,10 @@ export const BuildSchema = z
     status: z
       .enum(['building', 'deploying', 'running', 'failed', 'stopped'])
       .openapi({ example: 'running' }),
+    trigger: z
+      .enum(['deploy', 'redeploy', 'rollback'])
+      .openapi({ example: 'deploy' }),
+    rollbackOf: z.string().nullable().openapi({ example: '01966a1e-7c4f-7000-8000-1234567890ab' }),
     imageTag: z.string().nullable().openapi({ example: 'registry.service.consul:5000/hangar-dep-a1b2c3d4:01966a1e-...' }),
     createdAt: z.coerce.date().openapi({ example: '2024-01-01T00:00:00.000Z' }),
     updatedAt: z.coerce.date().openapi({ example: '2024-01-01T00:00:00.000Z' }),

@@ -1,6 +1,5 @@
 import { prisma } from '.'
-import type { Deployment, Build, Log } from '@prisma/client'
-import type { DeploymentStatus, BuildStatus } from '@hangar/types'
+import type { Deployment, Build, Log, BuildTrigger, DeploymentStatus, BuildStatus } from '@prisma/client'
 
 // ── Deployments ──────────────────────────────────────────
 
@@ -60,8 +59,10 @@ export async function updateDeployment(
 // ── Builds ───────────────────────────────────────────────
 
 export async function createBuild(data: {
-  id: string       // uuidv7 — used as image tag version
+  id: string
   deploymentId: string
+  trigger?: BuildTrigger
+  rollbackOf?: string
 }): Promise<Build> {
   return prisma.build.create({ data })
 }

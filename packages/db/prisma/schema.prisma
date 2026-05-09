@@ -37,14 +37,22 @@ model Deployment {
   @@map("deployments")
 }
 
+enum BuildTrigger {
+  deploy
+  redeploy
+  rollback
+}
+
 model Build {
-  id           String      @id // uuidv7 — doubles as the image tag version
-  deploymentId String      @map("deployment_id")
-  status       BuildStatus @default(building)
-  imageTag     String?     @map("image_tag")
-  createdAt    DateTime    @default(now()) @map("created_at")
-  updatedAt    DateTime    @updatedAt @map("updated_at")
-  deployment   Deployment  @relation(fields: [deploymentId], references: [id])
+  id           String       @id
+  deploymentId String       @map("deployment_id")
+  status       BuildStatus  @default(building)
+  trigger      BuildTrigger @default(deploy)
+  rollbackOf   String?      @map("rollback_of")
+  imageTag     String?      @map("image_tag")
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
+  deployment   Deployment   @relation(fields: [deploymentId], references: [id])
   logs         Log[]
 
   @@map("builds")

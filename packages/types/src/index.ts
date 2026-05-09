@@ -1,6 +1,6 @@
-import { type DeploymentStatus, type BuildStatus } from '@prisma/client'
+import { type DeploymentStatus, type BuildStatus, type BuildTrigger } from '@prisma/client'
 
-export type { DeploymentStatus, BuildStatus }
+export type { DeploymentStatus, BuildStatus, BuildTrigger }
 
 export interface Deployment {
   id: string
