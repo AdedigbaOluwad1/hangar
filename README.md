@@ -127,7 +127,21 @@ Nomad mints a JWT for each alloc (TTL: 1h)
 Secrets stored in Vault at `hangar/data/config`:
 - `nomad_addr` — Nomad API address reachable from containers
 - `consul_addr` — Consul API address reachable from containers
-- `nomad_token` — Nomad ACL bootstrap token (used by API to submit user deployment jobs)
+- `nomad_token` — Nomad deploy ACL token (least-privilege; used by API to submit user deployment jobs)
+
+### Nomad ACL Token Hierarchy
+
+Three tokens exist, each with a different scope:
+
+| Token | Path | Purpose |
+|---|---|---|
+| Bootstrap | `/etc/nomad.d/bootstrap.json` | Break-glass only — full management access, never used day-to-day |
+| Operator | `/etc/nomad.d/operator.json` | Admin work — full namespace write, node read/write |
+| Deploy | `/etc/nomad.d/deploy.json` | Pipeline + API — submit/read/stop jobs, read logs, no admin access |
+
+`vault-init.yml` creates the deploy and operator policies and tokens automatically on every fresh install. The bootstrap token is created by `setup.yml` during Nomad ACL bootstrap and never rotated.
+
+The deploy token is seeded into Vault at `hangar/data/config.nomad_token` so the API can read it via Consul template. `deploy.sh` also reads the deploy token directly for job management during deploys.
 
 ---
 
@@ -187,7 +201,7 @@ vault/
 ansible/
   playbooks/
     setup.yml                 — full server provisioning (packages, DNS, Nomad, Consul, Vault, ACL bootstrap)
-    vault-init.yml            — seed Vault secrets from group_vars
+    vault-init.yml            — seed Vault secrets, create deploy + operator ACL tokens
     deploy.yml                — build + push API/web images, run Nomad jobs, health check
     templates/
       nomad.hcl.j2            — Jinja2 Nomad config template (nomad_server_count configurable)
@@ -206,7 +220,7 @@ deploy.sh                     — single entrypoint: runs setup → vault-init �
 ### Prerequisites
 
 - Ubuntu 24 (bare metal or WSL2)
-- `ansible`, `ansible-playbook`, `jq`, `curl`, `git`, `nomad` installed on the deploying machine
+- `ansible`, `ansible-playbook`, `jq`, `curl`, `git` installed on the deploying machine
 - An Ansible Vault password
 
 ### One Command Deploy
@@ -219,7 +233,7 @@ deploy.sh                     — single entrypoint: runs setup → vault-init �
 
 1. **Auto-unseals Vault** if it's sealed (reads keys from `/etc/vault.d/keys/init.json`)
 2. **Runs `setup.yml`** — installs all packages, configures dnsmasq, Podman, Consul, Nomad, Vault, bootstraps ACLs
-3. **Runs `vault-init.yml`** — enables KV engine, seeds `hangar/config` secrets, configures JWT auth for Nomad workload identity
+3. **Runs `vault-init.yml`** — enables KV engine, creates deploy + operator ACL tokens, seeds `hangar/config` secrets, configures JWT auth for Nomad workload identity
 4. **Deploys Nomad infrastructure jobs** in startup order: registry → postgres → redis → buildkit
 5. **Runs `deploy.yml`** — builds and pushes `hangar-api` and `hangar-web` images, deploys them as Nomad jobs, waits for health checks
 6. **Deploys Caddy** — after API and web are registered healthy in Consul
@@ -275,7 +289,7 @@ Install the following on Ubuntu 24 (or WSL2 on Ubuntu 24):
 # HashiCorp tools
 curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
 echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
-sudo apt update && sudo apt install -y nomad consul vault
+sudo apt update && sudo apt install -y nomad consul vault nomad-driver-podman
 
 # Podman
 sudo apt install -y podman netavark aardvark-dns uidmap
@@ -387,23 +401,72 @@ sudo cat /etc/vault.d/keys/init.json | jq -r '.unseal_keys_b64[2]' | xargs vault
 export NOMAD_ADDR=http://127.0.0.1:4646
 nomad acl bootstrap -json | sudo tee /etc/nomad.d/bootstrap.json
 sudo chmod 600 /etc/nomad.d/bootstrap.json
-export NOMAD_TOKEN=$(sudo cat /etc/nomad.d/bootstrap.json | jq -r '.SecretID')
 ```
 
-### 6. Seed Vault Secrets
+### 6. Create Scoped ACL Tokens
+
+```bash
+export NOMAD_TOKEN=$(sudo cat /etc/nomad.d/bootstrap.json | jq -r '.SecretID')
+
+# Deploy policy — used by pipeline and API
+cat << 'EOF' | nomad acl policy apply -description "Deploy pipeline access" deploy -
+namespace "default" {
+  policy = "read"
+  capabilities = [
+    "submit-job",
+    "read-job",
+    "read-logs",
+    "read-fs",
+    "alloc-exec",
+    "alloc-lifecycle",
+  ]
+}
+node {
+  policy = "read"
+}
+EOF
+
+# Operator policy — used by admins day-to-day
+cat << 'EOF' | nomad acl policy apply -description "Full operator access" operator -
+namespace "default" {
+  policy = "write"
+}
+agent {
+  policy = "write"
+}
+operator {
+  policy = "write"
+}
+node {
+  policy = "write"
+}
+host_volume "*" {
+  policy = "write"
+}
+EOF
+
+# Create tokens
+nomad acl token create -name "deploy" -policy deploy -ttl 0 -json | sudo tee /etc/nomad.d/deploy.json
+sudo chmod 600 /etc/nomad.d/deploy.json
+
+nomad acl token create -name "operator" -policy operator -ttl 0 -json | sudo tee /etc/nomad.d/operator.json
+sudo chmod 600 /etc/nomad.d/operator.json
+```
+
+### 7. Seed Vault Secrets
 
 ```bash
 export VAULT_ADDR=https://127.0.0.1:8200
 export VAULT_SKIP_VERIFY=true
 export VAULT_TOKEN=$(sudo cat /etc/vault.d/keys/init.json | jq -r '.root_token')
-export NOMAD_TOKEN=$(sudo cat /etc/nomad.d/bootstrap.json | jq -r '.SecretID')
+export DEPLOY_TOKEN=$(sudo cat /etc/nomad.d/deploy.json | jq -r '.SecretID')
 
 vault secrets enable -path=hangar kv-v2
 
 vault kv put hangar/config \
   nomad_addr="http://10.88.0.1:4646" \
   consul_addr="http://10.88.0.1:8500" \
-  nomad_token="$NOMAD_TOKEN"
+  nomad_token="$DEPLOY_TOKEN"
 
 # Configure JWT auth for workload identity
 vault auth enable -path=jwt-nomad jwt
@@ -431,7 +494,7 @@ vault write auth/jwt-nomad/role/nomad-workloads \
   token_type="service"
 ```
 
-### 7. Create Data Directories
+### 8. Create Data Directories
 
 ```bash
 sudo mkdir -p /opt/hangar/data/{registry,buildkit,caddy,postgres,redis}
@@ -439,10 +502,10 @@ sudo chown -R $USER:$USER /opt/hangar/data/{registry,buildkit,caddy}
 sudo chown -R 999:999 /opt/hangar/data/{postgres,redis}
 ```
 
-### 8. Deploy Infrastructure Nomad Jobs
+### 9. Deploy Infrastructure Nomad Jobs
 
 ```bash
-export NOMAD_TOKEN=$(sudo cat /etc/nomad.d/bootstrap.json | jq -r '.SecretID')
+export NOMAD_TOKEN=$(sudo cat /etc/nomad.d/deploy.json | jq -r '.SecretID')
 
 nomad job run nomad/jobs/hangar-registry.nomad.hcl
 nomad job run nomad/jobs/hangar-postgres.nomad.hcl
@@ -461,14 +524,14 @@ curl -s http://127.0.0.1:8500/v1/health/service/buildkit?passing=true | jq '.[0]
 curl -s http://127.0.0.1:8500/v1/health/service/caddy?passing=true | jq '.[0].Service.ID'
 ```
 
-### 9. Run Migrations
+### 10. Run Migrations
 
 ```bash
 cd packages/db
 pnpm prisma migrate deploy
 ```
 
-### 10. Run API and Web Dev Servers
+### 11. Run API and Web Dev Servers
 
 Open two terminals:
 
@@ -478,7 +541,7 @@ Open two terminals:
 export VAULT_ADDR=https://127.0.0.1:8200
 export VAULT_SKIP_VERIFY=true
 export VAULT_TOKEN=$(sudo cat /etc/vault.d/keys/init.json | jq -r '.root_token')
-export NOMAD_TOKEN=$(sudo cat /etc/nomad.d/bootstrap.json | jq -r '.SecretID')
+export NOMAD_TOKEN=$(sudo cat /etc/nomad.d/deploy.json | jq -r '.SecretID')
 export NOMAD_ADDR=http://10.88.0.1:4646
 export CONSUL_ADDR=http://10.88.0.1:8500
 export DATABASE_URL="postgresql://hangar:hangar@postgres.service.consul:5432/hangar"
@@ -502,13 +565,13 @@ The API runs on `http://localhost:3001` and the web on `http://localhost:5173`.
 
 > **Note:** When running the API directly on the host (not as a Nomad job), Vault workload identity JWT auth is not available. Set `VAULT_TOKEN` directly as shown above. The API's `config.ts` falls back to `VAULT_TOKEN` env var when not running inside a Nomad alloc.
 
-### 11. Restarting After a Reboot
+### 12. Restarting After a Reboot
 
 After a reboot (or WSL restart), services need to be brought back up in order:
 
 ```bash
 # Load env
-export NOMAD_TOKEN=$(sudo cat /etc/nomad.d/bootstrap.json | jq -r '.SecretID')
+export NOMAD_TOKEN=$(sudo cat /etc/nomad.d/operator.json | jq -r '.SecretID')
 export VAULT_ADDR=https://127.0.0.1:8200
 export VAULT_SKIP_VERIFY=true
 export VAULT_TOKEN=$(sudo cat /etc/vault.d/keys/init.json | jq -r '.root_token')
@@ -537,19 +600,25 @@ sudo systemctl restart dnsmasq
 
 ### Environment Variables (Session Setup)
 
-Always load these before running any `nomad` or `vault` CLI commands:
+For day-to-day admin work, load the operator token:
 
 ```bash
-export NOMAD_TOKEN=$(sudo cat /etc/nomad.d/bootstrap.json | jq -r '.SecretID')
+export NOMAD_TOKEN=$(sudo cat /etc/nomad.d/operator.json | jq -r '.SecretID')
 export VAULT_ADDR=https://127.0.0.1:8200
 export VAULT_SKIP_VERIFY=true
 export VAULT_TOKEN=$(sudo cat /etc/vault.d/keys/init.json | jq -r '.root_token')
 ```
 
-### Manually Redeploying a Job
+For break-glass situations (ACL reset, token recreation):
 
 ```bash
 export NOMAD_TOKEN=$(sudo cat /etc/nomad.d/bootstrap.json | jq -r '.SecretID')
+```
+
+### Manually Redeploying a Job
+
+```bash
+export NOMAD_TOKEN=$(sudo cat /etc/nomad.d/operator.json | jq -r '.SecretID')
 
 # Stop and purge (wait for completion)
 nomad job stop -purge -detach=false <job-name>
@@ -617,6 +686,8 @@ sleep 8
 until curl -sf http://127.0.0.1:4646/v1/status/leader > /dev/null; do sleep 2; done
 sudo NOMAD_ADDR=http://127.0.0.1:4646 nomad acl bootstrap -json | sudo tee /etc/nomad.d/bootstrap.json
 sudo chmod 600 /etc/nomad.d/bootstrap.json
+# Then recreate deploy and operator tokens using the new bootstrap token
+# (vault-init.yml handles this automatically on next deploy)
 ```
 
 ---
@@ -630,7 +701,7 @@ Navigate to `http://<host-ip>` and paste a public Git URL into the deployment fo
 ### Via the API
 
 ```bash
-curl -X POST http://<host-ip>/api/deployments \
+curl -X POST http://<host-ip>/deployments \
   -H "Content-Type: application/json" \
   -d '{
     "sourceType": "git",
@@ -641,7 +712,7 @@ curl -X POST http://<host-ip>/api/deployments \
 Stream logs:
 
 ```bash
-curl -s http://<host-ip>/api/deployments/<id>/logs
+curl -s http://<host-ip>/deployments/<id>/logs
 ```
 
 ### Test Apps
@@ -656,13 +727,13 @@ curl -s http://<host-ip>/api/deployments/<id>/logs
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/api/deployments` | List all deployments |
-| `POST` | `/api/deployments` | Create a deployment |
-| `GET` | `/api/deployments/:id` | Get a single deployment |
-| `DELETE` | `/api/deployments/:id` | Stop and delete a deployment |
-| `POST` | `/api/deployments/:id/redeploy` | Redeploy from the same source |
-| `GET` | `/api/deployments/:id/health` | Check deployment health via Nomad |
-| `GET` | `/api/deployments/:id/logs` | Stream build + deploy logs over SSE |
+| `GET` | `/deployments` | List all deployments |
+| `POST` | `/deployments` | Create a deployment |
+| `GET` | `/deployments/:id` | Get a single deployment |
+| `DELETE` | `/deployments/:id` | Stop and delete a deployment |
+| `POST` | `/deployments/:id/redeploy` | Redeploy from the same source |
+| `GET` | `/deployments/:id/health` | Check deployment health via Nomad |
+| `GET` | `/deployments/:id/logs` | Stream build + deploy logs over SSE |
 
 ### Deployment Status Values
 
@@ -729,7 +800,7 @@ Without it, the shell returns immediately while Nomad is still stopping the job,
 
 ### Static ports bind to eth0, not 127.0.0.1
 
-On WSL2, static Nomad ports bind to the WSL eth0 IP (e.g. `172.30.186.74`), not `localhost`. Use the actual IP when accessing services from the host. For localhost access, set `networkingMode=mirrored` in `~/.wslconfig` (Windows) and restart WSL.
+On WSL2, static Nomad ports bind to the WSL eth0 IP (e.g. `172.30.186.74`), not `localhost`. Use the actual IP when accessing services from the host.
 
 ### address_mode = "driver" is required on all jobs
 
@@ -822,7 +893,7 @@ A production Hangar cluster looks like this:
                             │
                ┌────────────┼────────────┐
                │            │            │
-     ┌─────────┴───┐ ┌──────┴──┐ ┌──────┴──┐
+     ┌─────────┴───┐ ┌──────┴──┐ ┌───────┴─┐
      │  WORKER 1   │ │WORKER 2 │ │WORKER 3 │
      │             │ │         │ │         │
      │ Nomad Client│ │  same   │ │  same   │
@@ -938,7 +1009,7 @@ ansible-playbook -i inventory.ini setup-server.yml
 # 3. Join worker nodes to the cluster
 ansible-playbook -i inventory.ini setup-client.yml
 
-# 4. Seed Vault secrets
+# 4. Seed Vault secrets and create scoped tokens
 ansible-playbook -i inventory.ini vault-init.yml
 
 # 5. Deploy infrastructure jobs (pinned to node-1)
@@ -952,15 +1023,13 @@ ansible-playbook -i inventory.ini deploy.yml
 
 ## What's Next
 
-- **Scoped Nomad token** — replace bootstrap token with a least-privilege policy token
 - **Registry GC** — delete old images from the local registry after successful redeploy
 - **GitHub OAuth** — private repo support, user-scoped deployments
 - **Custom domains** — user-provided domains beyond `.localhost`
 - **Build cache reuse** — BuildKit cache persistence across deployments
 - **Rollback** — redeploy a previous image tag
-- **GitHub Actions CI/CD** — automated deploy pipeline on push
-- **Terraform** — infrastructure provisioning for cloud bare metal
 - **Multinode** — Ansible playbook split into `setup-common.yml`, `setup-server.yml`, `setup-client.yml` is the remaining implementation work (design complete — see Multinode Cluster Plan above)
+- **Staging cluster** — provision nodes, uncomment staging deploy job in CI
 
 ---
 
