@@ -2,46 +2,297 @@ name: CI & Deploy
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 jobs:
+  # ── Lint & Typecheck ────────────────────────────────────────────────────────
   lint-and-typecheck:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - name: Setup pnpm
         uses: pnpm/action-setup@v3
         with:
           version: 9
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           cache: pnpm
+
       - name: Install dependencies
         run: pnpm install
+
       - name: Generate Prisma client
         run: cd packages/db && npx prisma generate
+
       - name: Typecheck
         run: pnpm typecheck
+
       - name: Lint
         run: pnpm lint
 
-  deploy:
+  # ── End-to-End Integration Test ─────────────────────────────────────────────
+  # Runs bootstrap.sh exactly as a real server would — it installs all
+  # dependencies, clones the repo, installs Ansible collections, and hands
+  # off to deploy.sh, which runs setup.yml (Nomad, Consul, Vault, Podman,
+  # dnsmasq, Node.js, pnpm, etc), vault-init.yml, then deploys all Nomad jobs.
+  # After the stack is up, we trigger a real deployment and wait for it to
+  # go live end-to-end.
+  e2e:
     runs-on: ubuntu-latest
     needs: lint-and-typecheck
     if: github.event_name == 'push'
+    timeout-minutes: 60
+
     steps:
-      - uses: actions/checkout@v4
-      - name: Deploy to server
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SERVER_SSH_KEY }}
-          script: |
-            cd ~/documents/hangar
-            git pull origin main
-            docker compose up -d --build
+      # No checkout needed — bootstrap.sh clones the repo itself, just like
+      # a real server provisioning run would. ubuntu-latest has curl already.
+
+      # ── Run bootstrap.sh ────────────────────────────────────────────────────
+
+      - name: Run bootstrap.sh
+        env:
+          HANGAR_REPO_URL: https://github.com/AdedigbaOluwad1/hangar.git
+          ANSIBLE_VAULT_PASSWORD: ${{ secrets.ANSIBLE_VAULT_PASSWORD }}
+        run: |
+          # Write vault password file so bootstrap.sh -> deploy.sh won't prompt
+          echo "$ANSIBLE_VAULT_PASSWORD" > /tmp/.vault-pass
+          chmod 600 /tmp/.vault-pass
+
+          # Fetch bootstrap.sh from the repo and run it.
+          # bootstrap.sh installs ansible/jq/git, clones the repo,
+          # installs Ansible collections, then calls deploy.sh /tmp/.vault-pass.
+          # deploy.sh runs setup.yml which installs everything else:
+          # Nomad, Consul, Vault, Podman, dnsmasq, Node.js, pnpm, etc.
+          curl -fsSL \
+            https://raw.githubusercontent.com/AdedigbaOluwad1/hangar/main/bootstrap.sh \
+            -o /tmp/bootstrap.sh
+          chmod +x /tmp/bootstrap.sh
+          /tmp/bootstrap.sh /tmp/.vault-pass
+
+      # ── Verify all Consul services are healthy ──────────────────────────────
+
+      - name: Verify Consul service health
+        run: |
+          services=(registry postgres redis buildkit caddy api)
+          for svc in "${services[@]}"; do
+            echo "Checking $svc..."
+            for i in $(seq 1 30); do
+              result=$(curl -sf "http://127.0.0.1:8500/v1/health/service/$svc?passing=true" \
+                | jq -r '.[0].Service.ID // empty')
+              if [ -n "$result" ]; then
+                echo "  ✅ $svc is healthy"
+                break
+              fi
+              if [ "$i" -eq 30 ]; then
+                echo "  ❌ $svc did not become healthy after 150s"
+                curl -s "http://127.0.0.1:8500/v1/health/service/$svc" | jq .
+                exit 1
+              fi
+              sleep 5
+            done
+          done
+
+      # ── Trigger a test deployment ───────────────────────────────────────────
+
+      - name: Trigger test deployment
+        id: trigger
+        run: |
+          HOST_IP=$(ip route get 1.1.1.1 | awk '{print $7; exit}')
+          echo "Host IP: $HOST_IP"
+          echo "host_ip=$HOST_IP" >> $GITHUB_OUTPUT
+
+          RESPONSE=$(curl -sf -X POST "http://$HOST_IP:3001/api/deployments" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "sourceType": "git",
+              "sourceUrl": "https://github.com/render-examples/express-hello-world"
+            }')
+
+          echo "Response: $RESPONSE"
+          DEPLOYMENT_ID=$(echo "$RESPONSE" | jq -r '.id')
+
+          if [ -z "$DEPLOYMENT_ID" ] || [ "$DEPLOYMENT_ID" = "null" ]; then
+            echo "❌ Failed to create deployment"
+            exit 1
+          fi
+
+          echo "deployment_id=$DEPLOYMENT_ID" >> $GITHUB_OUTPUT
+          echo "✅ Deployment triggered: $DEPLOYMENT_ID"
+
+      # ── Poll until deployment status is 'running' ───────────────────────────
+
+      - name: Wait for deployment to go live
+        run: |
+          DEPLOYMENT_ID="${{ steps.trigger.outputs.deployment_id }}"
+          HOST_IP="${{ steps.trigger.outputs.host_ip }}"
+          MAX_ATTEMPTS=60  # 5 minutes at 5s intervals
+          attempt=0
+
+          echo "Polling deployment $DEPLOYMENT_ID..."
+
+          while [ "$attempt" -lt "$MAX_ATTEMPTS" ]; do
+            STATUS=$(curl -sf "http://$HOST_IP:3001/api/deployments/$DEPLOYMENT_ID" \
+              | jq -r '.status // empty')
+            echo "  attempt $((attempt+1)): status=$STATUS"
+
+            if [ "$STATUS" = "running" ]; then
+              echo "✅ Deployment is running"
+              break
+            fi
+
+            if [ "$STATUS" = "failed" ]; then
+              echo "❌ Deployment failed"
+              curl -sf "http://$HOST_IP:3001/api/deployments/$DEPLOYMENT_ID" | jq .
+              exit 1
+            fi
+
+            attempt=$((attempt + 1))
+            if [ "$attempt" -ge "$MAX_ATTEMPTS" ]; then
+              echo "❌ Deployment timed out after $((MAX_ATTEMPTS * 5))s"
+              curl -sf "http://$HOST_IP:3001/api/deployments/$DEPLOYMENT_ID" | jq .
+              exit 1
+            fi
+
+            sleep 5
+          done
+
+      # ── Verify the deployed app actually responds ───────────────────────────
+
+      - name: Verify deployed app is reachable
+        run: |
+          DEPLOYMENT_ID="${{ steps.trigger.outputs.deployment_id }}"
+          HOST_IP="${{ steps.trigger.outputs.host_ip }}"
+
+          LIVE_URL=$(curl -sf "http://$HOST_IP:3001/api/deployments/$DEPLOYMENT_ID" \
+            | jq -r '.liveUrl // empty')
+          echo "Live URL: $LIVE_URL"
+
+          if [ -z "$LIVE_URL" ] || [ "$LIVE_URL" = "null" ]; then
+            echo "❌ No liveUrl on deployment record"
+            exit 1
+          fi
+
+          # Caddy routes by Host header subdomain.
+          # liveUrl is http://<deploymentId>.localhost — use Host header with curl.
+          SUBDOMAIN=$(echo "$LIVE_URL" | sed 's|http://||' | cut -d. -f1)
+
+          HTTP_STATUS=$(curl -sf -o /dev/null -w "%{http_code}" \
+            -H "Host: $SUBDOMAIN.localhost" \
+            "http://$HOST_IP:80" || echo "000")
+
+          echo "HTTP status: $HTTP_STATUS"
+
+          if [ "$HTTP_STATUS" = "200" ]; then
+            echo "✅ Deployed app is live and responding"
+          else
+            echo "❌ App returned HTTP $HTTP_STATUS"
+            curl -s "http://$HOST_IP:2019/config/apps/http/servers/srv0/routes" | jq .
+            exit 1
+          fi
+
+      # ── Debug dumps on failure ──────────────────────────────────────────────
+
+      - name: Debug — Nomad job statuses
+        if: failure()
+        run: |
+          export NOMAD_TOKEN=$(sudo cat /etc/nomad.d/bootstrap.json | jq -r '.SecretID')
+          nomad status || true
+
+      - name: Debug — Consul critical services
+        if: failure()
+        run: |
+          curl -s http://127.0.0.1:8500/v1/health/state/critical | jq . || true
+
+      - name: Debug — hangar-api alloc logs
+        if: failure()
+        run: |
+          export NOMAD_TOKEN=$(sudo cat /etc/nomad.d/bootstrap.json | jq -r '.SecretID')
+          ALLOC=$(nomad job allocs hangar-api 2>/dev/null | grep -v ID | head -1 | awk '{print $1}')
+          [ -n "$ALLOC" ] && nomad alloc logs "$ALLOC" api || true
+
+      - name: Debug — hangar-buildkit alloc logs
+        if: failure()
+        run: |
+          export NOMAD_TOKEN=$(sudo cat /etc/nomad.d/bootstrap.json | jq -r '.SecretID')
+          ALLOC=$(nomad job allocs hangar-buildkit 2>/dev/null | grep -v ID | head -1 | awk '{print $1}')
+          [ -n "$ALLOC" ] && nomad alloc logs "$ALLOC" buildkit || true
+
+  # ── Deploy to Staging ───────────────────────────────────────────────────────
+  # TODO: Uncomment and configure when a staging cluster is provisioned.
+  #
+  # Staging is a multinode Nomad cluster (3 server nodes + N worker nodes).
+  # bootstrap.sh is NOT used here — the cluster is already provisioned.
+  # deploy.sh runs against the cluster via a multinode Ansible inventory
+  # (ansible/inventory.staging.ini) with nomad_server_count=3.
+  #
+  # Prerequisites (stored as GitHub secrets):
+  #   STAGING_SSH_KEY           — private key for all staging nodes
+  #   STAGING_SERVER_USER       — ssh user (e.g. ubuntu)
+  #   STAGING_NODE_1            — primary server node IP (runs infra jobs)
+  #   STAGING_NODE_2            — second server node IP
+  #   STAGING_NODE_3            — third server node IP
+  #   STAGING_WORKER_1..N       — worker node IPs
+  #   ANSIBLE_VAULT_PASSWORD    — same vault password as e2e
+  #
+  # deploy:
+  #   runs-on: ubuntu-latest
+  #   needs: [lint-and-typecheck, e2e]
+  #   if: github.event_name == 'push'
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #
+  #     - name: Install Ansible
+  #       run: sudo apt-get update -qq && sudo apt-get install -y -qq ansible
+  #
+  #     - name: Install Ansible collections
+  #       run: ansible-galaxy collection install -r ansible/requirements.yml
+  #
+  #     - name: Write SSH key
+  #       run: |
+  #         echo "${{ secrets.STAGING_SSH_KEY }}" > /tmp/staging.pem
+  #         chmod 600 /tmp/staging.pem
+  #
+  #     - name: Write Ansible vault password
+  #       run: |
+  #         echo "${{ secrets.ANSIBLE_VAULT_PASSWORD }}" > /tmp/.vault-pass
+  #         chmod 600 /tmp/.vault-pass
+  #
+  #     - name: Generate staging inventory
+  #       run: |
+  #         cat > ansible/inventory.staging.ini << EOF
+  #         [nomad_servers]
+  #         node-1 ansible_host=${{ secrets.STAGING_NODE_1 }} ansible_user=${{ secrets.STAGING_SERVER_USER }} ansible_ssh_private_key_file=/tmp/staging.pem
+  #         node-2 ansible_host=${{ secrets.STAGING_NODE_2 }} ansible_user=${{ secrets.STAGING_SERVER_USER }} ansible_ssh_private_key_file=/tmp/staging.pem
+  #         node-3 ansible_host=${{ secrets.STAGING_NODE_3 }} ansible_user=${{ secrets.STAGING_SERVER_USER }} ansible_ssh_private_key_file=/tmp/staging.pem
+  #
+  #         [nomad_clients]
+  #         worker-1 ansible_host=${{ secrets.STAGING_WORKER_1 }} ansible_user=${{ secrets.STAGING_SERVER_USER }} ansible_ssh_private_key_file=/tmp/staging.pem
+  #
+  #         [hangar:children]
+  #         nomad_servers
+  #         nomad_clients
+  #
+  #         [nomad_servers:vars]
+  #         nomad_server_count=3
+  #         nomad_is_server=true
+  #
+  #         [nomad_clients:vars]
+  #         nomad_server_count=0
+  #         nomad_is_server=false
+  #         EOF
+  #
+  #     - name: Deploy to staging cluster
+  #       env:
+  #         HANGAR_MODE: remote
+  #         ANSIBLE_VAULT_PASSWORD: ${{ secrets.ANSIBLE_VAULT_PASSWORD }}
+  #       run: |
+  #         # deploy.sh picks up the inventory from ansible/inventory.ini.
+  #         # Point it at the staging inventory instead.
+  #         cp ansible/inventory.staging.ini ansible/inventory.ini
+  #         ./deploy.sh /tmp/.vault-pass
