@@ -1,4 +1,4 @@
-FROM node:20-slim
+FROM node:20-slim AS base
 
 RUN apt-get update && apt-get install -y git curl tar && rm -rf /var/lib/apt/lists/*
 
@@ -24,11 +24,14 @@ COPY apps/api ./apps/api
 
 RUN pnpm install --no-frozen-lockfile
 
-# generate prisma client inside container
+# generate prisma client
 RUN cd /app/packages/db && npx prisma generate
+
+# build the API
+RUN cd /app/apps/api && pnpm build
 
 COPY --from=docker.io/moby/buildkit:latest /usr/bin/buildctl /usr/bin/buildctl
 
 WORKDIR /app/apps/api
 
-CMD ["sh", "-c", "cd /app/packages/db && npx prisma migrate deploy && cd /app/apps/api && tsx watch src/index.ts"]
+CMD ["sh", "-c", "cd /app/packages/db && npx prisma migrate deploy && cd /app/apps/api && node dist/index.js"]
