@@ -27,7 +27,9 @@ RUN pnpm install --no-frozen-lockfile
 # generate prisma client
 RUN cd /app/packages/db && npx prisma generate
 
-# build the API
+# build packages in dependency order
+RUN cd /app/packages/types && pnpm build
+RUN cd /app/packages/db && pnpm build
 RUN cd /app/apps/api && pnpm build
 
 COPY --from=docker.io/moby/buildkit:latest /usr/bin/buildctl /usr/bin/buildctl
