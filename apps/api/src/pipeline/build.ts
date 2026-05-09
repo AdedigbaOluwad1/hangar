@@ -2,6 +2,7 @@ import { execa } from 'execa'
 import { join } from 'path'
 import { writeLog } from '@hangar/db'
 import { emitLog } from '../lib/emitter'
+import { gcOldImage } from '../lib/build'
 
 export async function build(
   deploymentId: string,
@@ -30,7 +31,10 @@ export async function build(
   })
   await prepareProc
 
-  // step 2 — build and push directly to local registry
+  // step 2 — GC old image before pushing new one
+  await gcOldImage(registryHost, deploymentId)
+
+  // step 3 — build and push directly to local registry
   await writeLog(deploymentId, 'build', `🔨 Building image ${registryTag}`)
   await emitLog(deploymentId, 'build', `🔨 Building image ${registryTag}`)
   const buildProc = execa('buildctl', [
