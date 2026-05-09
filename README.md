@@ -38,7 +38,7 @@ BullMQ worker picks up job
 │                                                 │
 │  clone.ts    — git clone to /tmp                │
 │  build.ts    — Railpack detect + BuildKit build │
-│                → image pushed to               │
+│                → image pushed to                │
 │                  registry.service.consul:5000   │
 │  run.ts      — read user env from Vault         │
 │                → submit Nomad job               │
@@ -189,6 +189,8 @@ ansible/
     setup.yml                 — full server provisioning (packages, DNS, Nomad, Consul, Vault, ACL bootstrap)
     vault-init.yml            — seed Vault secrets from group_vars
     deploy.yml                — build + push API/web images, run Nomad jobs, health check
+    templates/
+      nomad.hcl.j2            — Jinja2 Nomad config template (nomad_server_count configurable)
   group_vars/
     hangar/
       vault.yml               — ansible-vault encrypted secrets (nomad_addr, consul_addr, caddy_admin_url, etc.)
@@ -452,7 +454,6 @@ nomad job run nomad/jobs/hangar-caddy.nomad.hcl
 Wait for all jobs to be healthy:
 
 ```bash
-# Check Consul for healthy services
 curl -s http://127.0.0.1:8500/v1/health/service/registry?passing=true | jq '.[0].Service.ID'
 curl -s http://127.0.0.1:8500/v1/health/service/postgres?passing=true | jq '.[0].Service.ID'
 curl -s http://127.0.0.1:8500/v1/health/service/redis?passing=true | jq '.[0].Service.ID'
@@ -554,8 +555,8 @@ export NOMAD_TOKEN=$(sudo cat /etc/nomad.d/bootstrap.json | jq -r '.SecretID')
 nomad job stop -purge -detach=false <job-name>
 
 # Force remove any stuck containers
-SHORT=<job-name-without-hangar-prefix>  # e.g. "api" not "hangar-api"
-sudo podman ps -a --format '{{.ID}} {{.Names}}' | grep "$SHORT" | awk '{print $1}' | xargs -r sudo podman rm -f
+# Note: Podman container names are <shortname>-<uuid>, NOT hangar-<shortname>-<uuid>
+sudo podman ps -a --format '{{.ID}} {{.Names}}' | grep "<shortname>" | awk '{print $1}' | xargs -r sudo podman rm -f
 
 # Kill anything holding the port
 sudo kill -9 $(sudo ss -tlnp | grep ':<PORT>' | grep -o 'pid=[0-9]*' | cut -d= -f2) 2>/dev/null
@@ -563,8 +564,6 @@ sudo kill -9 $(sudo ss -tlnp | grep ':<PORT>' | grep -o 'pid=[0-9]*' | cut -d= -
 # Redeploy
 nomad job run nomad/jobs/<job-name>.nomad.hcl
 ```
-
-> **Important:** Podman container names are `<shortname>-<uuid>`, NOT `hangar-<shortname>-<uuid>`. Always strip the `hangar-` prefix when grepping for containers.
 
 ### Checking Service Health
 
@@ -687,11 +686,12 @@ curl -s http://<host-ip>/api/deployments/<id>/logs
 
 ## Known Issues & Gotchas
 
-### Stale conmon processes
+### Stale Podman containers holding ports
 
-Nomad's Podman driver can leave `conmon` processes holding ports after a job is stopped. `deploy.sh` and `deploy_job()` handle this automatically. If doing manual redeployments:
+Nomad's Podman driver can leave containers stuck in `Stopping` state after a job is stopped. These containers continue to hold their port bindings, preventing new containers from binding the same port. `deploy.sh`'s `deploy_job()` function handles this automatically by force-removing stale containers before every deploy. For manual redeployments:
 
 ```bash
+sudo podman ps -a --format '{{.ID}} {{.Names}}' | grep "<shortname>" | awk '{print $1}' | xargs -r sudo podman rm -f
 sudo kill -9 $(sudo ss -tlnp | grep ':<PORT>' | grep -o 'pid=[0-9]*' | cut -d= -f2) 2>/dev/null
 ```
 
@@ -699,7 +699,7 @@ Ports to watch: `80`, `2019`, `3001`, `5000`, `5173`, `5432`, `6379`, `1234`.
 
 ### BuildKit stale lockfile
 
-BuildKit writes a lockfile at `/opt/hangar/data/buildkit/buildkitd.lock`. If BuildKit fails to start after a crash, the `hangar-buildkit` job has a `prestart` lifecycle task using `raw_exec` that deletes it automatically. If it persists:
+BuildKit writes a lockfile at `/opt/hangar/data/buildkit/buildkitd.lock`. If BuildKit crashes, the lockfile persists and the next start fails with `could not lock buildkitd.lock, another instance running?`. The `hangar-buildkit` job has a `prestart` lifecycle task using `raw_exec` that deletes it automatically before every start. If it persists manually:
 
 ```bash
 sudo rm -f /opt/hangar/data/buildkit/buildkitd.lock
@@ -730,6 +730,18 @@ Without it, the shell returns immediately while Nomad is still stopping the job,
 ### Static ports bind to eth0, not 127.0.0.1
 
 On WSL2, static Nomad ports bind to the WSL eth0 IP (e.g. `172.30.186.74`), not `localhost`. Use the actual IP when accessing services from the host. For localhost access, set `networkingMode=mirrored` in `~/.wslconfig` (Windows) and restart WSL.
+
+### address_mode = "driver" is required on all jobs
+
+All `service` and `check` blocks in Nomad job files must include `address_mode = "driver"`. Without it, Consul registers the host eth0 IP instead of the container's Podman IP. Health checks will fail whenever host port forwarding is interrupted by stale containers.
+
+### raw_exec must be fingerprinted after config changes
+
+If you add or modify the `raw_exec` plugin block in `nomad.hcl`, Nomad must be restarted before it appears in the driver list. Verify with:
+
+```bash
+nomad node status -self | grep "Driver Status"
+```
 
 ---
 
@@ -781,6 +793,163 @@ model Log {
 
 ---
 
+## Multinode Cluster Plan
+
+Hangar is designed with multinode in mind. `nomad_server_count` is already a configurable Jinja2 variable in `ansible/playbooks/templates/nomad.hcl.j2` — the single-node default of `1` works today with zero changes. Scaling to a cluster is an Ansible and topology problem, not a code problem.
+
+### Why 10.88.0.1 Is Not a Hardcoding Problem
+
+`10.88.0.0/16` with gateway `10.88.0.1` is Podman's default rootful bridge subnet on every Linux machine. It is not machine-specific — every node in a cluster will have this same gateway. So `dns { servers = ["10.88.0.1"] }` in every Nomad job file works correctly across all nodes without any changes.
+
+Similarly, Vault is bound to `0.0.0.0`, so `https://10.88.0.1:8200` is reachable from inside any Podman container on any node in the cluster via the bridge gateway.
+
+### Target Topology
+
+A production Hangar cluster looks like this:
+
+```
+┌──────────────────────────────────────────────────────────┐
+│                   SERVER NODES (3)                       │
+│                                                          │
+│  Nomad Server   ── Raft consensus across 3 nodes         │
+│  Consul Server  ── Gossip protocol across 3 nodes        │
+│  Vault          ── Active on one node, standby on rest   │
+│  Caddy          ── Reverse proxy      (pinned: node-1)   │
+│  Registry       ── OCI registry       (pinned: node-1)   │
+│  Postgres       ── Database           (pinned: node-1)   │
+│  Redis          ── Queue + pub/sub    (pinned: node-1)   │
+└──────────────────────────────────────────────────────────┘
+                            │
+               ┌────────────┼────────────┐
+               │            │            │
+     ┌─────────┴───┐ ┌──────┴──┐ ┌──────┴──┐
+     │  WORKER 1   │ │WORKER 2 │ │WORKER 3 │
+     │             │ │         │ │         │
+     │ Nomad Client│ │  same   │ │  same   │
+     │ Consul Clnt │ │         │ │         │
+     │ Podman      │ │         │ │         │
+     └─────────────┘ └─────────┘ └─────────┘
+           ↑ user hangar-dep-* jobs scheduled here
+```
+
+Server nodes run both Nomad server and Nomad client — they participate in Raft consensus AND can run workloads. Stateful infrastructure jobs (Postgres, Redis, Registry, Caddy) are pinned to `node-1` via Nomad node constraints so their data stays in one place. Worker nodes run only Nomad client and Consul client. All user `hangar-dep-*` jobs get scheduled across workers by Nomad's bin-packing scheduler.
+
+### Inventory Structure
+
+```ini
+[nomad_servers]
+node-1 ansible_host=x.x.x.x ansible_user=ubuntu  # primary — runs infra jobs
+node-2 ansible_host=x.x.x.x ansible_user=ubuntu
+node-3 ansible_host=x.x.x.x ansible_user=ubuntu
+
+[nomad_clients]
+node-4 ansible_host=x.x.x.x ansible_user=ubuntu
+node-5 ansible_host=x.x.x.x ansible_user=ubuntu
+
+[hangar:children]
+nomad_servers
+nomad_clients
+
+[nomad_servers:vars]
+nomad_server_count=3
+nomad_is_server=true
+
+[nomad_clients:vars]
+nomad_server_count=0
+nomad_is_server=false
+```
+
+### What Needs to Be Built
+
+The following work is needed to go from single-node to cluster. None of it requires changes to the application code or Nomad job files — it is purely Ansible and configuration work.
+
+**1. Split setup.yml into three playbooks:**
+
+```
+setup-common.yml  — runs on ALL nodes
+                    packages, Podman, dnsmasq, Node.js, pnpm,
+                    Consul client config, Nomad client config
+
+setup-server.yml  — runs on nomad_servers only
+                    Consul server, Vault, Nomad server+client,
+                    ACL bootstrap, Vault init + unseal
+
+setup-client.yml  — runs on nomad_clients only
+                    Consul client join, Nomad client join
+```
+
+**2. Update nomad.hcl.j2 for role-aware config:**
+
+```hcl
+server {
+  enabled          = {{ 'true' if nomad_is_server else 'false' }}
+  bootstrap_expect = {{ nomad_server_count if nomad_is_server else 0 }}
+}
+
+client {
+  enabled = true
+  servers = ["node-1.internal:4647", "node-2.internal:4647", "node-3.internal:4647"]
+
+  {% if nomad_is_server %}
+  host_volume "postgres-data" {
+    path      = "/opt/hangar/data/postgres"
+    read_only = false
+  }
+  host_volume "redis-data" {
+    path      = "/opt/hangar/data/redis"
+    read_only = false
+  }
+  {% endif %}
+}
+```
+
+**3. Pin stateful jobs to node-1 via node constraints:**
+
+```hcl
+# In hangar-postgres.nomad.hcl, hangar-redis.nomad.hcl,
+# hangar-registry.nomad.hcl, hangar-caddy.nomad.hcl:
+constraint {
+  attribute = "${node.unique.name}"
+  value     = "node-1"
+}
+```
+
+**4. Update Consul config for server clustering:**
+
+Server nodes need `bootstrap_expect = 3` and `retry_join` pointing at each other. Client nodes need `retry_join` pointing at the server nodes. This is currently hardcoded in `consul.hcl` — it needs to become a Jinja2 template like `nomad.hcl.j2`.
+
+**5. Vault HA (optional):**
+
+For true Vault HA, switch the storage backend from file to Consul (`storage "consul" { path = "vault/" }`). This lets standby Vault instances on node-2 and node-3 take over if node-1 goes down. For a first cluster deployment, running Vault only on node-1 and accepting brief unavailability during node-1 restarts is a reasonable starting point.
+
+**6. Registry in multinode:**
+
+The local registry is pinned to node-1. All worker nodes pull images from `registry.service.consul:5000` over the internal network — this works automatically via Consul DNS since every node's Consul client has the full service catalog. No changes needed to job files.
+
+### Deployment Order for Cluster Bootstrap
+
+```bash
+# 1. Provision all nodes in parallel
+ansible-playbook -i inventory.ini setup-common.yml
+
+# 2. Bootstrap server nodes (Consul quorum, Nomad quorum, Vault init)
+ansible-playbook -i inventory.ini setup-server.yml
+
+# 3. Join worker nodes to the cluster
+ansible-playbook -i inventory.ini setup-client.yml
+
+# 4. Seed Vault secrets
+ansible-playbook -i inventory.ini vault-init.yml
+
+# 5. Deploy infrastructure jobs (pinned to node-1)
+# registry → postgres → redis → buildkit → caddy
+
+# 6. Deploy API and web
+ansible-playbook -i inventory.ini deploy.yml
+```
+
+---
+
 ## What's Next
 
 - **Scoped Nomad token** — replace bootstrap token with a least-privilege policy token
@@ -792,7 +961,7 @@ model Log {
 - **Rollback** — redeploy a previous image tag
 - **GitHub Actions CI/CD** — automated deploy pipeline on push
 - **Terraform** — infrastructure provisioning for cloud bare metal
-- **Multinode** — `dns { servers = ["10.88.0.1"] }` is currently single-node specific; needs abstraction for multi-node clusters
+- **Multinode** — Ansible playbook split into `setup-common.yml`, `setup-server.yml`, `setup-client.yml` is the remaining implementation work (design complete — see Multinode Cluster Plan above)
 
 ---
 
