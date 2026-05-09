@@ -131,31 +131,32 @@ jobs:
         run: |
           DEPLOYMENT_ID="${{ steps.trigger.outputs.deployment_id }}"
           HOST_IP="${{ steps.trigger.outputs.host_ip }}"
-          MAX_ATTEMPTS=60  # 5 minutes at 5s intervals
+          MAX_ATTEMPTS=60
           attempt=0
 
           echo "Polling deployment $DEPLOYMENT_ID..."
 
           while [ "$attempt" -lt "$MAX_ATTEMPTS" ]; do
-            STATUS=$(curl -sf "http://$HOST_IP:3001/deployments/$DEPLOYMENT_ID" \
-              | jq -r '.status // empty')
-            echo "  attempt $((attempt+1)): status=$STATUS"
+            RESPONSE=$(curl -sf "http://$HOST_IP:3001/deployments/$DEPLOYMENT_ID")
+            STATUS=$(echo "$RESPONSE" | jq -r '.status // empty')
+            LIVE_URL=$(echo "$RESPONSE" | jq -r '.liveUrl // empty')
+            echo "  attempt $((attempt+1)): status=$STATUS liveUrl=$LIVE_URL"
 
-            if [ "$STATUS" = "running" ]; then
-              echo "✅ Deployment is running"
+            if [ -n "$LIVE_URL" ] && [ "$LIVE_URL" != "null" ]; then
+              echo "✅ Deployment is live at $LIVE_URL"
               break
             fi
 
             if [ "$STATUS" = "failed" ]; then
               echo "❌ Deployment failed"
-              curl -sf "http://$HOST_IP:3001/deployments/$DEPLOYMENT_ID" | jq .
+              echo "$RESPONSE" | jq .
               exit 1
             fi
 
             attempt=$((attempt + 1))
             if [ "$attempt" -ge "$MAX_ATTEMPTS" ]; then
               echo "❌ Deployment timed out after $((MAX_ATTEMPTS * 5))s"
-              curl -sf "http://$HOST_IP:3001/deployments/$DEPLOYMENT_ID" | jq .
+              echo "$RESPONSE" | jq .
               exit 1
             fi
 
