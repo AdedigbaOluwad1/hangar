@@ -196,6 +196,20 @@ jobs:
             exit 1
           fi
 
+      - name: Debug — deployment state at failure
+        if: always()
+        run: |
+          HOST_IP="${{ steps.trigger.outputs.host_ip }}"
+          DEPLOYMENT_ID="${{ steps.trigger.outputs.deployment_id }}"
+          echo "=== Deployment ==="
+          curl -s "http://$HOST_IP:3001/deployments/$DEPLOYMENT_ID" | jq .
+          echo "=== Builds ==="
+          curl -s "http://$HOST_IP:3001/deployments/$DEPLOYMENT_ID/builds" | jq .
+          echo "=== Caddy routes ==="
+          curl -s "http://$HOST_IP:2019/config/apps/http/servers/srv0/routes" | jq .
+          echo "=== API logs ==="
+          curl -s "http://$HOST_IP:3001/deployments/$DEPLOYMENT_ID/logs" | tail -50
+
       # ── Debug dumps on failure ──────────────────────────────────────────────
 
       - name: Debug — Nomad job statuses
