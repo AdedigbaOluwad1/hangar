@@ -59,15 +59,27 @@ cd "$DEST"
 echo "📦 Installing Ansible collections..."
 ansible-galaxy collection install -r ansible/requirements.yml
 
+
 # ── Hand off to deploy.sh ────────────────────────────────────────────────────
 
 chmod +x deploy.sh
 export HANGAR_REPO_URL="$REPO_URL"
 
-read -s -p "🔐 Enter Ansible Vault password: " VAULT_PASS < /dev/tty
-echo
-echo "$VAULT_PASS" > /tmp/.vault-pass
-chmod 600 /tmp/.vault-pass
-unset VAULT_PASS
+VAULT_PASS_FILE="${1:-}"
 
-./deploy.sh /tmp/.vault-pass
+if [ -n "$VAULT_PASS_FILE" ] && [ -f "$VAULT_PASS_FILE" ]; then
+  : # already have it
+elif [ -n "$ANSIBLE_VAULT_PASSWORD" ]; then
+  VAULT_PASS_FILE="/tmp/.vault-pass"
+  echo "$ANSIBLE_VAULT_PASSWORD" > "$VAULT_PASS_FILE"
+  chmod 600 "$VAULT_PASS_FILE"
+else
+  read -s -p "🔐 Enter Ansible Vault password: " VAULT_PASS < /dev/tty
+  echo
+  VAULT_PASS_FILE="/tmp/.vault-pass"
+  echo "$VAULT_PASS" > "$VAULT_PASS_FILE"
+  chmod 600 "$VAULT_PASS_FILE"
+  unset VAULT_PASS
+fi
+
+./deploy.sh "$VAULT_PASS_FILE"
