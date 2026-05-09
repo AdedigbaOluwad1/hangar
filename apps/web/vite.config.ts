@@ -9,5 +9,12 @@ export default defineConfig({
   },
   server: {
     allowedHosts: ["hangar.local", "localhost"],
+    proxy: {
+      "/api": {
+        target: "http://localhost:3001",
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, ""),
+      },
+    },
   },
 });

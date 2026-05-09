@@ -27,7 +27,7 @@ The production stack:
 ```
 User submits Git URL via UI
           ↓
-POST /api/deployments
+POST /deployments
   → deployment record created in Postgres
   → job enqueued in BullMQ (Redis)
           ↓
@@ -183,9 +183,13 @@ apps/
       schemas/
         deployments.ts        — Zod + OpenAPI schemas
   web/                        — Vite + React Router + TanStack Query frontend
+                                Vite dev proxy strips /api prefix and forwards
+                                to localhost:3001 — matches Caddy routing in prod
 
 packages/
   db/                         — Prisma client + shared DB queries
+                                .env.local contains DATABASE_URL pointing to
+                                postgres.service.consul:5432
 
 nomad/
   jobs/                       — all Nomad job HCL files
@@ -219,7 +223,9 @@ ansible/
       vault.yml               — ansible-vault encrypted secrets (nomad_addr, consul_addr, caddy_admin_url, etc.)
   inventory.ini               — generated at deploy time (localhost or remote)
 
-deploy.sh                     — single entrypoint: runs setup → vault-init → nomad jobs → deploy
+deploy.sh                     — production entrypoint: full stack provision + deploy
+dev.sh                        — dev entrypoint: provisions infra jobs only (no api/web Nomad jobs)
+bootstrap.sh                  — fresh machine entrypoint: installs prereqs, clones repo, calls deploy.sh
 ```
 
 ---
@@ -288,23 +294,37 @@ Current secrets:
 
 ## Developer Setup (Contributing)
 
-This section covers running Hangar locally for development without using `deploy.sh`. You'll run the infrastructure (Nomad jobs) once and then run the API and web servers directly on the host for fast iteration.
+### TL;DR
 
-### 1. Prerequisites
+```
+1. Install prerequisites + configure networking (one time)
+2. ./dev.sh
+3. Create .env.local files, run migrations
+4. pnpm dev
+```
 
-Install the following on Ubuntu 24 (or WSL2 on Ubuntu 24):
+`dev.sh` handles everything else — Vault init, Nomad ACL bootstrap, token creation, secret seeding, data directories, and all five infrastructure Nomad jobs (registry, postgres, redis, buildkit, caddy). It does not deploy `hangar-api` or `hangar-web` as Nomad jobs — those ports are left free for the dev servers.
+
+---
+
+### Step 1 — Install Prerequisites
+
+On Ubuntu 24 (or WSL2 on Ubuntu 24):
 
 ```bash
 # HashiCorp tools
 curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
 echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
-sudo apt update && sudo apt install -y nomad consul vault nomad-driver-podman
+sudo apt update && sudo apt install -y nomad consul vault
 
 # Podman
 sudo apt install -y podman netavark aardvark-dns uidmap
 
-# dnsmasq
-sudo apt install -y dnsmasq
+# dnsmasq + base tools
+sudo apt install -y dnsmasq jq curl git ansible
+
+# Ansible collections
+ansible-galaxy collection install community.crypto
 
 # Node.js via NVM
 curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
@@ -315,11 +335,17 @@ nvm install 24 && nvm use 24
 npm install -g pnpm
 ```
 
-### 2. DNS Setup
+---
 
-Configure dnsmasq to forward `.consul` queries to Consul:
+### Step 2 — Configure Networking
+
+This is a one-time step. It sets up dnsmasq to forward `.consul` DNS queries and points the system resolver at it so that `*.service.consul` hostnames resolve from both the host and inside containers.
 
 ```bash
+# Stop systemd-resolved — it conflicts with dnsmasq on port 53
+sudo systemctl disable --now systemd-resolved
+
+# Write dnsmasq config
 sudo tee /etc/dnsmasq.conf << 'EOF'
 server=/consul/10.88.0.1#8600
 server=8.8.8.8
@@ -329,16 +355,26 @@ listen-address=10.88.0.1
 bind-dynamic
 no-hosts
 EOF
-```
 
-Disable systemd-resolved (conflicts with dnsmasq on port 53):
-
-```bash
-sudo systemctl disable --now systemd-resolved
+# Point system resolver at dnsmasq
 sudo rm /etc/resolv.conf
 echo "nameserver 127.0.0.1" | sudo tee /etc/resolv.conf
+
 sudo systemctl restart dnsmasq
 ```
+
+**WSL2 users — one extra step:** WSL regenerates `/etc/resolv.conf` on every restart, overwriting `nameserver 127.0.0.1` with its own nameserver. This breaks `.consul` DNS resolution from the host. Disable it permanently:
+
+```bash
+sudo tee -a /etc/wsl.conf << 'EOF'
+[network]
+generateResolvConf = false
+EOF
+```
+
+Takes effect on the next WSL restart. The `rm + tee` above already fixes the current session.
+
+> **Do NOT use `networkingMode=mirrored`** in `.wslconfig`. In mirrored mode, the Windows DNS client intercepts `127.0.0.1:53` before dnsmasq sees it, breaking all `.consul` DNS silently.
 
 Configure Podman containers to use the bridge gateway as DNS:
 
@@ -372,176 +408,27 @@ sudo tee /etc/buildkit/buildkitd.toml << 'EOF'
 EOF
 ```
 
-### 3. Start Infrastructure Services
+Enable the rootful Podman socket:
 
 ```bash
-# Enable rootful Podman socket
 sudo systemctl enable --now podman.socket
-
-# Start HashiCorp services
-sudo systemctl start consul
-sleep 3
-sudo systemctl start nomad
-sleep 5
-sudo systemctl start vault
 ```
 
-### 4. Initialize Vault (First Time Only)
+---
+
+### Step 3 — Run dev.sh
 
 ```bash
-export VAULT_ADDR=https://127.0.0.1:8200
-export VAULT_SKIP_VERIFY=true
-
-# Initialize
-vault operator init -key-shares=5 -key-threshold=3 -format=json | \
-  sudo tee /etc/vault.d/keys/init.json
-sudo chmod 600 /etc/vault.d/keys/init.json
-
-# Unseal (run 3 times with different keys)
-export VAULT_TOKEN=$(sudo cat /etc/vault.d/keys/init.json | jq -r '.root_token')
-sudo cat /etc/vault.d/keys/init.json | jq -r '.unseal_keys_b64[0]' | xargs vault operator unseal
-sudo cat /etc/vault.d/keys/init.json | jq -r '.unseal_keys_b64[1]' | xargs vault operator unseal
-sudo cat /etc/vault.d/keys/init.json | jq -r '.unseal_keys_b64[2]' | xargs vault operator unseal
+./dev.sh
 ```
 
-### 5. Bootstrap Nomad ACL (First Time Only)
+This provisions the full infrastructure — installs all system packages, initialises Vault, bootstraps Nomad ACL, creates scoped tokens, seeds Vault secrets, creates data directories, and starts all five infrastructure Nomad jobs. It runs the same Ansible playbooks as production.
 
-```bash
-export NOMAD_ADDR=http://127.0.0.1:4646
-nomad acl bootstrap -json | sudo tee /etc/nomad.d/bootstrap.json
-sudo chmod 600 /etc/nomad.d/bootstrap.json
-```
+---
 
-### 6. Create Scoped ACL Tokens
+### Step 4 — Create .env.local Files
 
-```bash
-export NOMAD_TOKEN=$(sudo cat /etc/nomad.d/bootstrap.json | jq -r '.SecretID')
-
-# Deploy policy — used by pipeline and API
-cat << 'EOF' | nomad acl policy apply -description "Deploy pipeline access" deploy -
-namespace "default" {
-  policy = "read"
-  capabilities = [
-    "submit-job",
-    "read-job",
-    "read-logs",
-    "read-fs",
-    "alloc-exec",
-    "alloc-lifecycle",
-  ]
-}
-node {
-  policy = "read"
-}
-EOF
-
-# Operator policy — used by admins day-to-day
-cat << 'EOF' | nomad acl policy apply -description "Full operator access" operator -
-namespace "default" {
-  policy = "write"
-}
-agent {
-  policy = "write"
-}
-operator {
-  policy = "write"
-}
-node {
-  policy = "write"
-}
-host_volume "*" {
-  policy = "write"
-}
-EOF
-
-# Create tokens
-nomad acl token create -name "deploy" -policy deploy -ttl 0 -json | sudo tee /etc/nomad.d/deploy.json
-sudo chmod 600 /etc/nomad.d/deploy.json
-
-nomad acl token create -name "operator" -policy operator -ttl 0 -json | sudo tee /etc/nomad.d/operator.json
-sudo chmod 600 /etc/nomad.d/operator.json
-```
-
-### 7. Seed Vault Secrets
-
-```bash
-export VAULT_ADDR=https://127.0.0.1:8200
-export VAULT_SKIP_VERIFY=true
-export VAULT_TOKEN=$(sudo cat /etc/vault.d/keys/init.json | jq -r '.root_token')
-export DEPLOY_TOKEN=$(sudo cat /etc/nomad.d/deploy.json | jq -r '.SecretID')
-
-vault secrets enable -path=hangar kv-v2
-
-vault kv put hangar/config \
-  nomad_addr="http://10.88.0.1:4646" \
-  consul_addr="http://10.88.0.1:8500" \
-  nomad_token="$DEPLOY_TOKEN"
-
-# Configure JWT auth for workload identity
-vault auth enable -path=jwt-nomad jwt
-vault write auth/jwt-nomad/config \
-  jwks_url="http://127.0.0.1:4646/.well-known/jwks.json" \
-  jwt_supported_algs="RS256,EdDSA" \
-  default_role="nomad-workloads"
-
-vault policy write nomad-workloads - <<'EOF'
-path "hangar/data/*" {
-  capabilities = ["read"]
-}
-path "hangar/data/deployments/*" {
-  capabilities = ["create", "update", "read", "delete"]
-}
-EOF
-
-vault write auth/jwt-nomad/role/nomad-workloads \
-  role_type="jwt" \
-  bound_audiences="vault.io" \
-  user_claim="/nomad_job_id" \
-  user_claim_json_pointer=true \
-  token_policies="nomad-workloads" \
-  token_period="1h" \
-  token_type="service"
-```
-
-### 8. Create Data Directories
-
-```bash
-sudo mkdir -p /opt/hangar/data/{registry,buildkit,caddy,postgres,redis}
-sudo chown -R $USER:$USER /opt/hangar/data/{registry,buildkit,caddy}
-sudo chown -R 999:999 /opt/hangar/data/{postgres,redis}
-```
-
-### 9. Deploy Infrastructure Nomad Jobs
-
-```bash
-export NOMAD_TOKEN=$(sudo cat /etc/nomad.d/deploy.json | jq -r '.SecretID')
-
-nomad job run nomad/jobs/hangar-registry.nomad.hcl
-nomad job run nomad/jobs/hangar-postgres.nomad.hcl
-nomad job run nomad/jobs/hangar-buildkit.nomad.hcl
-nomad job run nomad/jobs/hangar-redis.nomad.hcl
-nomad job run nomad/jobs/hangar-caddy.nomad.hcl
-```
-
-Wait for all jobs to be healthy:
-
-```bash
-curl -s http://127.0.0.1:8500/v1/health/service/registry?passing=true | jq '.[0].Service.ID'
-curl -s http://127.0.0.1:8500/v1/health/service/postgres?passing=true | jq '.[0].Service.ID'
-curl -s http://127.0.0.1:8500/v1/health/service/redis?passing=true | jq '.[0].Service.ID'
-curl -s http://127.0.0.1:8500/v1/health/service/buildkit?passing=true | jq '.[0].Service.ID'
-curl -s http://127.0.0.1:8500/v1/health/service/caddy?passing=true | jq '.[0].Service.ID'
-```
-
-### 10. Run Migrations
-
-```bash
-pnpm --filter @hangar/db migrate:deploy
-```
-
-### 11. Set Up `apps/api/.env.local`
-
-The API dev server uses `dotenv-cli` to load `apps/api/.env.local` before starting. Create it:
+**`apps/api/.env.local`** — loaded automatically by the API dev server via `dotenv-cli`:
 
 ```bash
 cat > apps/api/.env.local << 'EOF'
@@ -557,41 +444,57 @@ REGISTRY_HOST=registry.service.consul:5000
 EOF
 ```
 
-`VAULT_TOKEN` and `NOMAD_TOKEN` are intentionally excluded — they come from root-owned files and must be exported per session (see step 12).
-
-This file is gitignored. Never commit it.
-
-### 12. Start Infrastructure Jobs
-
-`dev.sh` runs `setup.yml`, `vault-init.yml`, and deploys the five infrastructure Nomad jobs (registry, postgres, redis, buildkit, caddy). It does **not** deploy `hangar-api` or `hangar-web` — those ports are left free for the dev servers.
+**`packages/db/.env.local`** — used by Prisma CLI for migrations:
 
 ```bash
-./dev.sh
+cat > packages/db/.env.local << 'EOF'
+DATABASE_URL=postgresql://hangar:hangar@postgres.service.consul:5432/hangar
+EOF
 ```
 
-Caddy is included because it handles user deployment routes patched in at runtime. The base `/api/*` and `/` routes will fail to resolve in Caddy (since the api and web aren't Nomad jobs in dev) but that's fine — you hit those directly via `localhost:3001` and `localhost:5173`.
+Both files are gitignored. Never commit them.
 
-### 13. Run Dev Servers
+`VAULT_TOKEN` and `NOMAD_TOKEN` are not in `.env.local` — they come from root-owned files and must be exported per session (see step 5).
+
+---
+
+### Step 5 — Run Migrations
 
 ```bash
-# Load root-owned tokens (required every session)
 export VAULT_TOKEN=$(sudo cat /etc/vault.d/keys/init.json | jq -r '.root_token')
 export NOMAD_TOKEN=$(sudo cat /etc/nomad.d/deploy.json | jq -r '.SecretID')
 
-# From the repo root — starts both API and web via Turborepo
+pnpm --filter @hangar/db migrate:deploy
+```
+
+---
+
+### Step 6 — Start Dev Servers
+
+```bash
 pnpm dev
 ```
 
-The API's dev script (`dotenv -e .env.local -- tsx watch src/index.ts`) loads `apps/api/.env.local` automatically. The two exported tokens are passed through from the shell environment. The API runs on `http://localhost:3001` and the web on `http://localhost:5173`.
+Turborepo starts both the API (`localhost:3001`) and web (`localhost:5173`) with hot reload. The Vite dev server proxies `/api/*` requests to `localhost:3001`, stripping the `/api` prefix before forwarding — matching exactly how Caddy routes in production. The frontend always calls `/api/...` with no hardcoded host or port.
 
-> **Note:** When running the API directly on the host (not as a Nomad job), Vault workload identity JWT auth is not available. Set `VAULT_TOKEN` directly as shown above. The API's `config.ts` falls back to `VAULT_TOKEN` env var when not running inside a Nomad alloc.
+---
 
-### 14. Restarting After a Reboot
+### Day-to-Day (After First-Time Setup)
 
-After a reboot (or WSL restart), services need to be brought back up in order:
+Every session after the first:
 
 ```bash
-# Start services
+export VAULT_TOKEN=$(sudo cat /etc/vault.d/keys/init.json | jq -r '.root_token')
+export NOMAD_TOKEN=$(sudo cat /etc/nomad.d/deploy.json | jq -r '.SecretID')
+./dev.sh
+pnpm dev
+```
+
+### Restarting After a Reboot
+
+After a reboot or WSL restart, systemd services don't auto-start (unless you enabled them). Bring them up first:
+
+```bash
 sudo systemctl start consul
 sleep 3
 sudo systemctl start nomad
@@ -599,14 +502,13 @@ sleep 3
 sudo systemctl start vault
 sleep 3
 
-# Unseal Vault
 bash vault/scripts/unseal.sh
-
-# Restart dnsmasq (Podman bridge needs to be up first)
 sudo systemctl restart dnsmasq
 
-# Redeploy infra jobs
+export VAULT_TOKEN=$(sudo cat /etc/vault.d/keys/init.json | jq -r '.root_token')
+export NOMAD_TOKEN=$(sudo cat /etc/nomad.d/deploy.json | jq -r '.SecretID')
 ./dev.sh
+pnpm dev
 ```
 
 ---
@@ -701,8 +603,7 @@ sleep 8
 until curl -sf http://127.0.0.1:4646/v1/status/leader > /dev/null; do sleep 2; done
 sudo NOMAD_ADDR=http://127.0.0.1:4646 nomad acl bootstrap -json | sudo tee /etc/nomad.d/bootstrap.json
 sudo chmod 600 /etc/nomad.d/bootstrap.json
-# Then recreate deploy and operator tokens using the new bootstrap token
-# (vault-init.yml handles this automatically on next deploy)
+# Then re-run vault-init.yml to recreate deploy and operator tokens
 ```
 
 ---
@@ -764,7 +665,7 @@ curl -X POST http://<host-ip>/deployments/<id>/rollback \
   -d '{ "tag": "<uuidv7-tag>" }'
 ```
 
-Rollback skips clone and build entirely — it reuses the existing image from the registry and goes straight to `runContainer` → `patchCaddy`. The previous deployment is stopped once the rollback is live.
+Rollback skips clone and build entirely — it reuses the existing image from the registry and goes straight to `runContainer` → `patchCaddy`.
 
 ### Deployment Status Values
 
@@ -790,7 +691,7 @@ Rollback skips clone and build entirely — it reuses the existing image from th
 
 ### Stale Podman containers holding ports
 
-Nomad's Podman driver can leave containers stuck in `Stopping` state after a job is stopped. These containers continue to hold their port bindings, preventing new containers from binding the same port. `deploy.sh`'s `deploy_job()` function handles this automatically by force-removing stale containers before every deploy. For manual redeployments:
+Nomad's Podman driver can leave containers stuck in `Stopping` state after a job is stopped. These containers continue to hold their port bindings, preventing new containers from binding the same port. `deploy.sh`'s `deploy_job()` function handles this automatically. For manual redeployments:
 
 ```bash
 sudo podman ps -a --format '{{.ID}} {{.Names}}' | grep "<shortname>" | awk '{print $1}' | xargs -r sudo podman rm -f
@@ -801,7 +702,7 @@ Ports to watch: `80`, `2019`, `3001`, `5000`, `5173`, `5432`, `6379`, `1234`.
 
 ### BuildKit stale lockfile
 
-BuildKit writes a lockfile at `/opt/hangar/data/buildkit/buildkitd.lock`. If BuildKit crashes, the lockfile persists and the next start fails with `could not lock buildkitd.lock, another instance running?`. The `hangar-buildkit` job has a `prestart` lifecycle task using `raw_exec` that deletes it automatically before every start. If it persists manually:
+BuildKit writes a lockfile at `/opt/hangar/data/buildkit/buildkitd.lock`. If BuildKit crashes, the lockfile persists and the next start fails with `could not lock buildkitd.lock, another instance running?`. The `hangar-buildkit` job has a `prestart` lifecycle task using `raw_exec` that deletes it automatically. If it persists manually:
 
 ```bash
 sudo rm -f /opt/hangar/data/buildkit/buildkitd.lock
@@ -811,13 +712,27 @@ sudo rm -f /opt/hangar/data/buildkit/buildkitd.lock
 
 Nomad workload identity tokens expire after 1 hour. If the API alloc reports `failed to derive Vault token: token is expired`, stop-purge and redeploy the job. Ensure Vault is unsealed first.
 
-### dnsmasq and the Podman bridge
+### WSL overwrites /etc/resolv.conf on restart
 
-dnsmasq is configured with `bind-dynamic` and listens on both `127.0.0.1` and `10.88.0.1`. The `10.88.0.1` address only exists when at least one Podman container is running (it's the bridge gateway). With `bind-dynamic`, dnsmasq starts without it and binds to it automatically when the bridge comes up. This means DNS from containers works as soon as the first Nomad job starts.
+WSL regenerates `/etc/resolv.conf` on every restart, replacing `nameserver 127.0.0.1` with its own nameserver. This breaks `.consul` DNS resolution from the host — Prisma, the API dev server, and any process connecting to Consul-named services will fail. Fix permanently:
+
+```bash
+sudo tee -a /etc/wsl.conf << 'EOF'
+[network]
+generateResolvConf = false
+EOF
+
+sudo rm /etc/resolv.conf
+echo "nameserver 127.0.0.1" | sudo tee /etc/resolv.conf
+```
 
 ### WSL mirrored networking breaks dnsmasq
 
-Do NOT use `networkingMode=mirrored` in `.wslconfig`. In mirrored mode, Windows shares the loopback interface with WSL — the Windows DNS client intercepts packets on `127.0.0.1:53` before dnsmasq sees them, causing all DNS to fail silently. Use the default WSL networking mode.
+Do NOT use `networkingMode=mirrored` in `.wslconfig`. In mirrored mode, the Windows DNS client intercepts packets on `127.0.0.1:53` before dnsmasq sees them, breaking all `.consul` DNS resolution silently.
+
+### dnsmasq and the Podman bridge
+
+dnsmasq is configured with `bind-dynamic`. The `10.88.0.1` address only exists when at least one Podman container is running. With `bind-dynamic`, dnsmasq starts without it and binds automatically when the bridge comes up — so DNS from containers works as soon as the first Nomad job starts.
 
 ### HCL heredoc indentation
 
@@ -825,28 +740,20 @@ Consul template blocks in Nomad job files must use `<<EOT` (not `<<-EOT`) with z
 
 ### Nomad job stop is async by default
 
-Always use `-detach=false` when stopping jobs in scripts:
-
-```bash
-nomad job stop -purge -detach=false <job-name>
-```
-
-Without it, the shell returns immediately while Nomad is still stopping the job, causing race conditions with container cleanup.
-
-### Static ports bind to eth0, not 127.0.0.1
-
-On WSL2, static Nomad ports bind to the WSL eth0 IP (e.g. `172.30.186.74`), not `localhost`. Use the actual IP when accessing services from the host.
+Always use `-detach=false` when stopping jobs in scripts to avoid race conditions with container cleanup.
 
 ### address_mode = "driver" is required on all jobs
 
-All `service` and `check` blocks in Nomad job files must include `address_mode = "driver"`. Without it, Consul registers the host eth0 IP instead of the container's Podman IP. Health checks will fail whenever host port forwarding is interrupted by stale containers.
+All `service` and `check` blocks must include `address_mode = "driver"`. Without it, Consul registers the host eth0 IP instead of the container's Podman IP, and health checks fail when port forwarding is interrupted.
 
 ### raw_exec must be fingerprinted after config changes
 
-If you add or modify the `raw_exec` plugin block in `nomad.hcl`, Nomad must be restarted before it appears in the driver list. Verify with:
+If the `raw_exec` plugin block is added or modified in `nomad.hcl`, Nomad must restart before it appears in the driver list:
 
 ```bash
+sudo systemctl restart nomad
 nomad node status -self | grep "Driver Status"
+# should include raw_exec
 ```
 
 ---
@@ -967,21 +874,12 @@ nomad_is_server=false
 
 ### What Needs to Be Built
 
-The following work is needed to go from single-node to cluster. None of it requires changes to the application code or Nomad job files — it is purely Ansible and configuration work.
-
 **1. Split setup.yml into three playbooks:**
 
 ```
 setup-common.yml  — runs on ALL nodes
-                    packages, Podman, dnsmasq, Node.js, pnpm,
-                    Consul client config, Nomad client config
-
 setup-server.yml  — runs on nomad_servers only
-                    Consul server, Vault, Nomad server+client,
-                    ACL bootstrap, Vault init + unseal
-
 setup-client.yml  — runs on nomad_clients only
-                    Consul client join, Nomad client join
 ```
 
 **2. Update nomad.hcl.j2 for role-aware config:**
@@ -991,67 +889,37 @@ server {
   enabled          = {{ 'true' if nomad_is_server else 'false' }}
   bootstrap_expect = {{ nomad_server_count if nomad_is_server else 0 }}
 }
-
 client {
   enabled = true
   servers = ["node-1.internal:4647", "node-2.internal:4647", "node-3.internal:4647"]
-
   {% if nomad_is_server %}
-  host_volume "postgres-data" {
-    path      = "/opt/hangar/data/postgres"
-    read_only = false
-  }
-  host_volume "redis-data" {
-    path      = "/opt/hangar/data/redis"
-    read_only = false
-  }
+  host_volume "postgres-data" { path = "/opt/hangar/data/postgres" read_only = false }
+  host_volume "redis-data"    { path = "/opt/hangar/data/redis"    read_only = false }
   {% endif %}
 }
 ```
 
-**3. Pin stateful jobs to node-1 via node constraints:**
+**3. Pin stateful jobs to node-1:**
 
 ```hcl
-# In hangar-postgres.nomad.hcl, hangar-redis.nomad.hcl,
-# hangar-registry.nomad.hcl, hangar-caddy.nomad.hcl:
 constraint {
   attribute = "${node.unique.name}"
   value     = "node-1"
 }
 ```
 
-**4. Update Consul config for server clustering:**
+**4. Templatize consul.hcl** — currently hardcoded, needs `retry_join` and `bootstrap_expect` made configurable like `nomad.hcl.j2`.
 
-Server nodes need `bootstrap_expect = 3` and `retry_join` pointing at each other. Client nodes need `retry_join` pointing at the server nodes. This is currently hardcoded in `consul.hcl` — it needs to become a Jinja2 template like `nomad.hcl.j2`.
+**5. Vault HA (optional)** — switch storage backend to Consul for true standby support.
 
-**5. Vault HA (optional):**
-
-For true Vault HA, switch the storage backend from file to Consul (`storage "consul" { path = "vault/" }`). This lets standby Vault instances on node-2 and node-3 take over if node-1 goes down. For a first cluster deployment, running Vault only on node-1 and accepting brief unavailability during node-1 restarts is a reasonable starting point.
-
-**6. Registry in multinode:**
-
-The local registry is pinned to node-1. All worker nodes pull images from `registry.service.consul:5000` over the internal network — this works automatically via Consul DNS since every node's Consul client has the full service catalog. No changes needed to job files.
-
-### Deployment Order for Cluster Bootstrap
+### Cluster Bootstrap Order
 
 ```bash
-# 1. Provision all nodes in parallel
-ansible-playbook -i inventory.ini setup-common.yml
-
-# 2. Bootstrap server nodes (Consul quorum, Nomad quorum, Vault init)
-ansible-playbook -i inventory.ini setup-server.yml
-
-# 3. Join worker nodes to the cluster
-ansible-playbook -i inventory.ini setup-client.yml
-
-# 4. Seed Vault secrets and create scoped tokens
+ansible-playbook -i inventory.ini setup-common.yml  # all nodes
+ansible-playbook -i inventory.ini setup-server.yml  # server nodes first
+ansible-playbook -i inventory.ini setup-client.yml  # then workers join
 ansible-playbook -i inventory.ini vault-init.yml
-
-# 5. Deploy infrastructure jobs (pinned to node-1)
-# registry → postgres → redis → buildkit → caddy
-
-# 6. Deploy API and web
-ansible-playbook -i inventory.ini deploy.yml
+# then deploy infra jobs + api/web
 ```
 
 ---
