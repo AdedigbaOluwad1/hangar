@@ -1,10 +1,8 @@
 import { writeLog } from '@hangar/db'
 import { emitLog } from '../lib'
-
 async function getCaddyAdmin(): Promise<string> {
   return process.env.CADDY_ADMIN_URL ?? 'http://127.0.0.1:2019'
 }
-
 async function getServiceAddress(deploymentId: string): Promise<string> {
   const CONSUL_ADDR = process.env.CONSUL_ADDR ?? 'http://10.88.0.1:8500'
   const res = await fetch(
@@ -15,7 +13,6 @@ async function getServiceAddress(deploymentId: string): Promise<string> {
   const { Address, Port } = services[0].Service
   return `${Address}:${Port}`
 }
-
 async function waitForService(deploymentId: string, retries = 20, delay = 3000): Promise<string> {
   for (let i = 0; i < retries; i++) {
     try {
@@ -26,15 +23,11 @@ async function waitForService(deploymentId: string, retries = 20, delay = 3000):
   }
   throw new Error(`Service hangar-${deploymentId} never became healthy`)
 }
-
 export async function patchCaddy(deploymentId: string, buildId: string): Promise<string> {
   const CADDY_ADMIN = await getCaddyAdmin()
-
   await writeLog(buildId, 'deploy', `🌐 Configuring Caddy route`)
   await emitLog(buildId, 'deploy', `🌐 Configuring Caddy route`)
-
   const address = await waitForService(deploymentId)
-
   const route = {
     match: [{ host: [`${deploymentId}.localhost`] }],
     handle: [
@@ -44,44 +37,38 @@ export async function patchCaddy(deploymentId: string, buildId: string): Promise
       },
     ],
   }
-
   const existing = await fetch(
     `${CADDY_ADMIN}/config/apps/http/servers/srv0/routes`
   )
-  const routes = await existing.json()
-
+  const rawRoutes = await existing.json()
+  const existingRoutes = Array.isArray(rawRoutes) ? rawRoutes : []
   const res = await fetch(
     `${CADDY_ADMIN}/config/apps/http/servers/srv0/routes`,
     {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify([route, ...routes]),
+      body: JSON.stringify([route, ...existingRoutes]),
     }
   )
-
   if (!res.ok) {
     throw new Error(`Caddy admin API error: ${res.status} ${await res.text()}`)
   }
-
   const liveUrl = `http://${deploymentId}.localhost`
   await writeLog(buildId, 'deploy', `🔗 Live at ${liveUrl}`)
   await emitLog(buildId, 'deploy', `🔗 Live at ${liveUrl}`)
   return liveUrl
 }
-
 export async function unpatchCaddy(deploymentId: string): Promise<void> {
   const CADDY_ADMIN = await getCaddyAdmin()
-
   const existing = await fetch(
     `${CADDY_ADMIN}/config/apps/http/servers/srv0/routes`
   )
-  const routes: any[] = await existing.json()
-
-  const filtered = routes.filter((route) => {
+  const rawRoutes = await existing.json()
+  const safeRoutes = Array.isArray(rawRoutes) ? rawRoutes : []
+  const filtered = safeRoutes.filter((route) => {
     const hosts: string[] = route?.match?.[0]?.host ?? []
     return !hosts.some((h) => h === `${deploymentId}.localhost`)
   })
-
   await fetch(`${CADDY_ADMIN}/config/apps/http/servers/srv0/routes`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
