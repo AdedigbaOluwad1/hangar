@@ -22,6 +22,6 @@ new Worker<DeployJobData>('deployments', async (job) => {
     resources: job.data.resources,
     rollbackImageTag: job.data.rollbackImageTag,
   })
-}, { connection })
+}, { connection, concurrency: 1 })
 
 console.log('⚡ Deploy queue worker ready')

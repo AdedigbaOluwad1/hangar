@@ -37,6 +37,17 @@ export const HealthSchema = z
   })
   .openapi('Health')
 
+export const LatestBuildSchema = z
+  .object({
+    id: z.string(),
+    status: z.enum(['building', 'deploying', 'running', 'failed', 'stopped']),
+    imageTag: z.string().nullable(),
+    createdAt: z.coerce.date(),
+    updatedAt: z.coerce.date(),
+  })
+  .nullable()
+  .openapi('LatestBuild')
+
 export const DeploymentSchema = z
   .object({
     id: z.string().openapi({ example: 'dep-a1b2c3d4' }),
@@ -51,6 +62,7 @@ export const DeploymentSchema = z
     userId: z.string().nullable().openapi({ example: null }),
     createdAt: z.coerce.date().openapi({ example: '2024-01-01T00:00:00.000Z' }),
     updatedAt: z.coerce.date().openapi({ example: '2024-01-01T00:00:00.000Z' }),
+    latestBuild: LatestBuildSchema,
   })
   .openapi('Deployment')
 
@@ -108,3 +120,6 @@ export const RollbackBodySchema = z
     tag: z.string().openapi({ example: '01966a1e-7c4f-7000-8000-1234567890ab' }),
   })
   .openapi('RollbackBody')
+
+
+

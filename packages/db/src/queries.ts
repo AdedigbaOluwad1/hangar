@@ -13,12 +13,36 @@ export async function createDeployment(data: {
   return prisma.deployment.create({ data })
 }
 
-export async function getDeployment(id: string): Promise<Deployment | null> {
-  return prisma.deployment.findUnique({ where: { id } })
+export async function getDeployment(id: string): Promise<(Deployment & { latestBuild: Build | null }) | null> {
+  return prisma.deployment.findUnique({
+    where: { id },
+    include: {
+      builds: {
+        orderBy: { createdAt: 'desc' },
+        take: 1,
+      },
+    },
+  }).then(d => {
+    if (!d) return null
+    const { builds, ...deployment } = d
+    return { ...deployment, latestBuild: builds[0] ?? null }
+  })
 }
 
-export async function listDeployments(): Promise<Deployment[]> {
-  return prisma.deployment.findMany({ orderBy: { createdAt: 'desc' } })
+export async function listDeployments(): Promise<(Deployment & { latestBuild: Build | null })[]> {
+  const deployments = await prisma.deployment.findMany({
+    orderBy: { createdAt: 'desc' },
+    include: {
+      builds: {
+        orderBy: { createdAt: 'desc' },
+        take: 1,
+      },
+    },
+  })
+  return deployments.map(({ builds, ...deployment }) => ({
+    ...deployment,
+    latestBuild: builds[0] ?? null,
+  }))
 }
 
 export async function updateDeployment(
@@ -57,6 +81,7 @@ export async function listBuilds(deploymentId: string): Promise<Build[]> {
   return prisma.build.findMany({
     where: { deploymentId },
     orderBy: { createdAt: 'desc' },
+    take: 100,
   })
 }
 

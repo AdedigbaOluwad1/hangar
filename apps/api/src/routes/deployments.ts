@@ -133,7 +133,7 @@ deployments.openapi(createRoute_, async (c) => {
     resources: body.resources,
   })
 
-  return c.json(deployment, 201)
+  return c.json({ ...deployment, latestBuild: build }, 201)
 })
 
 // ── DELETE /:id — stop + remove ───────────────────────────
