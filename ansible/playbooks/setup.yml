@@ -497,6 +497,34 @@
         state: present
       when: nomad_check.rc != 0
 
+    - name: Check if nomad-driver-podman is installed
+      stat:
+        path: /opt/nomad/plugins/nomad-driver-podman
+      register: podman_driver_check
+
+    - name: Install nomad-driver-podman
+      become: true
+      apt:
+        name: nomad-driver-podman
+        state: present
+      when: not podman_driver_check.stat.exists
+
+    - name: Create Nomad plugin directory
+      become: true
+      file:
+        path: /opt/nomad/plugins
+        state: directory
+        mode: "0755"
+
+    - name: Copy nomad-driver-podman to plugin dir
+      become: true
+      copy:
+        src: /usr/bin/nomad-driver-podman
+        dest: /opt/nomad/plugins/nomad-driver-podman
+        remote_src: true
+        mode: "0755"
+      when: not podman_driver_check.stat.exists
+
     - name: Create Nomad data directory
       become: true
       file:
