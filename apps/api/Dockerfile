@@ -7,7 +7,7 @@ RUN curl -sSL https://mise.run | sh
 ENV PATH="/root/.local/bin:$PATH"
 
 # install railpack
-RUN curl -sSL https://railpack.com/install.sh | sh
+RUN RAILPACK_VERSION=0.23.0 curl -sSL https://railpack.com/install.sh | sh
 
 # install pnpm and tsx globally
 RUN npm install -g pnpm tsx
