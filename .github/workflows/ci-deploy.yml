@@ -107,7 +107,7 @@ jobs:
           echo "Host IP: $HOST_IP"
           echo "host_ip=$HOST_IP" >> $GITHUB_OUTPUT
 
-          RESPONSE=$(curl -sf -X POST "http://$HOST_IP:3001/api/deployments" \
+          RESPONSE=$(curl -s -X POST "http://$HOST_IP:3001/api/deployments" \
             -H "Content-Type: application/json" \
             -d '{
               "sourceType": "git",
