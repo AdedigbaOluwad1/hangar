@@ -5,7 +5,7 @@ Requires=network-online.target
 After=network-online.target consul.service
 
 [Service]
-ExecStart=/usr/bin/nomad agent -config={{ hangar_dir }}/nomad/config/nomad.hcl
+ExecStart=/usr/bin/nomad agent -config=/etc/nomad.d/nomad.hcl
 ExecReload=/bin/kill -HUP $MAINPID
 KillMode=process
 KillSignal=SIGINT
