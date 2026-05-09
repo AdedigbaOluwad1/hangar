@@ -9,7 +9,7 @@ const app = new OpenAPIHono()
 
 app.use('*', cors());
 app.get('/health', (c) => c.json({ ok: true }));
-app.get('/docs', swaggerUI({ url: '/api/openapi.json' }))
+app.get('/docs', swaggerUI({ url: '/openapi.json' }))
 app.route('/deployments', deployments)
 app.route('/deployments', logs)
 
@@ -20,7 +20,7 @@ app.doc('/openapi.json', {
     version: '1.0.0',
     description: 'Self-hosted PaaS API — deployments, logs, and service management',
   },
-  servers: [{ url: 'http://localhost/api', description: 'Local dev' }],
+  servers: [{ url: 'http://localhost:3001', description: 'Local dev' }],
 })
 
 if (process.env.SWAGGER_ENABLED === 'true') {
