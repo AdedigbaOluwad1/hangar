@@ -2,11 +2,11 @@
   "extends": "../../tsconfig.json",
   "compilerOptions": {
     "module": "CommonJS",
-    "moduleResolution": "node",
+    "moduleResolution": "node10",
+    "ignoreDeprecations": "6.0",
     "esModuleInterop": true,
     "noEmit": false,
     "outDir": "dist",
-    "ignoreDeprecations":"5.0",
     "rootDir": "src",
     "lib": ["ES2022", "DOM"],
     "types": ["node"]
