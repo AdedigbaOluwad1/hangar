@@ -7,7 +7,8 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "build": "tsc --project tsconfig.json"
+    "build": "tsc --project tsconfig.json",
+    "migrate:deploy": "prisma migrate deploy"
   },
   "dependencies": {
     "@hangar/types": "workspace:^",
@@ -20,6 +21,7 @@
     "@types/node": "^22",
     "@types/pg": "^8.20.0",
     "cpx2": "^7.0.0",
+    "dotenv-cli": "^11.0.0",
     "prisma": "^7.8.0"
   }
 }

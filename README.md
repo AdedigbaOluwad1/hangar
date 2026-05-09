@@ -62,8 +62,8 @@ All workloads run as Nomad jobs with the Podman driver. There is no Docker daemo
 | Job | Type | Port | Notes |
 |---|---|---|---|
 | `hangar-registry` | service | 5000 (static) | Local OCI registry |
-| `hangar-postgres` | service | 5432 (dynamic) | App database |
-| `hangar-redis` | service | 6379 (dynamic) | Queue + pub/sub |
+| `hangar-postgres` | service | 5432 (static) | App database |
+| `hangar-redis` | service | 6379 (static) | Queue + pub/sub |
 | `hangar-buildkit` | service | 1234 (static) | Image builder |
 | `hangar-api` | service | 3001 (static) | Hono API server |
 | `hangar-web` | service | 5173 (static) | React frontend |
@@ -111,6 +111,16 @@ On every request, Caddy resolves the current healthy IP from Consul directly. Wh
 
 For user-deployed apps, routes are injected at runtime via Caddy's admin API at port 2019.
 
+### Image Tagging and Registry GC
+
+Each build pushes two tags to the local registry:
+
+- `registry.service.consul:5000/hangar-<deploymentId>:<uuidv7>` — versioned, time-sortable
+- `registry.service.consul:5000/hangar-<deploymentId>:latest` — always points to current
+- `registry.service.consul:5000/hangar-<deploymentId>:cache` — BuildKit layer cache (never GC'd)
+
+The last 3 versioned tags are retained per deployment. On each new build, tags beyond that limit are deleted from the registry before the new image is pushed. The `:cache` tag is excluded from GC and persists across builds to speed up subsequent builds via BuildKit's `--import-cache` / `--export-cache`.
+
 ### Secrets Flow
 
 Vault uses Nomad workload identity (JWT) for auth — no static tokens anywhere in job files:
@@ -150,6 +160,7 @@ The deploy token is seeded into Vault at `hangar/data/config.nomad_token` so the
 ```
 apps/
   api/                        — Hono API server (TypeScript)
+    .env.local                — local dev env vars (gitignored)
     src/
       lib/
         config.ts             — Vault client, getConfig(), env loading
@@ -166,7 +177,7 @@ apps/
         run.ts                — getUserEnv from Vault, submitJob to Nomad
         caddy.ts              — waitForService in Consul, patchCaddy, unpatchCaddy
       routes/
-        deployments.ts        — deployment CRUD, health, redeploy
+        deployments.ts        — deployment CRUD, health, redeploy, tags, rollback
         logs.ts               — SSE log streaming from Redis
         auth.ts               — GitHub OAuth routes
       schemas/
@@ -185,8 +196,6 @@ nomad/
     hangar-postgres.nomad.hcl
     hangar-redis.nomad.hcl
     hangar-registry.nomad.hcl
-  config/
-    nomad.hcl                 — Nomad agent config (ACL, Podman plugin, Vault integration)
 
 consul/
   config/
@@ -527,55 +536,61 @@ curl -s http://127.0.0.1:8500/v1/health/service/caddy?passing=true | jq '.[0].Se
 ### 10. Run Migrations
 
 ```bash
-cd packages/db
-pnpm prisma migrate deploy
+pnpm --filter @hangar/db migrate:deploy
 ```
 
-### 11. Run API and Web Dev Servers
+### 11. Set Up `apps/api/.env.local`
 
-Open two terminals:
-
-**Terminal 1 — API:**
+The API dev server uses `dotenv-cli` to load `apps/api/.env.local` before starting. Create it:
 
 ```bash
-export VAULT_ADDR=https://127.0.0.1:8200
-export VAULT_SKIP_VERIFY=true
+cat > apps/api/.env.local << 'EOF'
+REDIS_URL=redis://redis.service.consul:6379
+DATABASE_URL=postgresql://hangar:hangar@postgres.service.consul:5432/hangar
+VAULT_ADDR=https://127.0.0.1:8200
+VAULT_SKIP_VERIFY=true
+NOMAD_ADDR=http://10.88.0.1:4646
+CONSUL_ADDR=http://10.88.0.1:8500
+CADDY_ADMIN_URL=http://caddy.service.consul:2019
+BUILDKIT_HOST=tcp://buildkit.service.consul:1234
+REGISTRY_HOST=registry.service.consul:5000
+EOF
+```
+
+`VAULT_TOKEN` and `NOMAD_TOKEN` are intentionally excluded — they come from root-owned files and must be exported per session (see step 12).
+
+This file is gitignored. Never commit it.
+
+### 12. Start Infrastructure Jobs
+
+`dev.sh` runs `setup.yml`, `vault-init.yml`, and deploys the five infrastructure Nomad jobs (registry, postgres, redis, buildkit, caddy). It does **not** deploy `hangar-api` or `hangar-web` — those ports are left free for the dev servers.
+
+```bash
+./dev.sh
+```
+
+Caddy is included because it handles user deployment routes patched in at runtime. The base `/api/*` and `/` routes will fail to resolve in Caddy (since the api and web aren't Nomad jobs in dev) but that's fine — you hit those directly via `localhost:3001` and `localhost:5173`.
+
+### 13. Run Dev Servers
+
+```bash
+# Load root-owned tokens (required every session)
 export VAULT_TOKEN=$(sudo cat /etc/vault.d/keys/init.json | jq -r '.root_token')
 export NOMAD_TOKEN=$(sudo cat /etc/nomad.d/deploy.json | jq -r '.SecretID')
-export NOMAD_ADDR=http://10.88.0.1:4646
-export CONSUL_ADDR=http://10.88.0.1:8500
-export DATABASE_URL="postgresql://hangar:hangar@postgres.service.consul:5432/hangar"
-export REDIS_URL="redis://redis.service.consul:6379"
-export CADDY_ADMIN_URL="http://caddy.service.consul:2019"
-export BUILDKIT_HOST="tcp://buildkit.service.consul:1234"
-export REGISTRY_HOST="registry.service.consul:5000"
 
-cd apps/api
+# From the repo root — starts both API and web via Turborepo
 pnpm dev
 ```
 
-**Terminal 2 — Web:**
-
-```bash
-cd apps/web
-pnpm dev
-```
-
-The API runs on `http://localhost:3001` and the web on `http://localhost:5173`.
+The API's dev script (`dotenv -e .env.local -- tsx watch src/index.ts`) loads `apps/api/.env.local` automatically. The two exported tokens are passed through from the shell environment. The API runs on `http://localhost:3001` and the web on `http://localhost:5173`.
 
 > **Note:** When running the API directly on the host (not as a Nomad job), Vault workload identity JWT auth is not available. Set `VAULT_TOKEN` directly as shown above. The API's `config.ts` falls back to `VAULT_TOKEN` env var when not running inside a Nomad alloc.
 
-### 12. Restarting After a Reboot
+### 14. Restarting After a Reboot
 
 After a reboot (or WSL restart), services need to be brought back up in order:
 
 ```bash
-# Load env
-export NOMAD_TOKEN=$(sudo cat /etc/nomad.d/operator.json | jq -r '.SecretID')
-export VAULT_ADDR=https://127.0.0.1:8200
-export VAULT_SKIP_VERIFY=true
-export VAULT_TOKEN=$(sudo cat /etc/vault.d/keys/init.json | jq -r '.root_token')
-
 # Start services
 sudo systemctl start consul
 sleep 3
@@ -590,8 +605,8 @@ bash vault/scripts/unseal.sh
 # Restart dnsmasq (Podman bridge needs to be up first)
 sudo systemctl restart dnsmasq
 
-# Redeploy Nomad jobs (or just run deploy.sh)
-./deploy.sh
+# Redeploy infra jobs
+./dev.sh
 ```
 
 ---
@@ -734,6 +749,22 @@ curl -s http://<host-ip>/deployments/<id>/logs
 | `POST` | `/deployments/:id/redeploy` | Redeploy from the same source |
 | `GET` | `/deployments/:id/health` | Check deployment health via Nomad |
 | `GET` | `/deployments/:id/logs` | Stream build + deploy logs over SSE |
+| `GET` | `/deployments/:id/tags` | List available image tags for rollback (last 3, newest first) |
+| `POST` | `/deployments/:id/rollback` | Roll back to a previous image tag — skips build |
+
+### Rollback
+
+```bash
+# List available tags
+curl http://<host-ip>/deployments/<id>/tags
+
+# Roll back to a specific tag
+curl -X POST http://<host-ip>/deployments/<id>/rollback \
+  -H "Content-Type: application/json" \
+  -d '{ "tag": "<uuidv7-tag>" }'
+```
+
+Rollback skips clone and build entirely — it reuses the existing image from the registry and goes straight to `runContainer` → `patchCaddy`. The previous deployment is stopped once the rollback is live.
 
 ### Deployment Status Values
 
@@ -783,6 +814,10 @@ Nomad workload identity tokens expire after 1 hour. If the API alloc reports `fa
 ### dnsmasq and the Podman bridge
 
 dnsmasq is configured with `bind-dynamic` and listens on both `127.0.0.1` and `10.88.0.1`. The `10.88.0.1` address only exists when at least one Podman container is running (it's the bridge gateway). With `bind-dynamic`, dnsmasq starts without it and binds to it automatically when the bridge comes up. This means DNS from containers works as soon as the first Nomad job starts.
+
+### WSL mirrored networking breaks dnsmasq
+
+Do NOT use `networkingMode=mirrored` in `.wslconfig`. In mirrored mode, Windows shares the loopback interface with WSL — the Windows DNS client intercepts packets on `127.0.0.1:53` before dnsmasq sees them, causing all DNS to fail silently. Use the default WSL networking mode.
 
 ### HCL heredoc indentation
 
@@ -893,7 +928,7 @@ A production Hangar cluster looks like this:
                             │
                ┌────────────┼────────────┐
                │            │            │
-     ┌─────────┴───┐ ┌──────┴──┐ ┌───────┴─┐
+     ┌─────────┴───┐ ┌──────┴──┐ ┌──────┴──┐
      │  WORKER 1   │ │WORKER 2 │ │WORKER 3 │
      │             │ │         │ │         │
      │ Nomad Client│ │  same   │ │  same   │
@@ -1023,11 +1058,8 @@ ansible-playbook -i inventory.ini deploy.yml
 
 ## What's Next
 
-- **Registry GC** — delete old images from the local registry after successful redeploy
 - **GitHub OAuth** — private repo support, user-scoped deployments
 - **Custom domains** — user-provided domains beyond `.localhost`
-- **Build cache reuse** — BuildKit cache persistence across deployments
-- **Rollback** — redeploy a previous image tag
 - **Multinode** — Ansible playbook split into `setup-common.yml`, `setup-server.yml`, `setup-client.yml` is the remaining implementation work (design complete — see Multinode Cluster Plan above)
 - **Staging cluster** — provision nodes, uncomment staging deploy job in CI
 
