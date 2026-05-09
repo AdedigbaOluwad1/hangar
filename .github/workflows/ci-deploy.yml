@@ -107,7 +107,7 @@ jobs:
           echo "Host IP: $HOST_IP"
           echo "host_ip=$HOST_IP" >> $GITHUB_OUTPUT
 
-          RESPONSE=$(curl -s -X POST "http://$HOST_IP:3001/api/deployments" \
+          RESPONSE=$(curl -s -X POST "http://$HOST_IP:3001/deployments" \
             -H "Content-Type: application/json" \
             -d '{
               "sourceType": "git",
@@ -137,7 +137,7 @@ jobs:
           echo "Polling deployment $DEPLOYMENT_ID..."
 
           while [ "$attempt" -lt "$MAX_ATTEMPTS" ]; do
-            STATUS=$(curl -sf "http://$HOST_IP:3001/api/deployments/$DEPLOYMENT_ID" \
+            STATUS=$(curl -sf "http://$HOST_IP:3001/deployments/$DEPLOYMENT_ID" \
               | jq -r '.status // empty')
             echo "  attempt $((attempt+1)): status=$STATUS"
 
@@ -148,14 +148,14 @@ jobs:
 
             if [ "$STATUS" = "failed" ]; then
               echo "❌ Deployment failed"
-              curl -sf "http://$HOST_IP:3001/api/deployments/$DEPLOYMENT_ID" | jq .
+              curl -sf "http://$HOST_IP:3001/deployments/$DEPLOYMENT_ID" | jq .
               exit 1
             fi
 
             attempt=$((attempt + 1))
             if [ "$attempt" -ge "$MAX_ATTEMPTS" ]; then
               echo "❌ Deployment timed out after $((MAX_ATTEMPTS * 5))s"
-              curl -sf "http://$HOST_IP:3001/api/deployments/$DEPLOYMENT_ID" | jq .
+              curl -sf "http://$HOST_IP:3001/deployments/$DEPLOYMENT_ID" | jq .
               exit 1
             fi
 
@@ -169,7 +169,7 @@ jobs:
           DEPLOYMENT_ID="${{ steps.trigger.outputs.deployment_id }}"
           HOST_IP="${{ steps.trigger.outputs.host_ip }}"
 
-          LIVE_URL=$(curl -sf "http://$HOST_IP:3001/api/deployments/$DEPLOYMENT_ID" \
+          LIVE_URL=$(curl -sf "http://$HOST_IP:3001/deployments/$DEPLOYMENT_ID" \
             | jq -r '.liveUrl // empty')
           echo "Live URL: $LIVE_URL"
 
