@@ -1,5 +1,5 @@
 FROM node:20-alpine AS base
-RUN npm install -g pnpm
+RUN npm install -g pnpm@9.0.0
 
 # ── Dependencies ──────────────────────────────────────────────────────────────
 FROM base AS deps
@@ -21,7 +21,7 @@ RUN pnpm build
 
 # ── Production ────────────────────────────────────────────────────────────────
 FROM node:20-alpine AS runner
-RUN npm install -g pnpm
+RUN npm install -g pnpm@9.0.0
 
 WORKDIR /app
 
