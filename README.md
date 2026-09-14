@@ -660,8 +660,10 @@ Navigate to `http://<host-ip>` and paste a public Git URL into the deployment fo
 
 ### Via the API
 
+> All external requests go through Caddy, which only routes `/api/*` (stripping the prefix) to the API service — everything else goes to the web frontend. Hit the API at `/api/...`, not bare `/...`.
+
 ```bash
-curl -X POST http://<host-ip>/deployments \
+curl -X POST http://<host-ip>/api/deployments \
   -H "Content-Type: application/json" \
   -d '{
     "sourceType": "git",
@@ -672,7 +674,7 @@ curl -X POST http://<host-ip>/deployments \
 Stream logs for a specific build:
 
 ```bash
-curl -s "http://<host-ip>/deployments/<id>/logs?buildId=<buildId>"
+curl -s "http://<host-ip>/api/deployments/<id>/logs?buildId=<buildId>"
 ```
 
 ### Test Apps
@@ -682,6 +684,8 @@ curl -s "http://<host-ip>/deployments/<id>/logs?buildId=<buildId>"
 ---
 
 ## API Reference
+
+> Paths below are as implemented by the API service. Through Caddy in production, prefix each with `/api` (e.g. `GET /deployments` → `GET http://<host-ip>/api/deployments`) — Caddy strips `/api` before forwarding.
 
 ### Deployments
 
@@ -739,10 +743,10 @@ All deployment endpoints return `latestBuild` inline — no separate request nee
 
 ```bash
 # List available tags
-curl http://<host-ip>/deployments/<id>/tags
+curl http://<host-ip>/api/deployments/<id>/tags
 
 # Roll back to a specific tag
-curl -X POST http://<host-ip>/deployments/<id>/rollback \
+curl -X POST http://<host-ip>/api/deployments/<id>/rollback \
   -H "Content-Type: application/json" \
   -d '{ "tag": "<uuidv7-tag>" }'
 ```
