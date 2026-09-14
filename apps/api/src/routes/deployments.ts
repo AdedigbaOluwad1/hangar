@@ -324,7 +324,12 @@ deployments.openapi(rollbackRoute, async (c) => {
   const registryHost = process.env.REGISTRY_HOST ?? 'registry.hangar.local:5000'
   const checkRes = await fetch(
     `http://${registryHost}/v2/hangar-${id}/manifests/${tag}`,
-    { headers: { Accept: 'application/vnd.docker.distribution.manifest.v2+json' } }
+    {
+      headers: {
+        Accept:
+          'application/vnd.docker.distribution.manifest.v2+json, application/vnd.oci.image.manifest.v1+json',
+      },
+    }
   )
   if (!checkRes.ok) return c.json({ error: `Tag ${tag} not found in registry` }, 400)
 

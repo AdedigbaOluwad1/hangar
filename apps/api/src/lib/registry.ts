@@ -23,7 +23,10 @@ export async function gcOldTags(registryHost: string, deploymentId: string): Pro
     if (await isBuildTagInUse(tag)) continue
 
     const headRes = await fetch(`${base}/manifests/${tag}`, {
-      headers: { Accept: 'application/vnd.docker.distribution.manifest.v2+json' },
+      headers: {
+        Accept:
+          'application/vnd.docker.distribution.manifest.v2+json, application/vnd.oci.image.manifest.v1+json',
+      },
     })
     if (!headRes.ok) continue
 
@@ -54,7 +57,12 @@ export async function getAvailableTags(registryHost: string, deploymentId: strin
 export async function tagExists(registryHost: string, deploymentId: string, tag: string): Promise<boolean> {
   const res = await fetch(
     `http://${registryHost}/v2/hangar-${deploymentId}/manifests/${tag}`,
-    { headers: { Accept: 'application/vnd.docker.distribution.manifest.v2+json' } }
+    {
+      headers: {
+        Accept:
+          'application/vnd.docker.distribution.manifest.v2+json, application/vnd.oci.image.manifest.v1+json',
+      },
+    }
   )
   return res.ok
 }
