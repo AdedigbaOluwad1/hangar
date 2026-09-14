@@ -511,6 +511,32 @@ Turborepo starts both the API (`localhost:3001`) and web (`localhost:5173`) with
 
 ---
 
+### Accessing Dev Servers From Another Machine
+
+The dev servers only bind to `localhost` on this box, and Vite's `allowedHosts` is locked to `hangar.local`/`localhost` — so reach them from your own machine via an SSH tunnel rather than exposing them on the network. Connect over Tailscale (`100.84.233.103`) rather than the LAN IP — it's stable across DHCP renewals and works from anywhere in the tailnet, not just the same LAN:
+
+```bash
+ssh -L 5100:localhost:5173 -L 3100:localhost:3001 -L 8080:192.168.20.235:80 oluwadarasimi@100.84.233.103 -N
+```
+
+| Local URL | What it is |
+|---|---|
+| `http://localhost:5100` | Web UI |
+| `http://localhost:3100` | API (`/health`, `/docs` for Swagger) |
+| `http://localhost:8080` | Caddy (port 80) — for hitting deployed apps at `<id>.localhost` |
+
+The local ports (`5100`/`3100`/`8080`) are arbitrary — pick whatever's free on your machine. The remote side must stay exactly `localhost:5173` / `localhost:3001` / `192.168.20.235:80` — the `192.168.20.235:80` target is not a Tailscale/LAN choice, it's fixed: Caddy binds to the host's eth0 IP specifically, not `localhost` or the Tailscale interface (see [Networking](#networking)). Only the SSH connection target (`oluwadarasimi@...`) is the Tailscale IP; the forward destinations are unaffected by how you connect.
+
+To open a deployed app's `<id>.localhost` URL through the `8080` forward, add it to your local hosts file first — `.localhost` always resolves to loopback on your own machine, so it needs to be told to route through the tunnel instead:
+
+```bash
+sudo sh -c 'echo "127.0.0.1 <deployment-id>.localhost" >> /etc/hosts'
+```
+
+Then visit `http://<deployment-id>.localhost:8080`.
+
+---
+
 ### Day-to-Day (After First-Time Setup)
 
 Every session after the first, regenerate `.env.local` with fresh tokens (Vault token and Nomad token change on reboot/reinit), then start the servers:
