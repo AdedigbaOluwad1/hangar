@@ -1,78 +1,105 @@
-// apps/web/app/components/DeploymentList.tsx
+// apps/web/app/components/deployment-list.tsx
+import { Link } from 'react-router';
+import { HugeiconsIcon } from '@hugeicons/react';
+import { ArrowRight01Icon, ExternalLinkIcon } from '@hugeicons/core-free-icons';
 import type { Deployment } from '@hangar/types';
+import { JetPlan } from '../story/art/jet';
+import { StatusBadge } from './status-badge';
+import { buttonVariants } from './ui/button';
+import { formatRelativeTime, repoName, shortId } from '../lib/format';
 
-const STATUS_COLORS: Record<string, string> = {
-	pending: '#888',
-	building: '#f5a623',
-	deploying: '#4a90e2',
-	running: '#27ae60',
-	failed: '#e74c3c',
+const JET_TONE: Record<string, string> = {
+	running: '#46e39a',
+	building: '#ffb24a',
+	deploying: '#ffd391',
+	failed: '#f2676b',
 };
 
-export function DeploymentList({
-	deployments,
-	selectedId,
-	onSelect,
-}: {
-	deployments: Deployment[];
-	selectedId: string | null;
-	onSelect: (id: string) => void;
-}) {
-	if (deployments.length === 0) {
-		return <p style={{ color: '#888' }}>No deployments yet.</p>;
-	}
+export function deploymentStatus(d: Deployment) {
+	return d.latestBuild?.status ?? d.status;
+}
+
+export function DeploymentList({ deployments }: { deployments: Deployment[] }) {
+	if (deployments.length === 0) return <EmptyHangar />;
 
 	return (
-		<div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-			{deployments.map((d) => (
-				<div
-					key={d.id}
-					onClick={() => onSelect(d.id)}
-					style={{
-						padding: '0.75rem 1rem',
-						border: `1px solid ${d.id === selectedId ? '#4a90e2' : '#333'}`,
-						borderRadius: '4px',
-						cursor: 'pointer',
-						background: d.id === selectedId ? '#1a1a2e' : 'transparent',
-					}}
-				>
-					<div
-						style={{
-							display: 'flex',
-							justifyContent: 'space-between',
-							alignItems: 'center',
-						}}
+		<ul className="panel divide-y divide-line overflow-hidden">
+			{deployments.map((d) => {
+				const status = deploymentStatus(d);
+				return (
+					<li
+						key={d.id}
+						data-reveal
+						className="group relative grid grid-cols-[auto_1fr_auto] items-center gap-4 px-4 py-4 transition-colors duration-300 ease-settle hover:bg-night-850 md:grid-cols-[auto_minmax(0,1fr)_auto_auto_auto] md:px-5"
 					>
-						<code style={{ fontSize: '0.85rem' }}>{d.id}</code>
-						<span
-							style={{
-								color: STATUS_COLORS[d.status] ?? '#888',
-								fontSize: '0.8rem',
-								fontWeight: 'bold',
-								textTransform: 'uppercase',
-							}}
-						>
-							{d.status}
+						<JetPlan
+							color={JET_TONE[status] ?? '#6b7891'}
+							className="h-7 w-5 rotate-90 opacity-80 transition-transform duration-500 ease-settle group-hover:translate-y-[-4px]"
+						/>
+						<div className="min-w-0">
+							{/* the row's link stretches over the whole row; Visit sits above it */}
+							<Link
+								to={`/deployments/${d.id}`}
+								className="block truncate font-medium text-steel-100 after:absolute after:inset-0"
+							>
+								{repoName(d.sourceUrl) ?? shortId(d.id)}
+							</Link>
+							<p className="mt-0.5 truncate font-code text-[11px] text-steel-500">{d.id}</p>
+						</div>
+						<StatusBadge status={status} />
+						{d.liveUrl ? (
+							<a
+								href={d.liveUrl}
+								target="_blank"
+								rel="noreferrer"
+								className="relative z-10 hidden items-center gap-1.5 font-code text-[11px] text-steel-400 transition-colors hover:text-signal-400 md:inline-flex"
+							>
+								Visit
+								<HugeiconsIcon icon={ExternalLinkIcon} className="h-3 w-3" />
+							</a>
+						) : (
+							<span className="hidden md:block" />
+						)}
+						<span className="hidden items-center gap-3 font-code text-[11px] text-steel-500 md:inline-flex">
+							{formatRelativeTime(d.updatedAt)}
+							<HugeiconsIcon
+								icon={ArrowRight01Icon}
+								className="h-4 w-4 text-steel-500 transition-transform duration-300 ease-settle group-hover:translate-x-1 group-hover:text-steel-100"
+							/>
 						</span>
-					</div>
-					<div
-						style={{ fontSize: '0.8rem', color: '#888', marginTop: '0.25rem' }}
-					>
-						{d.sourceUrl}
-					</div>
-					{d.liveUrl && (
-						<a
-							href={d.liveUrl}
-							target='_blank'
-							rel='noreferrer'
-							onClick={(e) => e.stopPropagation()}
-							style={{ fontSize: '0.8rem', color: '#4a90e2' }}
-						>
-							{d.liveUrl}
-						</a>
-					)}
-				</div>
-			))}
+					</li>
+				);
+			})}
+		</ul>
+	);
+}
+
+function EmptyHangar() {
+	return (
+		<div data-reveal className="panel relative overflow-hidden px-6 py-16 text-center md:py-20">
+			<div
+				aria-hidden="true"
+				className="blueprint-grid absolute inset-0 opacity-50 [mask-image:radial-gradient(closest-side,black,transparent)]"
+			/>
+			<div className="relative">
+				<svg viewBox="0 0 100 140" aria-hidden="true" className="mx-auto h-20 w-16 rotate-90">
+					<path
+						d="M50,2 L56,22 L58,60 L97,92 L97,100 L59,94 L60,120 L78,127 L78,134 L56,136 L44,136 L22,134 L22,127 L40,120 L41,94 L3,100 L3,92 L42,60 L44,22 Z"
+						fill="none"
+						stroke="rgb(143 170 220 / 0.6)"
+						strokeDasharray="4 4"
+					/>
+				</svg>
+				<p className="eyebrow mt-6">Bay empty</p>
+				<h2 className="display mt-3 text-4xl md:text-5xl">Nothing on deck yet.</h2>
+				<p className="mx-auto mt-4 max-w-sm text-sm leading-relaxed text-steel-400">
+					Push a Git URL. Hangar builds it, schedules it on Nomad and routes it through Caddy.
+				</p>
+				<Link to="/deployments/new" className={buttonVariants({ className: 'mt-8' })}>
+					Deploy your first app
+					<HugeiconsIcon icon={ArrowRight01Icon} className="h-4 w-4" />
+				</Link>
+			</div>
 		</div>
 	);
 }
