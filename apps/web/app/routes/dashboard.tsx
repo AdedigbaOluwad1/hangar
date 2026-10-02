@@ -49,6 +49,7 @@ export default function Dashboard() {
 	});
 	useReveal(scope, !isLoading);
 
+	const emptyHangar = !isLoading && !isError && deployments.length === 0;
 	const count = (statuses: string[]) => deployments.filter((d) => statuses.includes(deploymentStatus(d))).length;
 
 	return (
@@ -63,10 +64,12 @@ export default function Dashboard() {
 
 			<Header
 				action={
-					<Link to={paths.newDeployment} className={buttonVariants({ size: 'sm' })}>
-						<HugeiconsIcon icon={PlusSignIcon} className="h-3.5 w-3.5" />
-						New deployment
-					</Link>
+					emptyHangar ? undefined : (
+						<Link to={paths.newDeployment} className={buttonVariants({ size: 'sm' })}>
+							<HugeiconsIcon icon={PlusSignIcon} className="h-3.5 w-3.5" />
+							New deployment
+						</Link>
+					)
 				}
 			/>
 
