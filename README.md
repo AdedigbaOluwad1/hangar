@@ -529,8 +529,17 @@ Turborepo starts both the API (`localhost:3001`) and web (`localhost:5173`) with
 
 The dev servers only bind to `localhost` on this box, and Vite's `allowedHosts` is locked to `hangar.local`/`localhost` — so reach them from your own machine via an SSH tunnel rather than exposing them on the network. Connect over Tailscale (`100.84.233.103`) rather than the LAN IP — it's stable across DHCP renewals and works from anywhere in the tailnet, not just the same LAN:
 
+Caddy binds to the host's eth0 IP, which DHCP can change, so look it up on the server first:
+
 ```bash
-ssh -L 5100:localhost:5173 -L 3100:localhost:3001 -L 8080:192.168.20.235:80 oluwadarasimi@100.84.233.103 -N
+ss -ltn | grep -oE '[0-9.]+:80 ' | cut -d: -f1
+# → 192.168.20.4
+```
+
+Then, on your machine, use that address for the Caddy forward:
+
+```bash
+ssh -L 5100:localhost:5173 -L 3100:localhost:3001 -L 8080:<caddy-ip>:80 oluwadarasimi@100.84.233.103 -N
 ```
 
 | Local URL | What it is |
@@ -539,7 +548,7 @@ ssh -L 5100:localhost:5173 -L 3100:localhost:3001 -L 8080:192.168.20.235:80 oluw
 | `http://localhost:3100` | API (`/health`, `/docs` for Swagger) |
 | `http://localhost:8080` | Caddy (port 80) — for hitting deployed apps at `<id>.localhost` |
 
-The local ports (`5100`/`3100`/`8080`) are arbitrary — pick whatever's free on your machine. The remote side must stay exactly `localhost:5173` / `localhost:3001` / `192.168.20.235:80` — the `192.168.20.235:80` target is not a Tailscale/LAN choice, it's fixed: Caddy binds to the host's eth0 IP specifically, not `localhost` or the Tailscale interface (see [Networking](#networking)). Only the SSH connection target (`oluwadarasimi@...`) is the Tailscale IP; the forward destinations are unaffected by how you connect.
+The local ports (`5100`/`3100`/`8080`) are arbitrary — pick whatever's free on your machine. The remote side must stay `localhost:5173` / `localhost:3001` / `<caddy-ip>:80`. The Caddy target is not a Tailscale/LAN choice: Caddy binds to the host's eth0 IP specifically, not `localhost` or the Tailscale interface (see [Networking](#networking)), so it must be whatever the `ss` command above prints. Only the SSH connection target (`oluwadarasimi@...`) is the Tailscale IP; the forward destinations are unaffected by how you connect.
 
 To open a deployed app's `<id>.localhost` URL through the `8080` forward, add it to your local hosts file first — `.localhost` always resolves to loopback on your own machine, so it needs to be told to route through the tunnel instead:
 
