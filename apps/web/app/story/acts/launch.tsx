@@ -322,62 +322,69 @@ export function LaunchAct() {
 				</div>
 			</div>
 
-			<div
-				data-terminal
-				className="absolute inset-x-4 bottom-6 z-20 rounded-xl border border-line bg-night-900/95 shadow-[0_30px_80px_-20px_rgb(0_0_0/0.8)] md:inset-x-auto md:bottom-auto md:right-10 md:top-28 md:w-[540px]"
-			>
-				<div className="flex items-center justify-between border-b border-line px-4 py-3">
-					<p className="font-code text-mono text-steel-400">
-						hangar · deployment <span className="text-steel-100">{SHORT_ID}</span>
-					</p>
-					<span className="relative grid">
-						<span
-							data-pill-deploying
-							className="col-start-1 row-start-1 inline-flex items-center gap-1.5 rounded-full border border-deck-400/40 px-2 py-0.5 font-code text-micro uppercase tracking-wider text-deck-300"
-							style={{ visibility: 'hidden' }}
-						>
-							<span className="h-1.5 w-1.5 rounded-full bg-deck-400" />
-							Deploying
-						</span>
-						<span
-							data-pill-live
-							className="col-start-1 row-start-1 inline-flex items-center gap-1.5 rounded-full border border-signal-400/40 px-2 py-0.5 font-code text-micro uppercase tracking-wider text-signal-400"
-						>
-							<span className="relative h-1.5 w-1.5 rounded-full bg-signal-400">
-								<span data-live-ring className="absolute inset-0 rounded-full bg-signal-400 opacity-0" />
+			<div className="pointer-events-none absolute inset-x-4 bottom-6 z-20 md:inset-x-0 md:bottom-auto md:top-28">
+				<div className="mx-auto flex max-w-[1440px] justify-end md:px-10">
+					<div
+						data-terminal
+						className="pointer-events-auto w-full rounded-xl border border-line bg-night-900/95 shadow-[0_30px_80px_-20px_rgb(0_0_0/0.8)] md:w-[min(760px,56%)]"
+					>
+						<div className="flex items-center justify-between border-b border-line px-4 py-3">
+							<p className="font-code text-mono text-steel-400 md:text-xs">
+								hangar · deployment <span className="text-steel-100">{SHORT_ID}</span>
+							</p>
+							<span className="relative grid">
+								<span
+									data-pill-deploying
+									className="col-start-1 row-start-1 inline-flex items-center gap-1.5 rounded-full border border-deck-400/40 px-2 py-0.5 font-code text-micro uppercase tracking-wider text-deck-300"
+									style={{ visibility: 'hidden' }}
+								>
+									<span className="h-1.5 w-1.5 rounded-full bg-deck-400" />
+									Deploying
+								</span>
+								<span
+									data-pill-live
+									className="col-start-1 row-start-1 inline-flex items-center gap-1.5 rounded-full border border-signal-400/40 px-2 py-0.5 font-code text-micro uppercase tracking-wider text-signal-400"
+								>
+									<span className="relative h-1.5 w-1.5 rounded-full bg-signal-400">
+										<span data-live-ring className="absolute inset-0 rounded-full bg-signal-400 opacity-0" />
+									</span>
+									Running
+								</span>
 							</span>
-							Running
-						</span>
-					</span>
-				</div>
+						</div>
 
-				<div className="px-4 pt-4">
-					<div className="relative font-code text-mono md:text-xs">
-						<p className="flex items-center gap-2 rounded-md border border-line px-3 py-2 text-steel-400">
-							<span className="h-2 w-2 shrink-0 rounded-full bg-steel-500" aria-hidden="true" />
-							<span className="truncate">{LIVE_URL}</span>
-						</p>
-						<p
-							data-url-live
-							className="absolute inset-0 flex items-center gap-2 rounded-md border border-signal-400/45 bg-signal-950 px-3 py-2 text-signal-400"
+						<div className="px-4 pt-4">
+							<div className="relative font-code text-mono md:text-sm">
+								<p className="flex items-center gap-2 rounded-md border border-line px-3 py-2 text-steel-400">
+									<span className="h-2 w-2 shrink-0 rounded-full bg-steel-500" aria-hidden="true" />
+									<span className="truncate">{LIVE_URL}</span>
+								</p>
+								<p
+									data-url-live
+									className="absolute inset-0 flex items-center gap-2 rounded-md border border-signal-400/45 bg-signal-950 px-3 py-2 text-signal-400"
+								>
+									<span className="live-dot shrink-0" aria-hidden="true" />
+									<span className="truncate">{LIVE_URL}</span>
+								</p>
+							</div>
+						</div>
+
+						<ol
+							className="space-y-1 px-4 py-4 font-code text-mono leading-relaxed md:space-y-1.5 md:px-5 md:py-5 md:text-sm"
+							aria-label="Deployment log"
 						>
-							<span className="live-dot shrink-0" aria-hidden="true" />
-							<span className="truncate">{LIVE_URL}</span>
+							{LOG_LINES.map((l, i) => (
+								<li key={i} data-log className="flex gap-3 whitespace-nowrap">
+									<span className={`w-12 shrink-0 ${STAGE_TONE[l.stage]}`}>{l.stage}</span>
+									<span className="truncate text-steel-300">{l.text}</span>
+								</li>
+							))}
+						</ol>
+						<p className="border-t border-line px-4 py-2.5 font-code text-micro text-steel-500">
+							Streamed over SSE from Redis pub/sub
 						</p>
 					</div>
 				</div>
-
-				<ol className="space-y-1 px-4 py-4 font-code text-mono leading-relaxed md:text-xs" aria-label="Deployment log">
-					{LOG_LINES.map((l, i) => (
-						<li key={i} data-log className="flex gap-3 whitespace-nowrap">
-							<span className={`w-12 shrink-0 ${STAGE_TONE[l.stage]}`}>{l.stage}</span>
-							<span className="truncate text-steel-300">{l.text}</span>
-						</li>
-					))}
-				</ol>
-				<p className="border-t border-line px-4 py-2.5 font-code text-micro text-steel-500">
-					Streamed over SSE from Redis pub/sub
-				</p>
 			</div>
 		</section>
 	);
