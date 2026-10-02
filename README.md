@@ -355,16 +355,24 @@ echo 'eval "$($HOME/.local/bin/mise activate bash)"' >> ~/.bashrc
 source ~/.bashrc
 mise install github:railwayapp/railpack@latest
 mise use github:railwayapp/railpack
+
+# buildctl — the BuildKit client the API pipeline uses to talk to the
+# hangar-buildkit Nomad job. Keep it on the same minor version as the daemon.
+mise use -g github:moby/buildkit@latest
 ```
 
-Verify railpack is available:
+Verify both are available:
 
 ```bash
-which railpack
-# → /home/<user>/.local/share/mise/installs/github-railwayapp-railpack/<version>/railpack
+which railpack buildctl
+# → /home/<user>/.local/share/mise/shims/railpack
+# → /home/<user>/.local/share/mise/shims/buildctl
+
+buildctl --addr tcp://buildkit.service.consul:1234 debug info
+# → BuildKit: github.com/moby/buildkit v0.x.y   (requires ./dev.sh to have started the buildkit job)
 ```
 
-> **Important:** mise activation must be in your `.bashrc` so that `railpack` is on `PATH` in every new shell. The API dev server calls `railpack` as a subprocess — if it's not on `PATH` when the server starts, pipeline builds will fail with `ENOENT: spawn railpack`. Always make sure your terminal has sourced `.bashrc` before starting `pnpm dev`.
+> **Important:** mise activation must be in your `.bashrc` so that `railpack` and `buildctl` are on `PATH` in every new shell. The API dev server calls both as subprocesses — if either is missing when the server starts, pipeline builds fail with `ENOENT: spawn railpack` or `ENOENT: spawn buildctl`. Always make sure your terminal has sourced `.bashrc` before starting `pnpm dev`.
 
 ---
 
