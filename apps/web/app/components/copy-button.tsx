@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { HugeiconsIcon } from '@hugeicons/react';
 import { Copy01Icon, Tick01Icon } from '@hugeicons/core-free-icons';
 
+const COPIED_HOLD_MS = 1500;
+
 export function CopyButton({ value, label = 'Copy' }: { value: string; label?: string }) {
 	const [copied, setCopied] = useState(false);
 
@@ -9,7 +11,7 @@ export function CopyButton({ value, label = 'Copy' }: { value: string; label?: s
 		try {
 			await navigator.clipboard.writeText(value);
 			setCopied(true);
-			setTimeout(() => setCopied(false), 1500);
+			setTimeout(() => setCopied(false), COPIED_HOLD_MS);
 		} catch {}
 	}
 

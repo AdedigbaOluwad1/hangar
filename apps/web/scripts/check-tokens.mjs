@@ -4,13 +4,16 @@ import { join, relative } from 'node:path';
 const ROOT = new URL('../app/', import.meta.url).pathname;
 const strict = process.argv.includes('--strict');
 
-const SKIP = new Set(['lib/motion.ts']);
+const SKIP = new Set(['lib/motion.ts', 'story/art/palette.ts']);
 
 const RULES = [
 	{ id: 'hex-color', re: /#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3}(?:[0-9a-fA-F]{2})?)?\b/g, hint: 'use a colour token' },
 	{ id: 'arbitrary-color', re: /\b(?:bg|text|border|from|via|to|fill|stroke|ring)-\[#[^\]]+\]/g, hint: 'use a colour token' },
 	{ id: 'palette-escape', re: /\b(?:bg|text|border)-(?:white|black)\b/g, hint: 'use steel/night tokens' },
-	{ id: 'raw-ease', re: /ease:\s*['"](?!none['"])[^'"]+['"]|\bease-(?:linear|in|out|in-out)\b/g, hint: 'use EASE.* / ease-settle etc.' },
+	{ id: 'raw-ease', re: /ease:\s*['"][^'"]+['"]|\bease-(?:linear|in|out|in-out)\b/g, hint: 'use EASE.* / ease-settle etc.' },
+	{ id: 'raw-duration-class', re: /\bduration-\d+\b/g, hint: 'use duration-instant…duration-epic' },
+	{ id: 'raw-text-size', re: /\btext-\[(?:\d|clamp)[^\]]*\]/g, hint: 'use a text-* size token' },
+	{ id: 'raw-radius', re: /\brounded-\[[^\]]+\]/g, hint: 'use rounded-lg / rounded-xl etc.' },
 	{ id: 'arbitrary-duration', re: /\bduration-\[[^\]]+\]/g, hint: 'use a duration step' },
 	{ id: 'raw-timeout', re: /setTimeout\(.*,\s*\d{3,}\s*\)/g, hint: 'name the delay or use DUR' },
 	{ id: 'raw-seconds', re: /\b(?:duration|delay):\s*\d*\.?\d+\b/g, hint: 'use DUR.*', outsideStoryOnly: true },

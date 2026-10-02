@@ -7,6 +7,7 @@ import { ArrowRight01Icon } from '@hugeicons/core-free-icons';
 import { DUR, EASE, SCRUB, STAGGER, SplitText, gsap, pinLength, useAct } from '../motion';
 import { GITHUB_URL } from '../nav';
 import { Mark } from '../../components/mark';
+import { ART } from '../art/palette';
 
 const ROADMAP = [
 	{ title: 'One machine', body: 'Local, or remote over SSH. One ./deploy.sh on Ubuntu 24.', coming: false },
@@ -93,10 +94,10 @@ export function FleetAct() {
 						</g>
 
 						<g transform="translate(600 400)">
-							<path d={CARRIER} fill="#1d2a44" stroke="rgb(143 170 220 / 0.45)" />
+							<path d={CARRIER} fill={ART.carrier} stroke="rgb(143 170 220 / 0.45)" />
 							<path d="M60,40 L330,74" stroke="rgb(255 178 74 / 0.5)" strokeDasharray="12 8" />
 							<path d="M50,62 H360" stroke="rgb(143 170 220 / 0.25)" strokeDasharray="6 8" />
-							<rect x="250" y="80" width="40" height="12" fill="#0b1220" />
+							<rect x="250" y="80" width="40" height="12" fill={ART.panel} />
 							<text
 								x="20"
 								y="-14"
@@ -139,11 +140,7 @@ export function FleetAct() {
 					<p data-eyebrow className="eyebrow">
 						Act VI · The Fleet
 					</p>
-					<h2
-						id="fleet-title"
-						data-title
-						className="display mt-3 max-w-[13ch] text-[clamp(2.5rem,6vw,5.75rem)] md:mt-5"
-					>
+					<h2 id="fleet-title" data-title className="display mt-3 max-w-[13ch] text-display-act md:mt-5">
 						Starts on one machine. Built for a fleet.
 					</h2>
 				</div>
@@ -197,7 +194,7 @@ export function Coda() {
 						<span key={i} className="block h-1 flex-1 rounded-full bg-deck-400" style={{ opacity: 0.15 + i * 0.07 }} />
 					))}
 				</div>
-				<h2 id="coda-title" data-title className="display text-[clamp(3.25rem,11vw,10rem)]">
+				<h2 id="coda-title" data-title className="display text-display-finale">
 					Clear for takeoff.
 				</h2>
 				<div data-cta className="mt-8 flex flex-wrap gap-3 md:mt-12">

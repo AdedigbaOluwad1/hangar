@@ -1,4 +1,5 @@
 import type { SVGProps } from 'react';
+import { ART } from './palette';
 
 export const FUSELAGE =
 	'M18,74 L30,66 L80,61 L230,58 C270,56 300,55 330,60 L370,66 C384,68 394,70 398,71 C394,73 384,74 370,76 L330,80 L230,84 L80,86 L30,84 L18,80 Z';
@@ -13,15 +14,15 @@ type Tone = 'silhouette' | 'steel';
 
 const TONES: Record<Tone, { body: string; shade: string; glass: string; line: string }> = {
 	silhouette: {
-		body: '#05080f',
-		shade: '#03050a',
-		glass: '#0b1220',
+		body: ART.hull,
+		shade: ART.night,
+		glass: ART.panel,
 		line: 'transparent',
 	},
 	steel: {
-		body: '#2a3a57',
-		shade: '#1b2740',
-		glass: '#7fa6d9',
+		body: ART.jet,
+		shade: ART.jetShade,
+		glass: ART.canopy,
 		line: 'rgb(183 205 240 / 0.35)',
 	},
 };
@@ -37,9 +38,9 @@ export function JetSide({
 		<svg viewBox="0 0 400 120" overflow="visible" aria-hidden="true" {...props}>
 			<defs>
 				<linearGradient id="jet-flame" x1="1" x2="0" y1="0" y2="0">
-					<stop offset="0" stopColor="#fff4dc" />
-					<stop offset="0.25" stopColor="#ffb24a" />
-					<stop offset="1" stopColor="#f39a1f" stopOpacity="0" />
+					<stop offset="0" stopColor={ART.flameCore} />
+					<stop offset="0.25" stopColor={ART.amber} />
+					<stop offset="1" stopColor={ART.amberDeep} stopOpacity="0" />
 				</linearGradient>
 			</defs>
 			{flame && (
@@ -74,13 +75,13 @@ export function JetSide({
 	);
 }
 
-export function JetPlan({ color = '#2a3a57', ...props }: SVGProps<SVGSVGElement> & { color?: string }) {
+export function JetPlan({ color = 'currentColor', ...props }: SVGProps<SVGSVGElement> & { color?: string }) {
 	return (
 		<svg viewBox="0 0 100 140" aria-hidden="true" {...props}>
 			<path d="M57,52 L97,92 L97,100 L59,94 Z M43,52 L3,92 L3,100 L41,94 Z" fill={color} opacity="0.85" />
 			<path d="M58,112 L78,127 L78,134 L58,129 Z M42,112 L22,127 L22,134 L42,129 Z" fill={color} opacity="0.85" />
 			<path d="M50,2 L56,22 L58,60 L60,120 L56,136 L44,136 L40,120 L42,60 L44,22 Z" fill={color} />
-			<ellipse cx="50" cy="32" rx="3.6" ry="10" fill="#7fa6d9" opacity="0.8" />
+			<ellipse cx="50" cy="32" rx="3.6" ry="10" fill={ART.canopy} opacity="0.8" />
 		</svg>
 	);
 }

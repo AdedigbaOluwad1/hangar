@@ -3,6 +3,7 @@ import { DUR, EASE, SCRUB, STAGGER, SplitText, gsap, pinLength, useAct } from '.
 import { CANOPY, FIN, FUSELAGE, JetSide, STAB, WING } from '../art/jet';
 import { Dimension } from '../art/scenery';
 import { REGISTRY_REPO, REGISTRY_TAGS, SHORT_ID } from '../data';
+import { ART } from '../art/palette';
 
 const STEPS = [
 	{
@@ -192,7 +193,7 @@ export function HangarAct() {
 						<p data-eyebrow className="eyebrow">
 							Act II · The Hangar
 						</p>
-						<h2 id="hangar-title" data-title className="display mt-3 text-[clamp(2.5rem,5.4vw,5rem)] md:mt-5">
+						<h2 id="hangar-title" data-title className="display mt-3 text-display-act md:mt-5">
 							Built in the bay.
 						</h2>
 						<p data-lede className="mt-3 max-w-sm text-sm leading-relaxed text-steel-300 md:mt-5 md:text-base">
@@ -210,7 +211,7 @@ export function HangarAct() {
 								/>
 								<div data-step-body>
 									<p className="flex items-baseline gap-2.5">
-										<span className="font-code text-[11px] text-deck-400">{s.n}</span>
+										<span className="font-code text-mono text-deck-400">{s.n}</span>
 										<span className="font-display text-lg font-bold uppercase tracking-wide md:text-xl">{s.title}</span>
 									</p>
 									<p className="mt-0.5 text-xs leading-snug text-steel-400 md:text-sm">{s.body}</p>
@@ -234,11 +235,11 @@ export function HangarAct() {
 							<JetSide tone="steel" x="0" y="0" width="400" height="120" />
 							<g data-scan opacity="0">
 								<rect x="-8" y="-6" width="16" height="132" fill="rgb(255 178 74 / 0.12)" />
-								<rect x="-0.75" y="-6" width="1.5" height="132" fill="#ffb24a" />
+								<rect x="-0.75" y="-6" width="1.5" height="132" fill={ART.amber} />
 							</g>
 						</svg>
 
-						<div className="relative mt-5 h-5 font-code text-xs text-steel-300 md:mt-6 md:text-[13px]">
+						<div className="relative mt-5 h-5 font-code text-xs text-steel-300 md:mt-6 md:text-button-sm">
 							{STEPS.map((s, i) => (
 								<p
 									key={s.n}
@@ -253,7 +254,7 @@ export function HangarAct() {
 
 						<div
 							data-registry
-							className="mt-4 rounded-lg border border-line bg-night-850/95 p-3 font-code text-[11px] md:mt-6 md:p-4 md:text-xs"
+							className="mt-4 rounded-lg border border-line bg-night-850/95 p-3 font-code text-mono md:mt-6 md:p-4 md:text-xs"
 						>
 							<p className="truncate text-steel-400">{REGISTRY_REPO}</p>
 							<ul className="mt-2 grid gap-1.5 md:grid-cols-3 md:gap-3">
@@ -279,7 +280,7 @@ export function HangarAct() {
 					className="hangar-door absolute inset-y-0 left-0 w-1/2 border-r border-night-600"
 					style={{ visibility: 'hidden' }}
 				>
-					<span className="absolute bottom-[14%] right-[8%] font-display text-[22vh] font-extrabold leading-none text-night-600/70">
+					<span className="absolute bottom-[14%] right-[8%] font-display text-stencil font-extrabold leading-none text-night-600/70">
 						HGR
 					</span>
 				</div>
@@ -288,7 +289,7 @@ export function HangarAct() {
 					className="hangar-door absolute inset-y-0 right-0 w-1/2 border-l border-night-600"
 					style={{ visibility: 'hidden' }}
 				>
-					<span className="absolute bottom-[14%] left-[8%] font-display text-[22vh] font-extrabold leading-none text-night-600/70">
+					<span className="absolute bottom-[14%] left-[8%] font-display text-stencil font-extrabold leading-none text-night-600/70">
 						02
 					</span>
 				</div>

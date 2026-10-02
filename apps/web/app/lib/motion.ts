@@ -11,6 +11,7 @@ export const EASE = {
 	brake: 'hangar.brake',
 	spool: 'hangar.spool',
 	scrub: 'none',
+	impact: 'none',
 } as const;
 
 const CURVES: Record<string, string> = {
@@ -23,6 +24,7 @@ const CURVES: Record<string, string> = {
 };
 
 export const DUR = {
+	impact: 0.06,
 	instant: 0.12,
 	quick: 0.24,
 	base: 0.48,

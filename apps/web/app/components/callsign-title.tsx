@@ -121,7 +121,7 @@ export function CallsignTitle({ deployment }: { deployment: Deployment }) {
 			<p
 				id="callsign-hint"
 				role={error ? 'alert' : undefined}
-				className={`mt-2 font-code text-[11px] ${error ? 'text-destructive' : 'text-steel-500'}`}
+				className={`mt-2 font-code text-mono ${error ? 'text-destructive' : 'text-steel-500'}`}
 			>
 				{error ?? 'Lowercase letters, numbers and hyphens. Enter to save, Esc to cancel.'}
 			</p>

@@ -1,7 +1,8 @@
 import { useRef } from 'react';
-import { EASE, SCRUB, SplitText, gsap, pinLength, useAct } from '../motion';
+import { DUR, EASE, SCRUB, SplitText, gsap, pinLength, useAct } from '../motion';
 import { JetPlan } from '../art/jet';
 import { TAG_HISTORY } from '../data';
+import { ART } from '../art/palette';
 
 type Status = 'running' | 'building' | 'deploying';
 
@@ -103,7 +104,13 @@ export function SquadronAct() {
 			.to({}, { duration: 0.01 }, 0.99);
 
 		q('[data-bob]').forEach((el, i) => {
-			gsap.to(el, { y: i % 2 ? 4 : -4, duration: 1.6 + (i % 3) * 0.3, ease: EASE.glide, repeat: -1, yoyo: true });
+			gsap.to(el, {
+				y: i % 2 ? 4 : -4,
+				duration: DUR.epic + (i % 3) * DUR.quick,
+				ease: EASE.glide,
+				repeat: -1,
+				yoyo: true,
+			});
 		});
 
 		return () => title.revert();
@@ -124,11 +131,7 @@ export function SquadronAct() {
 						<p data-eyebrow className="eyebrow">
 							Act V · The Squadron
 						</p>
-						<h2
-							id="squadron-title"
-							data-title
-							className="display mt-3 max-w-[12ch] text-[clamp(2.5rem,5.4vw,5rem)] md:mt-5"
-						>
+						<h2 id="squadron-title" data-title className="display mt-3 max-w-[12ch] text-display-act md:mt-5">
 							One console. Every sortie.
 						</h2>
 						<p data-lede className="mt-3 max-w-sm text-sm leading-relaxed text-steel-300 md:mt-5 md:text-base">
@@ -153,16 +156,20 @@ export function SquadronAct() {
 					>
 						<div data-deck className="absolute inset-x-[8%] bottom-[4%] h-[16%]">
 							<svg viewBox="0 0 600 96" preserveAspectRatio="none" className="h-full w-full">
-								<path d="M0,48 L40,8 L540,6 L600,48 L540,90 L40,88 Z" fill="#0b1220" stroke="rgb(143 170 220 / 0.3)" />
+								<path
+									d="M0,48 L40,8 L540,6 L600,48 L540,90 L40,88 Z"
+									fill={ART.panel}
+									stroke="rgb(143 170 220 / 0.3)"
+								/>
 								<path d="M60,48 H560" stroke="rgb(255 178 74 / 0.45)" strokeDasharray="14 10" />
 								<path d="M300,20 V76 M330,20 V76 M360,20 V76" stroke="rgb(143 170 220 / 0.35)" />
 							</svg>
-							<span className="absolute -top-5 left-0 font-code text-[10px] tracking-[0.2em] text-steel-500">
+							<span className="absolute -top-5 left-0 font-code text-micro tracking-[0.2em] text-steel-500">
 								DECK · RECOVERY
 							</span>
 						</div>
 
-						<div className="absolute bottom-[22%] right-0 hidden w-[34%] font-code md:block text-[10px] md:text-[11px]">
+						<div className="absolute bottom-[22%] right-0 hidden w-[34%] font-code md:block text-micro md:text-mono">
 							<p className="mb-1.5 tracking-[0.18em] text-steel-500">NOTES-API · TAGS</p>
 							<div className="relative rounded border border-line bg-night-900/80">
 								<span
@@ -187,12 +194,12 @@ export function SquadronAct() {
 										style={{ left: `${j.x}%`, top: `${j.y}%` }}
 									>
 										<div data-bob>
-											<JetPlan className="w-full" />
+											<JetPlan className="w-full" color={ART.jet} />
 										</div>
 									</div>
 									<p
 										data-label
-										className="absolute flex -translate-x-1/2 items-center gap-1.5 whitespace-nowrap font-code text-[10px] text-steel-300 md:text-[11px]"
+										className="absolute flex -translate-x-1/2 items-center gap-1.5 whitespace-nowrap font-code text-micro text-steel-300 md:text-mono"
 										style={{ left: `${j.x}%`, top: `calc(${j.y}% + 5.5%)` }}
 									>
 										<span data-dot className={`h-2 w-2 rounded-full ${STATUS_DOT[j.status]}`} />
@@ -208,7 +215,7 @@ export function SquadronAct() {
 								style={{ left: `${TRAP.x}%`, top: `${TRAP.y}%` }}
 							>
 								<div data-back-jet>
-									<JetPlan className="w-full" color="#3a4d70" />
+									<JetPlan className="w-full" color={ART.jetReturning} />
 								</div>
 								<span
 									data-back-ring
@@ -218,7 +225,7 @@ export function SquadronAct() {
 							</div>
 							<p
 								data-label
-								className="absolute flex -translate-x-1/2 items-center gap-1.5 whitespace-nowrap font-code text-[10px] text-steel-300 md:text-[11px]"
+								className="absolute flex -translate-x-1/2 items-center gap-1.5 whitespace-nowrap font-code text-micro text-steel-300 md:text-mono"
 								style={{ left: `${TRAP.x}%`, top: `calc(${TRAP.y}% + 5.5%)` }}
 							>
 								<span className="relative grid h-2 w-2">

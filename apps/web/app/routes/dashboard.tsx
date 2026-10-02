@@ -25,7 +25,7 @@ function Stat({ label, value, tone }: { label: string; value: number; tone: stri
 			<span ref={ref} className={cn('display block text-4xl tabular-nums md:text-5xl', tone)}>
 				{value}
 			</span>
-			<span className="mt-1.5 block font-code text-[10px] uppercase tracking-[0.2em] text-steel-500">{label}</span>
+			<span className="mt-1.5 block font-code text-micro uppercase tracking-[0.2em] text-steel-500">{label}</span>
 		</div>
 	);
 }

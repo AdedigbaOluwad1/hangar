@@ -2,31 +2,32 @@ import { useRef } from 'react';
 import { EASE, SCRUB, SplitText, gsap, pinLength, useAct } from '../motion';
 import { JetSide } from '../art/jet';
 import { CrewFigure, StarField } from '../art/scenery';
+import { ART } from '../art/palette';
 
 const ROLES = [
 	{
 		tool: 'Nomad',
 		role: 'Flight Director',
 		body: 'Schedules every job onto the deck.',
-		jersey: '#ffb24a',
+		jersey: ART.amber,
 	},
 	{
 		tool: 'Consul',
 		role: 'Air Traffic Control',
 		body: 'Service discovery. Every app findable by name.',
-		jersey: '#e8ecf3',
+		jersey: ART.steel,
 	},
 	{
 		tool: 'Vault',
 		role: 'The Armory',
 		body: 'Secrets issued per workload. No static tokens.',
-		jersey: '#e5484d',
+		jersey: ART.alarmDeep,
 	},
 	{
 		tool: 'Caddy',
 		role: 'The Catapult',
 		body: 'Routes live traffic the instant the app is airborne.',
-		jersey: '#46e39a',
+		jersey: ART.signal,
 	},
 ];
 
@@ -119,7 +120,13 @@ export function CrewAct() {
 			aria-labelledby="crew-title"
 			className="relative min-h-svh overflow-hidden bg-night-950"
 		>
-			<div aria-hidden="true" className="absolute inset-0 bg-gradient-to-b from-night-950 via-night-900 to-[#1a1720]" />
+			<div
+				aria-hidden="true"
+				className="absolute inset-0"
+				style={{
+					backgroundImage: `linear-gradient(to bottom, ${ART.night}, var(--color-night-900), ${ART.duskFloor})`,
+				}}
+			/>
 			<div data-stars aria-hidden="true" className="absolute inset-0 w-[110%] opacity-70">
 				<StarField className="h-full w-full" />
 			</div>
@@ -129,16 +136,16 @@ export function CrewAct() {
 					<svg viewBox="0 0 2080 900" preserveAspectRatio="xMinYMax meet" className="absolute inset-0 h-full w-full">
 						<defs>
 							<radialGradient id="crew-dusk" cx="0.5" cy="0.5" r="0.5">
-								<stop offset="0" stopColor="#ffb24a" stopOpacity="0.35" />
-								<stop offset="1" stopColor="#ffb24a" stopOpacity="0" />
+								<stop offset="0" stopColor={ART.amber} stopOpacity="0.35" />
+								<stop offset="1" stopColor={ART.amber} stopOpacity="0" />
 							</radialGradient>
 						</defs>
 						<ellipse cx="1500" cy="640" rx="700" ry="90" fill="url(#crew-dusk)" />
 						<line x1="0" y1="640" x2="2080" y2="640" stroke="rgb(255 178 74 / 0.3)" />
-						<path d="M520,640 L528,628 L554,628 L558,620 L566,620 L570,628 L602,628 L608,640 Z" fill="#05080f" />
+						<path d="M520,640 L528,628 L554,628 L558,620 L566,620 L570,628 L602,628 L608,640 Z" fill={ART.hull} />
 						<path
 							d="M1640,640 L1646,632 L1666,632 L1669,626 L1675,626 L1678,632 L1698,632 L1702,640 Z"
-							fill="#05080f"
+							fill={ART.hull}
 						/>
 					</svg>
 				</div>
@@ -147,13 +154,13 @@ export function CrewAct() {
 					<svg viewBox={`0 0 ${DECK_WIDTH} 900`} className="absolute inset-0 h-full w-full">
 						<defs>
 							<linearGradient id="crew-beam" x1="0" x2="0" y1="0" y2="1">
-								<stop offset="0" stopColor="#ffb24a" stopOpacity="0" />
-								<stop offset="1" stopColor="#ffb24a" stopOpacity="0.28" />
+								<stop offset="0" stopColor={ART.amber} stopOpacity="0" />
+								<stop offset="1" stopColor={ART.amber} stopOpacity="0.28" />
 							</linearGradient>
 						</defs>
 						<path
 							d="M120,700 L120,470 L170,470 L170,380 L210,380 L210,330 L222,330 L222,380 L300,380 L300,470 L560,470 L600,700 Z"
-							fill="#070b14"
+							fill={ART.wall}
 						/>
 						<path
 							d="M190,420 H280 M190,440 H280"
@@ -161,9 +168,9 @@ export function CrewAct() {
 							strokeWidth="3"
 							strokeDasharray="6 10"
 						/>
-						<rect x="0" y="700" width={DECK_WIDTH} height="200" fill="#05080f" />
-						<rect x="0" y="700" width={DECK_WIDTH} height="10" fill="#101a2c" />
-						<g fill="#ffb24a" opacity="0.5">
+						<rect x="0" y="700" width={DECK_WIDTH} height="200" fill={ART.hull} />
+						<rect x="0" y="700" width={DECK_WIDTH} height="10" fill={ART.deckEdge} />
+						<g fill={ART.amber} opacity="0.5">
 							{Array.from({ length: 40 }, (_, i) => (
 								<circle key={i} cx={60 + i * 120} cy="716" r="2.2" />
 							))}
@@ -173,7 +180,7 @@ export function CrewAct() {
 							y1="699"
 							x2="4700"
 							y2="699"
-							stroke="#46e39a"
+							stroke={ART.signal}
 							strokeOpacity="0.5"
 							strokeWidth="2"
 							strokeDasharray="22 10"
@@ -185,7 +192,7 @@ export function CrewAct() {
 									d={`M${x - 70},700 L${x - 14},560 L${x + 14},560 L${x + 70},700 Z`}
 									fill="url(#crew-beam)"
 								/>
-								<rect x={x - 2} y="560" width="4" height="140" fill="#1a2438" />
+								<rect x={x - 2} y="560" width="4" height="140" fill={ART.post} />
 								<circle data-lamp cx={x} cy="556" r="9" fill={ROLES[i].jersey} />
 								<CrewFigure jersey={ROLES[i].jersey} transform={`translate(${x + 54} 700) scale(1.7)`} />
 								<text
@@ -225,7 +232,7 @@ export function CrewAct() {
 				<p data-eyebrow className="eyebrow">
 					Act III · The Crew
 				</p>
-				<h2 id="crew-title" data-title className="display mt-3 max-w-[14ch] text-[clamp(2.5rem,5.4vw,5rem)] md:mt-5">
+				<h2 id="crew-title" data-title className="display mt-3 max-w-[14ch] text-display-act md:mt-5">
 					Every launch has a crew.
 				</h2>
 
@@ -238,7 +245,7 @@ export function CrewAct() {
 								className="absolute inset-x-0 top-0 h-0.5 origin-left rounded-t-lg"
 								style={{ background: r.jersey }}
 							/>
-							<p className="font-code text-[11px] uppercase tracking-[0.18em] text-steel-400">{r.role}</p>
+							<p className="font-code text-mono uppercase tracking-[0.18em] text-steel-400">{r.role}</p>
 							<h3 className="mt-1.5 font-display text-2xl font-bold uppercase tracking-wide md:text-3xl">{r.tool}</h3>
 							<p className="mt-1.5 text-sm leading-snug text-steel-300">{r.body}</p>
 						</li>

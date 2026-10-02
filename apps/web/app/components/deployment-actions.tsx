@@ -104,7 +104,7 @@ export function DeploymentActions({
 								{tags.map((t) => (
 									<SelectItem key={t.value} value={t.value} disabled={t.current} className="font-code text-xs">
 										{t.label}
-										{t.current && <span className="ml-auto text-[10px] text-steel-500">live</span>}
+										{t.current && <span className="ml-auto text-micro text-steel-500">live</span>}
 									</SelectItem>
 								))}
 							</SelectGroup>

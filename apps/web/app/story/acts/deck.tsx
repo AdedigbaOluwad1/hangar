@@ -9,6 +9,7 @@ import { releaseIntroGuard } from '../intro-guard';
 import { DOCS_URL } from '../nav';
 import { JetSide } from '../art/jet';
 import { Dimension, StarField } from '../art/scenery';
+import { ART } from '../art/palette';
 
 const DOOR_RAISED = -260;
 
@@ -36,14 +37,14 @@ export function DeckAct() {
 				.from(q('[data-horizon-line]'), { scaleX: 0, transformOrigin: '50% 50%', duration: DUR.epic }, 0.2)
 				.from(q('[data-structure-intro]'), { y: 50, autoAlpha: 0, duration: DUR.epic }, 0.15)
 				.fromTo(q('[data-door]'), { y: 0 }, { y: 8, duration: DUR.quick, ease: EASE.spool }, 0.45)
-				.to(q('[data-door]'), { y: DOOR_RAISED, duration: 1.7, ease: EASE.glide })
+				.to(q('[data-door]'), { y: DOOR_RAISED, duration: DUR.epic, ease: EASE.glide })
 				.from(
 					q('[data-spill]'),
 					{
 						autoAlpha: 0,
 						scaleY: 0.15,
 						transformOrigin: '50% 0%',
-						duration: 1.7,
+						duration: DUR.epic,
 						ease: EASE.glide,
 					},
 					'<',
@@ -125,22 +126,22 @@ export function DeckAct() {
 				>
 					<defs>
 						<linearGradient id="deck-sky" x1="0" x2="0" y1="0" y2="1">
-							<stop offset="0" stopColor="#03050a" stopOpacity="0" />
-							<stop offset="0.45" stopColor="#0a1222" />
-							<stop offset="0.66" stopColor="#1d1a22" />
-							<stop offset="0.711" stopColor="#5a3615" />
-							<stop offset="0.712" stopColor="#04070d" />
+							<stop offset="0" stopColor={ART.night} stopOpacity="0" />
+							<stop offset="0.45" stopColor={ART.skyMid} />
+							<stop offset="0.66" stopColor={ART.duskHaze} />
+							<stop offset="0.711" stopColor={ART.ember} />
+							<stop offset="0.712" stopColor={ART.deck} />
 						</linearGradient>
 						<radialGradient id="deck-sun" cx="0.5" cy="0.5" r="0.5">
-							<stop offset="0" stopColor="#ffb24a" stopOpacity="0.55" />
-							<stop offset="1" stopColor="#ffb24a" stopOpacity="0" />
+							<stop offset="0" stopColor={ART.amber} stopOpacity="0.55" />
+							<stop offset="1" stopColor={ART.amber} stopOpacity="0" />
 						</radialGradient>
 					</defs>
 					<rect width="1600" height="900" fill="url(#deck-sky)" />
 					<ellipse cx="300" cy="640" rx="520" ry="110" fill="url(#deck-sun)" />
 					<line data-horizon-line x1="0" y1="640" x2="1600" y2="640" stroke="rgb(255 178 74 / 0.4)" />
-					<path d="M180,640 L188,628 L214,628 L218,620 L226,620 L230,628 L262,628 L268,640 Z" fill="#05080f" />
-					<path d="M430,640 L436,632 L456,632 L459,626 L465,626 L468,632 L488,632 L492,640 Z" fill="#05080f" />
+					<path d="M180,640 L188,628 L214,628 L218,620 L226,620 L230,628 L262,628 L268,640 Z" fill={ART.hull} />
+					<path d="M430,640 L436,632 L456,632 L459,626 L465,626 L468,632 L488,632 L492,640 Z" fill={ART.hull} />
 				</svg>
 
 				<div data-structure className="absolute inset-0 origin-[70%_60%] will-change-transform">
@@ -154,22 +155,22 @@ export function DeckAct() {
 					>
 						<defs>
 							<radialGradient id="bay-light" cx="0.5" cy="0.85" r="0.75">
-								<stop offset="0" stopColor="#ffe2b0" />
-								<stop offset="0.35" stopColor="#ffb24a" />
-								<stop offset="1" stopColor="#5a3008" />
+								<stop offset="0" stopColor={ART.bayHot} />
+								<stop offset="0.35" stopColor={ART.amber} />
+								<stop offset="1" stopColor={ART.bayDeep} />
 							</radialGradient>
 							<linearGradient id="bay-spill" x1="0" x2="0" y1="0" y2="1">
-								<stop offset="0" stopColor="#ffb24a" stopOpacity="0.5" />
-								<stop offset="1" stopColor="#ffb24a" stopOpacity="0" />
+								<stop offset="0" stopColor={ART.amber} stopOpacity="0.5" />
+								<stop offset="1" stopColor={ART.amber} stopOpacity="0" />
 							</linearGradient>
 							<clipPath id="bay-aperture">
 								<rect x="760" y="300" width="720" height="400" />
 							</clipPath>
 						</defs>
 
-						<path d="M600,700 L600,236 L640,196 L1600,196 L1600,700 Z" fill="#070b14" />
-						<path d="M640,196 L640,700 M700,196 L700,700 M1530,196 L1530,700" stroke="#0c1424" strokeWidth="6" />
-						<text x="672" y="420" fontFamily="var(--font-display)" fontWeight="800" fontSize="96" fill="#0d1527">
+						<path d="M600,700 L600,236 L640,196 L1600,196 L1600,700 Z" fill={ART.wall} />
+						<path d="M640,196 L640,700 M700,196 L700,700 M1530,196 L1530,700" stroke={ART.rib} strokeWidth="6" />
+						<text x="672" y="420" fontFamily="var(--font-display)" fontWeight="800" fontSize="96" fill={ART.stencil}>
 							02
 						</text>
 
@@ -181,17 +182,17 @@ export function DeckAct() {
 
 						<g clipPath="url(#bay-aperture)">
 							<g data-door transform={`translate(0 ${DOOR_RAISED})`}>
-								<rect x="760" y="300" width="720" height="400" fill="#0b1220" />
+								<rect x="760" y="300" width="720" height="400" fill={ART.panel} />
 								<path
 									d="M760,320 H1480 M760,345 H1480 M760,370 H1480 M760,395 H1480 M760,420 H1480 M760,445 H1480 M760,470 H1480 M760,495 H1480 M760,520 H1480 M760,545 H1480 M760,570 H1480 M760,595 H1480 M760,620 H1480 M760,645 H1480 M760,670 H1480"
-									stroke="#0f182b"
+									stroke={ART.doorSlat}
 									strokeWidth="2"
 								/>
-								<rect x="760" y="692" width="720" height="8" fill="#1a2438" />
+								<rect x="760" y="692" width="720" height="8" fill={ART.post} />
 							</g>
 						</g>
 
-						<rect x="0" y="700" width="1600" height="200" fill="#04070d" />
+						<rect x="0" y="700" width="1600" height="200" fill={ART.deck} />
 						<g data-spill>
 							<path d="M760,700 L1480,700 L1640,900 L560,900 Z" fill="url(#bay-spill)" />
 						</g>
@@ -213,7 +214,7 @@ export function DeckAct() {
 					</g>
 					<g>
 						<line x1="1300" y1="652" x2="1300" y2="772" stroke="rgb(255 178 74 / 0.7)" />
-						<circle cx="1300" cy="652" r="3" fill="#ffb24a" />
+						<circle cx="1300" cy="652" r="3" fill={ART.amber} />
 						<text
 							x="1310"
 							y="776"
@@ -244,7 +245,7 @@ export function DeckAct() {
 					id="deck-title"
 					data-intro
 					data-headline
-					className="display mt-4 max-w-[11ch] text-[clamp(3rem,8.6vw,8.25rem)] text-steel-100 md:mt-6"
+					className="display mt-4 max-w-[11ch] text-display-hero text-steel-100 md:mt-6"
 				>
 					Your apps deserve a runway.
 				</h1>
@@ -272,7 +273,7 @@ export function DeckAct() {
 				aria-hidden="true"
 				className="absolute bottom-6 left-1/2 z-20 hidden -translate-x-1/2 flex-col items-center gap-3 md:flex"
 			>
-				<span className="font-code text-[10px] uppercase tracking-[0.3em] text-steel-400">Scroll is the throttle</span>
+				<span className="font-code text-micro uppercase tracking-[0.3em] text-steel-400">Scroll is the throttle</span>
 				<span data-cue-line className="block h-10 w-px bg-gradient-to-b from-deck-400 to-transparent" />
 			</div>
 

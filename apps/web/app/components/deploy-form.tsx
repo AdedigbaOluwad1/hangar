@@ -30,7 +30,7 @@ function Section({
 	return (
 		<section data-reveal className="border-t border-line px-5 py-7 first:border-t-0 md:px-7">
 			<div className="flex items-baseline gap-3">
-				<span className="font-code text-[11px] text-deck-400">{n}</span>
+				<span className="font-code text-mono text-deck-400">{n}</span>
 				<div>
 					<h2 className="font-display text-xl font-bold uppercase tracking-wide">{title}</h2>
 					{description && <p className="mt-1 text-sm text-steel-400">{description}</p>}
@@ -113,7 +113,7 @@ export function DeployForm() {
 					onChange={(e) => setUrl(e.target.value)}
 					className="font-code"
 				/>
-				<p className="mt-2 h-4 font-code text-[11px] text-steel-500">
+				<p className="mt-2 h-4 font-code text-mono text-steel-500">
 					{repo && (
 						<>
 							<span className="text-deck-400">›</span> airframe <span className="text-steel-100">{repo}</span>
@@ -152,7 +152,7 @@ export function DeployForm() {
 								size="icon"
 								onClick={() => removeRow(i)}
 								aria-label={`Remove variable ${i + 1}`}
-								className="size-11 rounded-[10px] border-input text-steel-500 not-disabled:hover:translate-y-0 hover:border-destructive/50 hover:bg-destructive/[0.06] hover:text-destructive"
+								className="size-11 rounded-lg border-input text-steel-500 not-disabled:hover:translate-y-0 hover:border-destructive/50 hover:bg-destructive/[0.06] hover:text-destructive"
 							>
 								<HugeiconsIcon icon={Cancel01Icon} />
 							</Button>
@@ -164,7 +164,7 @@ export function DeployForm() {
 					variant="ghost"
 					size="sm"
 					onClick={() => setEnvRows((rows) => [...rows, { key: '', value: '' }])}
-					className="mt-3 -ml-3 font-code text-[11px] tracking-[0.16em] text-deck-400 uppercase hover:bg-deck-400/[0.08] hover:text-deck-300"
+					className="mt-3 -ml-3 font-code text-mono tracking-[0.16em] text-deck-400 uppercase hover:bg-deck-400/[0.08] hover:text-deck-300"
 				>
 					<HugeiconsIcon icon={PlusSignIcon} />
 					Add variable

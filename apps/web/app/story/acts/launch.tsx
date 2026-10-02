@@ -3,6 +3,7 @@ import { DUR, EASE, SCRUB, STAGGER, SplitText, gsap, pinLength, useAct } from '.
 import { JetSide } from '../art/jet';
 import { CrewFigure } from '../art/scenery';
 import { LIVE_URL, LOG_LINES, SHORT_ID, type LogStage } from '../data';
+import { ART } from '../art/palette';
 
 const FIRE_AT = 0.5;
 
@@ -51,58 +52,64 @@ export function LaunchAct() {
 				{ rotation: -95, transformOrigin: '50% 0%', duration: DUR.instant, ease: EASE.snap },
 				0,
 			)
-			.to(jet, { x: 2300, duration: 0.95, ease: EASE.throttle }, 0.06)
-			.to(jet, { y: -150, rotation: -9, duration: 0.55, ease: EASE.spool }, 0.48)
-			.to(flame, { scaleX: 1.6, duration: 0.2, ease: EASE.settle }, 0.06)
-			.fromTo(q('[data-flash]'), { autoAlpha: 0 }, { autoAlpha: 0.55, duration: 0.05, ease: 'none' }, 0.62)
-			.to(q('[data-flash]'), { autoAlpha: 0, duration: 0.5, ease: EASE.settle }, 0.67)
-			.to(q('[data-boom]'), { autoAlpha: 1, duration: 0.04 }, 0.62)
-			.to(q('[data-boom]'), { scale: 4, autoAlpha: 0, duration: 0.9, ease: EASE.settle }, 0.64)
+			.to(jet, { x: 2300, duration: DUR.slow, ease: EASE.throttle }, 0.06)
+			.to(jet, { y: -150, rotation: -9, duration: DUR.base, ease: EASE.spool }, 0.41)
+			.to(flame, { scaleX: 1.6, duration: DUR.quick, ease: EASE.settle }, 0.06)
+			.fromTo(q('[data-flash]'), { autoAlpha: 0 }, { autoAlpha: 0.55, duration: DUR.impact, ease: EASE.impact }, 0.56)
+			.to(q('[data-flash]'), { autoAlpha: 0, duration: DUR.base, ease: EASE.settle }, 0.62)
+			.to(q('[data-boom]'), { autoAlpha: 1, duration: DUR.impact, ease: EASE.impact }, 0.56)
+			.to(q('[data-boom]'), { scale: 4, autoAlpha: 0, duration: DUR.slow, ease: EASE.settle }, 0.58)
 			.to(
 				q('[data-shake]'),
 				{
 					keyframes: { x: [0, -12, 10, -8, 6, -3, 1, 0], y: [0, 6, -7, 5, -3, 2, -1, 0] },
-					duration: 0.55,
-					ease: 'none',
+					duration: DUR.base,
+					ease: EASE.impact,
 				},
-				0.62,
+				0.56,
 			)
 			.fromTo(
 				q('[data-speed]'),
 				{ autoAlpha: 0, xPercent: 120 },
-				{ autoAlpha: 1, xPercent: -260, duration: 0.42, ease: EASE.throttle, stagger: { each: 0.025, from: 'random' } },
-				0.3,
+				{
+					autoAlpha: 1,
+					xPercent: -260,
+					duration: DUR.base,
+					ease: EASE.throttle,
+					stagger: { each: STAGGER.chars, from: 'random' },
+				},
+				0.26,
 			)
-			.to(q('[data-speed]'), { autoAlpha: 0, duration: 0.2 }, 0.85)
+			.to(q('[data-speed]'), { autoAlpha: 0, duration: DUR.quick }, 0.79)
 			.to(
 				q('[data-steam]'),
 				{
 					scale: 2.4,
 					autoAlpha: 0,
 					transformOrigin: '50% 100%',
-					duration: 1.1,
+					duration: DUR.epic,
 					ease: EASE.settle,
 					stagger: STAGGER.tight,
 				},
 				0.08,
 			)
-			.fromTo(q('[data-camera]'), { scale: 1.03 }, { scale: 1, duration: DUR.slow, ease: EASE.settle }, 0.62)
-			.to(q('[data-hud]'), { autoAlpha: 0, duration: DUR.quick }, 0.9)
-			.to(q('[data-terminal]'), { autoAlpha: 1, y: 0, duration: DUR.slow, ease: EASE.settle }, 0.95)
-			.to(q('[data-log]'), { autoAlpha: 1, x: 0, duration: DUR.quick, ease: EASE.settle, stagger: 0.16 }, 1.15)
-			.to(q('[data-pill-deploying]'), { autoAlpha: 0, duration: DUR.quick }, 2.45)
+			.fromTo(q('[data-camera]'), { scale: 1.03 }, { scale: 1, duration: DUR.slow, ease: EASE.settle }, 0.56)
+			.to(q('[data-hud]'), { autoAlpha: 0, duration: DUR.quick }, 0.84)
+			.to(q('[data-terminal]'), { autoAlpha: 1, y: 0, duration: DUR.slow, ease: EASE.settle }, 0.89)
+			.to(q('[data-log]'), { autoAlpha: 1, x: 0, duration: DUR.quick, ease: EASE.settle, stagger: STAGGER.loose }, 1.09)
+			.to(q('[data-pill-deploying]'), { autoAlpha: 0, duration: DUR.quick }, 2.39)
 			.fromTo(
 				q('[data-pill-live]'),
 				{ autoAlpha: 0, scale: 0.8 },
 				{ autoAlpha: 1, scale: 1, duration: DUR.base, ease: EASE.snap },
-				2.45,
+				2.39,
 			)
-			.to(q('[data-url-live]'), { autoAlpha: 1, duration: DUR.base, ease: EASE.settle }, 2.45)
+			.to(q('[data-url-live]'), { autoAlpha: 1, duration: DUR.base, ease: EASE.settle }, 2.39)
 			.fromTo(
 				q('[data-live-ring]'),
 				{ scale: 1, autoAlpha: 0.9 },
 				{ scale: 3, autoAlpha: 0, duration: DUR.slow, ease: EASE.settle },
-				2.5,
+				2.44,
 			);
 
 		let fired = false;
@@ -189,24 +196,25 @@ export function LaunchAct() {
 				<div data-shake className="absolute inset-0">
 					<div
 						aria-hidden="true"
-						className="absolute inset-0 bg-gradient-to-b from-night-950 via-[#101629] to-[#3b2a1c]"
+						className="absolute inset-0"
+						style={{ backgroundImage: `linear-gradient(to bottom, ${ART.night}, ${ART.skyLow}, ${ART.duskLow})` }}
 					/>
 					<div aria-hidden="true" className="story-stage launch-stage">
 						<div data-far className="absolute inset-y-0 left-0 w-[110%] will-change-transform">
 							<svg viewBox="0 0 1760 900" preserveAspectRatio="xMinYMax meet" className="h-full w-full">
 								<defs>
 									<radialGradient id="launch-sun" cx="0.5" cy="0.5" r="0.5">
-										<stop offset="0" stopColor="#ffd391" stopOpacity="0.7" />
-										<stop offset="0.4" stopColor="#ffb24a" stopOpacity="0.25" />
-										<stop offset="1" stopColor="#ffb24a" stopOpacity="0" />
+										<stop offset="0" stopColor={ART.amberSoft} stopOpacity="0.7" />
+										<stop offset="0.4" stopColor={ART.amber} stopOpacity="0.25" />
+										<stop offset="1" stopColor={ART.amber} stopOpacity="0" />
 									</radialGradient>
 								</defs>
 								<ellipse cx="1350" cy="640" rx="620" ry="160" fill="url(#launch-sun)" />
-								<rect x="0" y="640" width="1760" height="260" fill="#060a12" />
+								<rect x="0" y="640" width="1760" height="260" fill={ART.sea} />
 								<line x1="0" y1="640" x2="1760" y2="640" stroke="rgb(255 211 145 / 0.55)" />
 								<path
 									d="M1500,640 L1508,630 L1534,630 L1538,622 L1546,622 L1550,630 L1582,630 L1588,640 Z"
-									fill="#05080f"
+									fill={ART.hull}
 								/>
 							</svg>
 						</div>
@@ -214,31 +222,40 @@ export function LaunchAct() {
 						<svg viewBox="0 0 1600 900" className="absolute inset-0 h-full w-full overflow-visible">
 							<defs>
 								<radialGradient id="steam" cx="0.5" cy="0.5" r="0.5">
-									<stop offset="0" stopColor="#e8ecf3" stopOpacity="0.55" />
-									<stop offset="1" stopColor="#e8ecf3" stopOpacity="0" />
+									<stop offset="0" stopColor={ART.steel} stopOpacity="0.55" />
+									<stop offset="1" stopColor={ART.steel} stopOpacity="0" />
 								</radialGradient>
 							</defs>
-							<path d="M-60,700 L1270,700 L1330,712 L1290,770 L1150,900 L-60,900 Z" fill="#05080f" />
-							<rect x="-60" y="700" width="1330" height="9" fill="#101a2c" />
+							<path d="M-60,700 L1270,700 L1330,712 L1290,770 L1150,900 L-60,900 Z" fill={ART.hull} />
+							<rect x="-60" y="700" width="1330" height="9" fill={ART.deckEdge} />
 							<line
 								x1="220"
 								y1="699"
 								x2="1260"
 								y2="699"
-								stroke="#46e39a"
+								stroke={ART.signal}
 								strokeOpacity="0.55"
 								strokeWidth="2"
 								strokeDasharray="22 10"
 							/>
 							<g data-jbd transform="rotate(58 300 700)">
-								<rect x="150" y="692" width="150" height="8" fill="#1d2840" />
+								<rect x="150" y="692" width="150" height="8" fill={ART.deflector} />
 								<path d="M160,696 H290" stroke="rgb(255 178 74 / 0.5)" strokeDasharray="10 8" />
 							</g>
 							{[380, 520, 680, 840, 1000, 1160].map((x, i) => (
 								<ellipse key={x} data-steam cx={x} cy={688 - (i % 2) * 6} rx="90" ry="26" fill="url(#steam)" />
 							))}
-							<CrewFigure data-shooter jersey="#ffb24a" transform="translate(1140 700) scale(1.7)" />
-							<circle data-boom cx="1290" cy="640" r="60" fill="none" stroke="#ffd391" strokeWidth="3" opacity="0" />
+							<CrewFigure data-shooter jersey={ART.amber} transform="translate(1140 700) scale(1.7)" />
+							<circle
+								data-boom
+								cx="1290"
+								cy="640"
+								r="60"
+								fill="none"
+								stroke={ART.amberSoft}
+								strokeWidth="3"
+								opacity="0"
+							/>
 							<g data-jet transform="translate(900 -90) rotate(-9 600 640)">
 								<g data-jet-body>
 									<JetSide tone="steel" flame x="380" y="576" width="440" height="132" />
@@ -263,15 +280,15 @@ export function LaunchAct() {
 			<div
 				data-flash
 				aria-hidden="true"
-				className="pointer-events-none absolute inset-0 z-30 bg-[#fff1d6]"
-				style={{ opacity: 0 }}
+				className="pointer-events-none absolute inset-0 z-30"
+				style={{ opacity: 0, background: ART.flash }}
 			/>
 
 			<div className="relative z-10 mx-auto max-w-[1440px] px-5 pt-20 md:px-10 md:pt-28">
 				<p data-eyebrow className="eyebrow">
 					Act IV · Launch
 				</p>
-				<h2 id="launch-title" data-title className="display mt-3 max-w-[12ch] text-[clamp(2.5rem,5.4vw,5rem)] md:mt-5">
+				<h2 id="launch-title" data-title className="display mt-3 max-w-[12ch] text-display-act md:mt-5">
 					Zero to airborne.
 				</h2>
 				<p data-lede className="mt-3 max-w-sm text-sm leading-relaxed text-steel-300 md:mt-5 md:text-base">
@@ -281,7 +298,7 @@ export function LaunchAct() {
 				<div
 					data-hud
 					aria-hidden="true"
-					className="mt-6 inline-flex flex-col gap-1 rounded-md md:flex-row md:items-center md:gap-4 border border-line bg-night-900/90 px-3 py-2 font-code text-[11px] text-steel-300 md:mt-8 md:text-xs"
+					className="mt-6 inline-flex flex-col gap-1 rounded-md md:flex-row md:items-center md:gap-4 border border-line bg-night-900/90 px-3 py-2 font-code text-mono text-steel-300 md:mt-8 md:text-xs"
 				>
 					<span className="text-steel-500">
 						CAT 1 · THRUST{' '}
@@ -310,13 +327,13 @@ export function LaunchAct() {
 				className="absolute inset-x-4 bottom-6 z-20 rounded-xl border border-line bg-night-900/95 shadow-[0_30px_80px_-20px_rgb(0_0_0/0.8)] md:inset-x-auto md:bottom-auto md:right-10 md:top-28 md:w-[540px]"
 			>
 				<div className="flex items-center justify-between border-b border-line px-4 py-3">
-					<p className="font-code text-[11px] text-steel-400">
+					<p className="font-code text-mono text-steel-400">
 						hangar · deployment <span className="text-steel-100">{SHORT_ID}</span>
 					</p>
 					<span className="relative grid">
 						<span
 							data-pill-deploying
-							className="col-start-1 row-start-1 inline-flex items-center gap-1.5 rounded-full border border-deck-400/40 px-2 py-0.5 font-code text-[10px] uppercase tracking-wider text-deck-300"
+							className="col-start-1 row-start-1 inline-flex items-center gap-1.5 rounded-full border border-deck-400/40 px-2 py-0.5 font-code text-micro uppercase tracking-wider text-deck-300"
 							style={{ visibility: 'hidden' }}
 						>
 							<span className="h-1.5 w-1.5 rounded-full bg-deck-400" />
@@ -324,7 +341,7 @@ export function LaunchAct() {
 						</span>
 						<span
 							data-pill-live
-							className="col-start-1 row-start-1 inline-flex items-center gap-1.5 rounded-full border border-signal-400/40 px-2 py-0.5 font-code text-[10px] uppercase tracking-wider text-signal-400"
+							className="col-start-1 row-start-1 inline-flex items-center gap-1.5 rounded-full border border-signal-400/40 px-2 py-0.5 font-code text-micro uppercase tracking-wider text-signal-400"
 						>
 							<span className="relative h-1.5 w-1.5 rounded-full bg-signal-400">
 								<span data-live-ring className="absolute inset-0 rounded-full bg-signal-400 opacity-0" />
@@ -335,14 +352,14 @@ export function LaunchAct() {
 				</div>
 
 				<div className="px-4 pt-4">
-					<div className="relative font-code text-[11px] md:text-xs">
+					<div className="relative font-code text-mono md:text-xs">
 						<p className="flex items-center gap-2 rounded-md border border-line px-3 py-2 text-steel-400">
 							<span className="h-2 w-2 shrink-0 rounded-full bg-steel-500" aria-hidden="true" />
 							<span className="truncate">{LIVE_URL}</span>
 						</p>
 						<p
 							data-url-live
-							className="absolute inset-0 flex items-center gap-2 rounded-md border border-signal-400/45 bg-[#0d1f1a] px-3 py-2 text-signal-400"
+							className="absolute inset-0 flex items-center gap-2 rounded-md border border-signal-400/45 bg-signal-950 px-3 py-2 text-signal-400"
 						>
 							<span className="live-dot shrink-0" aria-hidden="true" />
 							<span className="truncate">{LIVE_URL}</span>
@@ -350,10 +367,7 @@ export function LaunchAct() {
 					</div>
 				</div>
 
-				<ol
-					className="space-y-1 px-4 py-4 font-code text-[10.5px] leading-relaxed md:text-[11.5px]"
-					aria-label="Deployment log"
-				>
+				<ol className="space-y-1 px-4 py-4 font-code text-mono leading-relaxed md:text-xs" aria-label="Deployment log">
 					{LOG_LINES.map((l, i) => (
 						<li key={i} data-log className="flex gap-3 whitespace-nowrap">
 							<span className={`w-12 shrink-0 ${STAGE_TONE[l.stage]}`}>{l.stage}</span>
@@ -361,7 +375,7 @@ export function LaunchAct() {
 						</li>
 					))}
 				</ol>
-				<p className="border-t border-line px-4 py-2.5 font-code text-[10px] text-steel-500">
+				<p className="border-t border-line px-4 py-2.5 font-code text-micro text-steel-500">
 					Streamed over SSE from Redis pub/sub
 				</p>
 			</div>

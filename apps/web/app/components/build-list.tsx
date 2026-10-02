@@ -32,14 +32,14 @@ export function BuildList({
 							onClick={() => onSelect(b.id)}
 							aria-current={selected ? 'true' : undefined}
 							className={cn(
-								'relative flex w-full flex-col gap-1.5 px-4 py-3.5 text-left transition-colors duration-300 ease-settle',
+								'relative flex w-full flex-col gap-1.5 px-4 py-3.5 text-left transition-colors duration-quick ease-settle',
 								selected ? 'bg-night-850' : 'hover:bg-night-900',
 							)}
 						>
 							<span
 								aria-hidden="true"
 								className={cn(
-									'absolute inset-y-0 left-0 w-0.5 origin-top bg-deck-400 transition-transform duration-500 ease-settle',
+									'absolute inset-y-0 left-0 w-0.5 origin-top bg-deck-400 transition-transform duration-base ease-settle',
 									selected ? 'scale-y-100' : 'scale-y-0',
 								)}
 							/>
@@ -49,13 +49,13 @@ export function BuildList({
 								</span>
 								<StatusBadge status={b.status} />
 							</span>
-							<span className="flex items-center gap-1.5 font-code text-[11px] text-steel-500">
+							<span className="flex items-center gap-1.5 font-code text-mono text-steel-500">
 								<span>{shortId(b.id)}</span>
 								<span aria-hidden>·</span>
 								<span>{formatRelativeTime(b.createdAt)}</span>
 							</span>
 							{b.rollbackOf && (
-								<span className="font-code text-[11px] text-deck-300">↩ image from {shortId(b.rollbackOf)}</span>
+								<span className="font-code text-mono text-deck-300">↩ image from {shortId(b.rollbackOf)}</span>
 							)}
 						</button>
 					</li>

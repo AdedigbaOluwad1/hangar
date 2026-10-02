@@ -29,7 +29,7 @@ export default function NewDeployment() {
 					<Link
 						to={paths.dashboard}
 						data-reveal
-						className="inline-flex items-center gap-1.5 font-code text-[11px] uppercase tracking-[0.16em] text-steel-400 transition-colors hover:text-steel-100"
+						className="inline-flex items-center gap-1.5 font-code text-mono uppercase tracking-[0.16em] text-steel-400 transition-colors hover:text-steel-100"
 					>
 						<HugeiconsIcon icon={ArrowLeft01Icon} className="h-3.5 w-3.5" />
 						Deployments
@@ -46,7 +46,7 @@ export default function NewDeployment() {
 					<ol data-reveal className="mt-8 space-y-2.5 border-l border-line pl-4">
 						{FLIGHT_PLAN.map((s, i) => (
 							<li key={s.key} className="flex items-baseline gap-3 text-sm">
-								<span className="font-code text-[10px] text-deck-400">{String(i + 1).padStart(2, '0')}</span>
+								<span className="font-code text-micro text-deck-400">{String(i + 1).padStart(2, '0')}</span>
 								<span className="text-steel-100">{s.label}</span>
 								<span className="truncate text-xs text-steel-500">{s.by}</span>
 							</li>

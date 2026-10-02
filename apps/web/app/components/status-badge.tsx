@@ -6,7 +6,7 @@ export function StatusBadge({ status, className }: { status: string; className?:
 	return (
 		<span
 			className={cn(
-				'inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 font-code text-[10px] uppercase tracking-wider',
+				'inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 font-code text-micro uppercase tracking-wider',
 				s.ring,
 				s.text,
 				className,

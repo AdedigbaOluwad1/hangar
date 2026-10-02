@@ -26,7 +26,7 @@ export function meta({ params }: Route.MetaArgs) {
 function Fact({ label, children }: { label: string; children: React.ReactNode }) {
 	return (
 		<div className="min-w-0">
-			<dt className="font-code text-[10px] uppercase tracking-[0.2em] text-steel-500">{label}</dt>
+			<dt className="font-code text-micro uppercase tracking-[0.2em] text-steel-500">{label}</dt>
 			<dd className="mt-1.5 truncate text-sm text-steel-300">{children}</dd>
 		</div>
 	);
@@ -79,7 +79,7 @@ export default function DeploymentDetail() {
 			>
 				<div className="blueprint-grid absolute inset-0 opacity-50" />
 				<div
-					className={`absolute -top-40 left-1/3 h-80 w-[50%] rounded-full blur-3xl transition-colors duration-1000 ${live ? 'bg-signal-400/10' : 'bg-deck-400/10'}`}
+					className={`absolute -top-40 left-1/3 h-80 w-[50%] rounded-full blur-3xl transition-colors duration-slow ${live ? 'bg-signal-400/10' : 'bg-deck-400/10'}`}
 				/>
 			</div>
 
@@ -88,7 +88,7 @@ export default function DeploymentDetail() {
 			<main className="relative mx-auto max-w-6xl px-5 pb-20 pt-10 md:px-8 md:pt-12">
 				<Link
 					to={paths.dashboard}
-					className="inline-flex items-center gap-1.5 font-code text-[11px] uppercase tracking-[0.16em] text-steel-400 transition-colors hover:text-steel-100"
+					className="inline-flex items-center gap-1.5 font-code text-mono uppercase tracking-[0.16em] text-steel-400 transition-colors hover:text-steel-100"
 				>
 					<HugeiconsIcon icon={ArrowLeft01Icon} className="h-3.5 w-3.5" />
 					Deployments
@@ -144,25 +144,25 @@ export default function DeploymentDetail() {
 									href={deployment.liveUrl!}
 									target="_blank"
 									rel="noreferrer"
-									className="group panel flex items-center gap-4 border-signal-400/40 bg-[#0b1c17] px-5 py-5 transition-colors hover:border-signal-400/70"
+									className="group panel flex items-center gap-4 border-signal-400/40 bg-signal-950 px-5 py-5 transition-colors hover:border-signal-400/70"
 								>
 									<span className="live-dot shrink-0" aria-hidden="true" />
 									<span className="min-w-0 flex-1">
-										<span className="block font-code text-[10px] uppercase tracking-[0.2em] text-signal-400/80">
+										<span className="block font-code text-micro uppercase tracking-[0.2em] text-signal-400/80">
 											Live
 										</span>
 										<span className="mt-1 block truncate font-code text-sm text-signal-400">{deployment.liveUrl}</span>
 									</span>
 									<HugeiconsIcon
 										icon={ExternalLinkIcon}
-										className="h-4 w-4 shrink-0 text-signal-400 transition-transform duration-300 ease-settle group-hover:-translate-y-0.5 group-hover:translate-x-0.5"
+										className="h-4 w-4 shrink-0 text-signal-400 transition-transform duration-quick ease-settle group-hover:-translate-y-0.5 group-hover:translate-x-0.5"
 									/>
 								</a>
 							) : (
 								<div className="panel flex items-center gap-4 border-dashed px-5 py-5">
 									<span className="h-2 w-2 shrink-0 rounded-full bg-steel-500" aria-hidden="true" />
 									<span className="min-w-0">
-										<span className="block font-code text-[10px] uppercase tracking-[0.2em] text-steel-500">
+										<span className="block font-code text-micro uppercase tracking-[0.2em] text-steel-500">
 											Live URL
 										</span>
 										<span className="mt-1 block text-sm text-steel-400">

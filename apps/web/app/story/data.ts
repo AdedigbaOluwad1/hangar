@@ -1,3 +1,5 @@
+import { PIPELINE_LOG } from '@hangar/types';
+
 export const DEPLOYMENT_ID = 'dep-k7m2x9qa';
 export const BUILD_ID = '0199a3f4-1b7a-7c2e-8f03-a46d92e1c5b8';
 const EVAL_ID = 'b1c4e8a2-73f9-4d61-a0e5-2f8c6d9b3e17';
@@ -16,15 +18,15 @@ export const REGISTRY_TAGS = [
 export type LogStage = 'system' | 'build' | 'deploy';
 
 export const LOG_LINES: Array<{ stage: LogStage; text: string }> = [
-	{ stage: 'system', text: `Cloning into /tmp/hangar-${DEPLOYMENT_ID}-k2P9xq` },
-	{ stage: 'build', text: 'Analysing app...' },
-	{ stage: 'build', text: `Building image ${VERSIONED_TAG}` },
-	{ stage: 'build', text: `Image pushed: ${VERSIONED_TAG}` },
-	{ stage: 'deploy', text: 'Submitting Nomad job' },
-	{ stage: 'deploy', text: `Nomad job submitted: ${EVAL_ID}` },
-	{ stage: 'deploy', text: 'Configuring Caddy route' },
-	{ stage: 'deploy', text: `Live at ${LIVE_URL}` },
-	{ stage: 'system', text: 'Deployment complete' },
+	{ stage: 'system', text: `${PIPELINE_LOG.clone} /tmp/hangar-${DEPLOYMENT_ID}-k2P9xq` },
+	{ stage: 'build', text: `${PIPELINE_LOG.detect}...` },
+	{ stage: 'build', text: `${PIPELINE_LOG.build} ${VERSIONED_TAG}` },
+	{ stage: 'build', text: `${PIPELINE_LOG.push}: ${VERSIONED_TAG}` },
+	{ stage: 'deploy', text: PIPELINE_LOG.schedule },
+	{ stage: 'deploy', text: `${PIPELINE_LOG.scheduled}: ${EVAL_ID}` },
+	{ stage: 'deploy', text: PIPELINE_LOG.route },
+	{ stage: 'deploy', text: `${PIPELINE_LOG.live} ${LIVE_URL}` },
+	{ stage: 'system', text: PIPELINE_LOG.complete },
 ];
 
 export const TAG_HISTORY = [BUILD_ID, '0199a2c8-90f1-7d3a-b6e4-1c7f20a9d5e2', '0199a1b0-3e5c-7a19-8d72-f04b6c1e9a37'];
