@@ -56,3 +56,17 @@ export interface ApiResponse<T> {
   data: T
   error?: string
 }
+
+export const PIPELINE_LOG = {
+  clone: 'Cloning into',
+  detect: 'Analysing app',
+  build: 'Building image',
+  push: 'Image pushed',
+  schedule: 'Submitting Nomad job',
+  scheduled: 'Nomad job submitted',
+  route: 'Configuring Caddy route',
+  live: 'Live at',
+  complete: 'Deployment complete',
+  rollback: 'Rolling back to image',
+  failed: 'Pipeline failed',
+} as const

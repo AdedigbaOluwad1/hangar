@@ -5,6 +5,7 @@ import { build } from './build'
 import { runContainer } from './run'
 import { patchCaddy, unpatchCaddy } from './caddy'
 import { emitDone, emitLog, stopJob } from '../lib'
+import { PIPELINE_LOG } from '@hangar/types'
 
 export async function runPipeline(
   deploymentId: string,
@@ -21,8 +22,8 @@ export async function runPipeline(
     if (options.rollbackImageTag) {
       imageTag = options.rollbackImageTag
       await updateBuild(buildId, { status: 'deploying', imageTag })
-      await writeLog(buildId, 'system', `⏪ Rolling back to image: ${imageTag}`)
-      await emitLog(buildId, 'system', `⏪ Rolling back to image: ${imageTag}`)
+      await writeLog(buildId, 'system', `⏪ ${PIPELINE_LOG.rollback}: ${imageTag}`)
+      await emitLog(buildId, 'system', `⏪ ${PIPELINE_LOG.rollback}: ${imageTag}`)
     } else {
       await updateBuild(buildId, { status: 'building' })
       dir = await clone(deploymentId, buildId)
@@ -39,10 +40,10 @@ export async function runPipeline(
     await updateDeployment(deploymentId, { liveUrl })
     await stopPreviousBuilds(deploymentId, buildId)
     await updateBuild(buildId, { status: 'running' })
-    await emitLog(buildId, 'system', '✅ Deployment complete')
+    await emitLog(buildId, 'system', `✅ ${PIPELINE_LOG.complete}`)
   } catch (err: any) {
     console.error('Pipeline error:', err)
-    await writeLog(buildId, 'system', `❌ Pipeline failed: ${err.message}`)
+    await writeLog(buildId, 'system', `❌ ${PIPELINE_LOG.failed}: ${err.message}`)
     await updateDeployment(deploymentId, { status: 'failed' })
     await updateBuild(buildId, { status: 'failed' })
   } finally {

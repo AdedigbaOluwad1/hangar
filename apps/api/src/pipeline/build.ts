@@ -2,6 +2,7 @@ import { execa } from 'execa'
 import { join } from 'path'
 import { writeLog } from '@hangar/db'
 import { emitLog, gcOldTags } from '../lib'
+import { PIPELINE_LOG } from '@hangar/types'
 
 export async function build(
   deploymentId: string,
@@ -15,8 +16,8 @@ export async function build(
   const cacheTag = `${registryHost}/${name}:cache`
   const planPath = join(dir, 'railpack-plan.json')
 
-  await writeLog(buildId, 'build', `📋 Analysing app...`)
-  await emitLog(buildId, 'build', `📋 Analysing app...`)
+  await writeLog(buildId, 'build', `📋 ${PIPELINE_LOG.detect}...`)
+  await emitLog(buildId, 'build', `📋 ${PIPELINE_LOG.detect}...`)
   const prepareProc = execa('railpack', ['prepare', dir, '--plan-out', planPath])
   prepareProc.stdout?.on('data', (chunk: Buffer) => {
     for (const line of chunk.toString().split('\n').filter(Boolean)) {
@@ -34,8 +35,8 @@ export async function build(
 
   await gcOldTags(registryHost, deploymentId)
 
-  await writeLog(buildId, 'build', `🔨 Building image ${versionedTag}`)
-  await emitLog(buildId, 'build', `🔨 Building image ${versionedTag}`)
+  await writeLog(buildId, 'build', `🔨 ${PIPELINE_LOG.build} ${versionedTag}`)
+  await emitLog(buildId, 'build', `🔨 ${PIPELINE_LOG.build} ${versionedTag}`)
   const buildProc = execa('buildctl', [
     '--addr', process.env.BUILDKIT_HOST!,
     'build',
@@ -62,8 +63,8 @@ export async function build(
   })
   await buildProc
 
-  await writeLog(buildId, 'build', `✅ Image pushed: ${versionedTag}`)
-  await emitLog(buildId, 'build', `✅ Image pushed: ${versionedTag}`)
+  await writeLog(buildId, 'build', `✅ ${PIPELINE_LOG.push}: ${versionedTag}`)
+  await emitLog(buildId, 'build', `✅ ${PIPELINE_LOG.push}: ${versionedTag}`)
 
   return versionedTag
 }

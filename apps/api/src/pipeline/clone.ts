@@ -4,6 +4,7 @@ import { tmpdir } from 'os'
 import { join } from 'path'
 import { writeLog, getDeployment } from '@hangar/db'
 import { emitLog } from '../lib'
+import { PIPELINE_LOG } from '@hangar/types'
 
 export async function clone(deploymentId: string, buildId: string): Promise<string> {
   const deployment = await getDeployment(deploymentId)
@@ -12,8 +13,8 @@ export async function clone(deploymentId: string, buildId: string): Promise<stri
 
   const dir = await mkdtemp(join(tmpdir(), `hangar-${deploymentId}-`))
 
-  await writeLog(buildId, 'system', `📁 Cloning into ${dir}`)
-  await emitLog(buildId, 'system', `📁 Cloning into ${dir}`)
+  await writeLog(buildId, 'system', `📁 ${PIPELINE_LOG.clone} ${dir}`)
+  await emitLog(buildId, 'system', `📁 ${PIPELINE_LOG.clone} ${dir}`)
 
   const proc = execa('git', ['clone', '--depth=1', deployment.sourceUrl, dir])
 
