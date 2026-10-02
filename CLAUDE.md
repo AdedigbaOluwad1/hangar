@@ -1,5 +1,9 @@
 # Hangar
 
+## Code Comments
+
+No comments in app code (`apps/*`, `packages/*`): no file-path headers, no explanatory blocks, no end-of-line notes. The only exceptions are `TODO`/`FIXME` and the `// tokens-ok: <reason>` marker. This overrides any general guidance to comment the why. Applied migrations and generated files are never edited.
+
 ## Design & Motion Rules
 
 Full guide: `docs/STYLE_GUIDE.md`. These rules are non-negotiable for anything in `apps/web`.

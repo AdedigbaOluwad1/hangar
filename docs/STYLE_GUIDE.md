@@ -341,6 +341,7 @@ Breakpoint is `md` (768px), the same one `useAct` uses for `isDesktop`.
 | Impact effects only in the launch | Shaking the page on a successful save |
 | `useReveal(scope, !isLoading)` | Re-running entrances on every refetch |
 | Roadmap features with a "Coming" chip | Shipping copy that implies multi-node works today |
+| Name things so the code explains itself; leave a `TODO` for unfinished work | Comments in app code (see `CLAUDE.md`, Code Comments) |
 
 ---
 
@@ -450,6 +451,7 @@ Lore names places and moments; plain words name data. Eyebrows and section label
 - [ ] Checked at 390px and 1440px; no sideways scroll
 - [ ] Dashboard work follows §11: page template, one amber primary, silent refetches, no story choreography
 - [ ] Copy follows §7; any claim matches the code
+- [ ] No comments added except `TODO`/`FIXME` or a `tokens-ok` marker
 - [ ] If a new pattern was introduced, this guide is updated in the same change
 
 ## Open decisions
