@@ -8,7 +8,7 @@ import type { Route } from './+types/deployments.$id';
 import { api } from '../lib/api';
 import { useLogStream } from '../lib/use-log-stream';
 import { useReveal } from '../lib/motion';
-import { repoName, shortId } from '../lib/format';
+import { shortId } from '../lib/format';
 import { ACTIVE_BUILD_STATUSES } from '../lib/status';
 import { Header } from '../components/header';
 import { StatusBadge } from '../components/status-badge';
@@ -17,6 +17,7 @@ import { LogStream } from '../components/log-stream';
 import { DeploymentActions } from '../components/deployment-actions';
 import { CopyButton } from '../components/copy-button';
 import { FlightPath } from '../components/flight-path';
+import { CallsignTitle } from '../components/callsign-title';
 
 export function meta({ params }: Route.MetaArgs) {
 	return [{ title: `${params.id} · Hangar` }];
@@ -111,9 +112,9 @@ export default function DeploymentDetail() {
 									<p className="eyebrow">Deployment</p>
 									<StatusBadge status={status} />
 								</div>
-								<h1 data-reveal className="display mt-4 truncate text-5xl md:text-7xl">
-									{repoName(deployment.sourceUrl) ?? shortId(deploymentId)}
-								</h1>
+								<div data-reveal className="mt-4">
+									<CallsignTitle deployment={deployment} />
+								</div>
 								<div data-reveal className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1">
 									<span className="flex min-w-0 items-center gap-1 font-code text-xs text-steel-500">
 										<span className="truncate">{deploymentId}</span>

@@ -23,6 +23,13 @@ export const api = {
 			body: JSON.stringify(body),
 		}).then((r) => json(r)),
 
+	renameDeployment: (id: string, callsign: string): Promise<Deployment> =>
+		fetch(`${BASE}/deployments/${id}`, {
+			method: 'PATCH',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ callsign }),
+		}).then((r) => json(r)),
+
 	deleteDeployment: (id: string): Promise<{ message: string }> =>
 		fetch(`${BASE}/deployments/${id}`, { method: 'DELETE' }).then((r) => json(r)),
 

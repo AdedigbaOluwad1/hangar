@@ -8,3 +8,4 @@ export * from './build-list';
 export * from './log-stream';
 export * from './mark';
 export * from './flight-path';
+export * from './callsign-title';

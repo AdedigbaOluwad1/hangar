@@ -72,7 +72,7 @@ export function DeployForm() {
 		},
 		onSuccess: (deployment) => {
 			queryClient.invalidateQueries({ queryKey: ['deployments'] });
-			toast.success('Cleared for launch', { description: deployment.id });
+			toast.success(`${deployment.callsign} is cleared for launch`, { description: deployment.id });
 			navigate(`/deployments/${deployment.id}`);
 		},
 	});

@@ -6,7 +6,7 @@ import type { Deployment } from '@hangar/types';
 import { JetPlan } from '../story/art/jet';
 import { StatusBadge } from './status-badge';
 import { buttonVariants } from './ui/button';
-import { formatRelativeTime, repoName, shortId } from '../lib/format';
+import { formatRelativeTime, repoName } from '../lib/format';
 
 const JET_TONE: Record<string, string> = {
 	running: '#46e39a',
@@ -42,9 +42,11 @@ export function DeploymentList({ deployments }: { deployments: Deployment[] }) {
 								to={`/deployments/${d.id}`}
 								className="block truncate font-medium text-steel-100 after:absolute after:inset-0"
 							>
-								{repoName(d.sourceUrl) ?? shortId(d.id)}
+								{d.callsign}
 							</Link>
-							<p className="mt-0.5 truncate font-code text-[11px] text-steel-500">{d.id}</p>
+							<p className="mt-0.5 truncate font-code text-[11px] text-steel-500">
+								{repoName(d.sourceUrl) ?? 'no source'} · {d.id}
+							</p>
 						</div>
 						<StatusBadge status={status} />
 						{d.liveUrl ? (
