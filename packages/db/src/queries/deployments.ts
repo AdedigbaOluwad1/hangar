@@ -55,6 +55,7 @@ export async function updateDeployment(
     imageTag: string
     containerId: string
     liveUrl: string
+    callsign: string
   }>
 ): Promise<Deployment> {
   return prisma.deployment.update({ where: { id }, data })

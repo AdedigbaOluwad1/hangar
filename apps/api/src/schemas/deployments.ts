@@ -1,4 +1,5 @@
 import { z } from '@hono/zod-openapi'
+import { CALLSIGN_PATTERN } from '../lib/callsign'
 
 export const DeploymentIdParam = z.object({
   id: z.string().openapi({
@@ -113,6 +114,19 @@ export const CreateDeploymentBody = z
     resources: ResourcesSchema.optional(),
   })
   .openapi('CreateDeploymentBody')
+
+export const RenameDeploymentBody = z
+  .object({
+    callsign: z
+      .string()
+      .trim()
+      .toLowerCase()
+      .min(3)
+      .max(40)
+      .regex(CALLSIGN_PATTERN, 'Use lowercase letters, numbers and single hyphens')
+      .openapi({ example: 'copper-kestrel' }),
+  })
+  .openapi('RenameDeploymentBody')
 
 export const TagsResponseSchema = z
   .object({

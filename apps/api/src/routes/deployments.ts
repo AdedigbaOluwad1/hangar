@@ -27,6 +27,7 @@ import {
   HealthSchema,
   TagsResponseSchema,
   RollbackBodySchema,
+  RenameDeploymentBody,
 } from '../schemas/deployments'
 
 // Validation failures answer in the documented ErrorSchema shape rather than
@@ -146,6 +147,48 @@ deployments.openapi(createRoute_, async (c) => {
   })
 
   return c.json({ ...deployment, latestBuild: build }, 201)
+})
+
+// ── PATCH /:id — rename ───────────────────────────────────
+
+const renameRoute = createRoute({
+  method: 'patch',
+  path: '/{id}',
+  tags: ['Deployments'],
+  summary: "Rename a deployment's callsign",
+  request: {
+    params: DeploymentIdParam,
+    body: {
+      required: true,
+      content: { 'application/json': { schema: RenameDeploymentBody } },
+    },
+  },
+  responses: {
+    200: {
+      content: { 'application/json': { schema: DeploymentSchema } },
+      description: 'The renamed deployment',
+    },
+    404: {
+      content: { 'application/json': { schema: ErrorSchema } },
+      description: 'Not found',
+    },
+    409: {
+      content: { 'application/json': { schema: ErrorSchema } },
+      description: 'Callsign already taken by another deployment',
+    },
+  },
+})
+
+deployments.openapi(renameRoute, async (c) => {
+  const { id } = c.req.valid('param')
+  const { callsign } = c.req.valid('json')
+  const deployment = await getDeployment(id)
+  if (!deployment) return c.json({ error: 'Not found' }, 404)
+  if (callsign !== deployment.callsign && (await isCallsignTaken(callsign))) {
+    return c.json({ error: `${callsign} is already taken` }, 409)
+  }
+  const renamed = await updateDeployment(id, { callsign })
+  return c.json({ ...renamed, latestBuild: deployment.latestBuild }, 200)
 })
 
 // ── DELETE /:id — stop + remove ───────────────────────────
