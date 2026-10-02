@@ -27,7 +27,17 @@ import {
   RollbackBodySchema,
 } from '../schemas/deployments'
 
-export const deployments = new OpenAPIHono()
+// Validation failures answer in the documented ErrorSchema shape rather than
+// zod's raw issue list, so clients can show the message as-is.
+export const deployments = new OpenAPIHono({
+  defaultHook: (result, c) => {
+    if (!result.success) {
+      const issue = result.error.issues[0]
+      const field = issue?.path.join('.')
+      return c.json({ error: field ? `${field}: ${issue.message}` : (issue?.message ?? 'Invalid request') }, 400)
+    }
+  },
+})
 
 // ── GET / — list ──────────────────────────────────────────
 
