@@ -98,8 +98,7 @@ export function DeckAct() {
 				.to(q('[data-structure]'), { scale: isDesktop ? 1.7 : 1.5, duration: 1, ease: EASE.throttle }, 0)
 				.to(q('[data-blueprint]'), { scale: 2.1, autoAlpha: 0, duration: 0.7, ease: EASE.throttle }, 0)
 				.to(q('[data-stars]'), { yPercent: -8, duration: 1 }, 0)
-				.to(q('[data-sky]'), { yPercent: -3, duration: 1 }, 0)
-				.to(q('[data-fade]'), { autoAlpha: 1, duration: 0.22, ease: EASE.glide }, 0.78);
+				.to(q('[data-sky]'), { yPercent: -3, duration: 1 }, 0);
 		},
 		{ eager: true },
 	);
@@ -276,8 +275,6 @@ export function DeckAct() {
 				<span className="font-code text-micro uppercase tracking-[0.3em] text-steel-400">Scroll is the throttle</span>
 				<span data-cue-line className="block h-10 w-px bg-gradient-to-b from-deck-400 to-transparent" />
 			</div>
-
-			<div data-fade className="pointer-events-none absolute inset-0 z-30 bg-night-950 opacity-0" />
 		</section>
 	);
 }
