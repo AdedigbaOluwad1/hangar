@@ -133,6 +133,12 @@ The `:cache` tag is excluded from GC and persists across builds to speed up subs
 
 Builds are serialized via `concurrency: 1` on the BullMQ worker — a redeploy queued while a build is in progress waits until the current build completes.
 
+### Callsigns
+
+Every deployment has a unique, renameable callsign (`copper-kestrel`) alongside its `dep-<nanoid>` id, so deployments of the same repo can be told apart. New deployments get a random adjective-noun pair from `apps/api/src/lib/callsign.ts`, with a numeric suffix once pairs run short. `PATCH /deployments/:id` renames one (lowercase letters, numbers and single hyphens, 3–40 characters; `409` if taken).
+
+> **Important:** the `ADJECTIVES` and `NOUNS` lists are append-only. The `20261002120000_add_deployment_callsign` migration copied them to backfill existing deployments, and it picks words by position. Reordering or removing words changes what that migration would produce on a fresh database. Add new words at the end of a list only.
+
 ### Secrets Flow
 
 Vault uses Nomad workload identity (JWT) for auth — no static tokens anywhere in job files:
