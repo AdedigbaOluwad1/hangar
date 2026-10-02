@@ -1,12 +1,12 @@
-// apps/web/app/lib/useLogStream.ts
+// apps/web/app/lib/use-log-stream.ts
 import { useState, useEffect } from 'react';
 
-interface LogLine {
+export interface LogLine {
 	stream: 'build' | 'deploy' | 'system';
 	line: string;
 }
 
-export function useLogStream(deploymentId: string | null) {
+export function useLogStream(deploymentId: string | null, buildId?: string | null) {
 	const [lines, setLines] = useState<LogLine[]>([]);
 	const [done, setDone] = useState(false);
 
@@ -16,8 +16,9 @@ export function useLogStream(deploymentId: string | null) {
 		setDone(false);
 
 		const BASE = typeof window !== 'undefined' ? '' : 'http://api:3001';
+		const query = buildId ? `?buildId=${buildId}` : '';
 
-		const es = new EventSource(`${BASE}/api/deployments/${deploymentId}/logs`);
+		const es = new EventSource(`${BASE}/api/deployments/${deploymentId}/logs${query}`);
 
 		es.addEventListener('log', (e) => {
 			setLines((prev) => [...prev, JSON.parse(e.data)]);
@@ -31,7 +32,7 @@ export function useLogStream(deploymentId: string | null) {
 		es.onerror = () => es.close();
 
 		return () => es.close();
-	}, [deploymentId]);
+	}, [deploymentId, buildId]);
 
 	return { lines, done };
 }
