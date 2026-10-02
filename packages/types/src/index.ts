@@ -15,6 +15,7 @@ export interface Build {
 
 export interface Deployment {
   id: string
+  callsign: string
   status: DeploymentStatus
   sourceType: 'git' | 'zip'
   sourceUrl: string | null

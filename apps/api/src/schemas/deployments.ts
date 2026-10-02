@@ -51,6 +51,7 @@ export const LatestBuildSchema = z
 export const DeploymentSchema = z
   .object({
     id: z.string().openapi({ example: 'dep-a1b2c3d4' }),
+    callsign: z.string().openapi({ example: 'copper-kestrel' }),
     status: z
       .enum(['pending', 'running', 'failed', 'stopped'])
       .openapi({ example: 'running' }),

@@ -3,6 +3,7 @@ import type { Deployment, Build, DeploymentStatus } from '@prisma/client'
 
 export async function createDeployment(data: {
   id: string
+  callsign: string
   sourceType: 'git' | 'zip'
   sourceUrl: string | null
   userId?: string
@@ -40,6 +41,11 @@ export async function listDeployments(): Promise<(Deployment & { latestBuild: Bu
     ...deployment,
     latestBuild: builds[0] ?? null,
   }))
+}
+
+export async function isCallsignTaken(callsign: string): Promise<boolean> {
+  const found = await prisma.deployment.findUnique({ where: { callsign }, select: { id: true } })
+  return found !== null
 }
 
 export async function updateDeployment(

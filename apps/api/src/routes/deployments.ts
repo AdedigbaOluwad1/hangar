@@ -9,9 +9,11 @@ import {
   getDeployment,
   getBuild,
   updateDeployment,
+  isCallsignTaken,
 } from '@hangar/db'
 import { getVault, deployQueue, stopJob, getJobStatus } from '../lib'
 import { unpatchCaddy } from '../pipeline/caddy'
+import { generateCallsign } from '../lib/callsign'
 import {
   DeploymentIdParam,
   BuildIdParam,
@@ -119,6 +121,7 @@ deployments.openapi(createRoute_, async (c) => {
 
   const deployment = await createDeployment({
     id: `dep-${nanoid(8).toLowerCase().replace(/[^a-z0-9-]/g, '')}`,
+    callsign: await generateCallsign(isCallsignTaken),
     sourceType: body.sourceType,
     sourceUrl: body.sourceUrl ?? null,
   })

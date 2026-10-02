@@ -23,6 +23,7 @@ enum BuildStatus {
 
 model Deployment {
   id          String           @id
+  callsign    String           @unique
   status      DeploymentStatus @default(pending)
   sourceType  String           @map("source_type")
   sourceUrl   String?          @map("source_url")
