@@ -7,6 +7,7 @@ import { JetPlan } from '../story/art/jet';
 import { StatusBadge } from './status-badge';
 import { buttonVariants } from './ui/button';
 import { formatRelativeTime, repoName } from '../lib/format';
+import { deploymentStatus } from '../lib/status';
 
 const JET_TONE: Record<string, string> = {
 	running: '#46e39a',
@@ -14,10 +15,6 @@ const JET_TONE: Record<string, string> = {
 	deploying: '#ffd391',
 	failed: '#f2676b',
 };
-
-export function deploymentStatus(d: Deployment) {
-	return d.latestBuild?.status ?? d.status;
-}
 
 export function DeploymentList({ deployments }: { deployments: Deployment[] }) {
 	if (deployments.length === 0) return <EmptyHangar />;
@@ -49,7 +46,7 @@ export function DeploymentList({ deployments }: { deployments: Deployment[] }) {
 							</p>
 						</div>
 						<StatusBadge status={status} />
-						{d.liveUrl ? (
+						{d.liveUrl && status === 'running' ? (
 							<a
 								href={d.liveUrl}
 								target="_blank"

@@ -9,9 +9,9 @@ import { api } from '../lib/api';
 import { useCountUp, useReveal } from '../lib/motion';
 import { cn } from '../lib/utils';
 import { Header } from '../components/header';
-import { DeploymentList, deploymentStatus } from '../components/deployment-list';
+import { DeploymentList } from '../components/deployment-list';
 import { buttonVariants } from '../components/ui/button';
-import { ACTIVE_BUILD_STATUSES } from '../lib/status';
+import { ACTIVE_BUILD_STATUSES, deploymentStatus } from '../lib/status';
 
 export function meta({}: Route.MetaArgs) {
 	return [{ title: 'Deployments · Hangar' }];

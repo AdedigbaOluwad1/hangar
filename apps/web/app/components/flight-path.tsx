@@ -74,7 +74,7 @@ export function FlightPath({ lines, status }: { lines: LogLine[]; status?: strin
 			<div className="flex items-center justify-between">
 				<p className="eyebrow">Flight path</p>
 				<p className="font-code text-[11px] text-steel-500">
-					{complete ? 'airborne' : failed ? 'aborted' : status === 'stopped' ? 'stood down' : 'in flight'}
+					{status === 'stopped' ? 'stood down' : complete ? 'airborne' : failed ? 'aborted' : 'in flight'}
 				</p>
 			</div>
 

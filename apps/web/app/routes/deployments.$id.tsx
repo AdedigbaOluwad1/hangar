@@ -9,7 +9,7 @@ import { api } from '../lib/api';
 import { useLogStream } from '../lib/use-log-stream';
 import { useReveal } from '../lib/motion';
 import { shortId } from '../lib/format';
-import { ACTIVE_BUILD_STATUSES } from '../lib/status';
+import { ACTIVE_BUILD_STATUSES, deploymentStatus } from '../lib/status';
 import { Header } from '../components/header';
 import { StatusBadge } from '../components/status-badge';
 import { BuildList } from '../components/build-list';
@@ -68,7 +68,7 @@ export default function DeploymentDetail() {
 	}, [builds, selectedBuildId]);
 
 	const selectedBuild = builds.find((b) => b.id === selectedBuildId);
-	const status = deployment ? (deployment.latestBuild?.status ?? deployment.status) : 'pending';
+	const status = deployment ? deploymentStatus(deployment) : 'pending';
 	const live = deployment?.liveUrl && status === 'running';
 
 	return (
@@ -189,7 +189,10 @@ export default function DeploymentDetail() {
 						</div>
 
 						<div data-reveal className="mt-4">
-							<FlightPath lines={lines} status={selectedBuild?.status} />
+							<FlightPath
+								lines={lines}
+								status={selectedBuild?.id === deployment.latestBuild?.id ? status : selectedBuild?.status}
+							/>
 						</div>
 
 						<div className="mt-10 grid grid-cols-1 gap-6 md:grid-cols-[280px_minmax(0,1fr)]">
