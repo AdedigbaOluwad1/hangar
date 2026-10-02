@@ -41,7 +41,7 @@
   --text-display-act--line-height: 0.88;
   --text-display-finale: clamp(3.25rem, 11vw, 10rem);
   --text-display-finale--line-height: 0.88;
-  --text-stencil: 22vh;
+  --text-stencil: min(22vh, 24vw);
   --text-stencil--line-height: 1;
   --text-micro: 0.625rem;
   --text-mono: 0.6875rem;

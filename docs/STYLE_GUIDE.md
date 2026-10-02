@@ -168,7 +168,7 @@ Status colours live in one place: `STATUS` in `lib/status.ts` (`dot`, `text`, `r
 | Hero | `display text-display-hero` (clamp 3rem → 8.25rem) | `story/acts/deck.tsx` |
 | Act title | `display text-display-act` (clamp 2.5rem → 5rem) | Every story act, including the fleet |
 | Finale | `display text-display-finale` (clamp 3.25rem → 10rem) | `story/acts/fleet.tsx` (`Coda`) |
-| Door stencil | `text-stencil` (22vh) | `story/acts/hangar.tsx` |
+| Door stencil | `text-stencil` (`min(22vh, 24vw)`) | `story/acts/hangar.tsx` |
 | Page title | `display text-6xl md:text-8xl` (list) / `text-5xl md:text-7xl` (others) | `routes/dashboard.tsx`, `dashboard.deployments.$id.tsx` |
 | Section / card title | `font-display text-xl–3xl font-bold uppercase tracking-wide` | `deploy-form.tsx` `Section`, `crew.tsx` cards |
 | Eyebrow | `.eyebrow`: mono 11px, `tracking-[0.22em]`, uppercase, `deck-400` | Everywhere above a title |
