@@ -10,6 +10,9 @@ export const EASE = {
 	snap: 'hangar.snap',
 	brake: 'hangar.brake',
 	spool: 'hangar.spool',
+	catapult: 'hangar.catapult',
+	coast: 'hangar.coast',
+	cruise: 'none',
 	scrub: 'none',
 	impact: 'none',
 } as const;
@@ -21,7 +24,23 @@ const CURVES: Record<string, string> = {
 	[EASE.snap]: '0.34,1.45,0.64,1',
 	[EASE.brake]: '0.05,0.7,0.1,1',
 	[EASE.spool]: '0.5,0,0.75,0',
+	[EASE.catapult]: '0.33,0,0.67,0.33',
+	[EASE.coast]: '0.33,0.67,0.67,1',
 };
+
+function bezier(ease: string) {
+	return (CURVES[ease] ?? '0,0,1,1').split(',').map(Number);
+}
+
+export function entrySpeed(ease: string) {
+	const [x1, y1] = bezier(ease);
+	return x1 === 0 ? Infinity : y1 / x1;
+}
+
+export function exitSpeed(ease: string) {
+	const [, , x2, y2] = bezier(ease);
+	return x2 === 1 ? Infinity : (1 - y2) / (1 - x2);
+}
 
 export const DUR = {
 	impact: 0.06,

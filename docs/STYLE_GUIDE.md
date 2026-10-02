@@ -18,14 +18,14 @@ Paths below are relative to `apps/web/app/` unless they start with the repo root
 
 | Idea | What it looks like here | Code |
 |---|---|---|
-| Acceleration | Things gaining speed start slow, then go: `throttle` | Launch stroke, hero camera push (`story/acts/launch.tsx`, `story/acts/deck.tsx`) |
-| Weight | Heavy things move symmetrically and slowly: `glide` | Bay doors, camera pans, rollback turn |
-| Anticipation | A small move against the main one first | Door dips 8px before rising; crew arm drops before it salutes; jet squats back before the shot |
-| Follow-through | Arrivals overshoot slightly or settle long | Parts lock in with `snap`; text and cards land with `settle`; landings stop hard with `brake` |
+| Acceleration | Things gaining speed start slow, then go: `throttle`. A catapult stroke is constant acceleration: `catapult` | Hero camera push (`story/acts/deck.tsx`); the launch stroke, the crew jet pulling away, the rollback break (`launch.tsx`, `crew.tsx`, `squadron.tsx`) |
+| Weight | Heavy things move symmetrically and slowly: `glide` | Bay doors, camera pans |
+| Anticipation | A small move against the main one first | Door dips 8px before rising; crew arm drops before it salutes |
+| Follow-through | Arrivals overshoot slightly or settle long | Parts lock in with `snap`; text and cards land with `settle`; landings roll to a stop with `coast` |
 | Deliberate impact | Shake, flash, speed lines and shockwaves happen at exactly one moment | The launch shot only; a smaller echo when the rollback jet traps |
 
 **We never:**
-- use `linear` or the browser's default `ease` for anything that isn't a scroll scrub
+- use `linear` or the browser's default `ease` for anything that isn't a scroll scrub or a vehicle holding its speed (`EASE.cruise`)
 - animate layout properties (width, height, top, left, margins) in motion code
 - use impact effects (shake, flash, speed lines) outside the launch and its squadron echo
 - replay entrance animations on data refetches
@@ -44,12 +44,15 @@ Paths below are relative to `apps/web/app/` unless they start with the repo root
 | `EASE.settle` | `hangar.settle` | `0.16, 1, 0.3, 1` | `--ease-settle` / `ease-settle` | Arrivals: text, cards, panels, camera settling. **Default** for UI transitions |
 | `EASE.glide` | `hangar.glide` | `0.65, 0, 0.35, 1` | `--ease-glide` / `ease-glide` | Heavy symmetric moves: doors, pans, turns |
 | `EASE.snap` | `hangar.snap` | `0.34, 1.45, 0.64, 1` | `--ease-snap` / `ease-snap` | Parts locking into place, status dots popping in |
-| `EASE.brake` | `hangar.brake` | `0.05, 0.7, 0.1, 1` | `--ease-brake` / `ease-brake` | Hard stops: arrested landings |
+| `EASE.brake` | `hangar.brake` | `0.05, 0.7, 0.1, 1` | `--ease-brake` / `ease-brake` | Hard stops. Not used in the story since the physics pass; prefer `coast`, which hands speed over cleanly |
 | `EASE.spool` | `hangar.spool` | `0.5, 0, 0.75, 0` | `--ease-spool` / `ease-spool` | Pressure building before a release: thrust, anticipation dips |
+| `EASE.catapult` | `hangar.catapult` | `0.33, 0, 0.67, 0.33` | `--ease-catapult` / `ease-catapult` | Constant acceleration from rest: the catapult stroke. Ends at 2× its average speed |
+| `EASE.coast` | `hangar.coast` | `0.33, 0.67, 0.67, 1` | `--ease-coast` / `ease-coast` | Constant deceleration to rest: a jet rolling up to the catapult, a camera easing to a stop. Starts at 2× its average speed |
+| `EASE.cruise` | `none` | linear | — | A vehicle holding its speed along a path: the climb-out, the landing pattern |
 | `EASE.scrub` | `none` | linear | — | Scroll-scrubbed tracks only. `SCRUB` lag supplies the smoothing |
 | `EASE.impact` | `none` | linear | — | Single-frame hits and keyframed shakes, which carry their own shape. Launch only |
 
-Curves are registered once by `registerEases()` (`lib/motion.ts`). There are no springs; overshoot comes from `snap`.
+Curves are registered once by `registerEases()` (`lib/motion.ts`). There are no springs; overshoot comes from `snap`. `entrySpeed(ease)` and `exitSpeed(ease)` return a curve's speed at its start and end, as a multiple of its average speed; use them to hand speed from one tween to the next (§2.6).
 
 ### 2.2 Duration — `DUR` in `lib/motion.ts`, seconds
 
@@ -95,7 +98,7 @@ Tailwind's numeric `duration-200` etc. are not used. Hold times that aren't moti
 | `PIN.hangar` | 260% / 220% | |
 | `PIN.crew` | 320% / 300% | |
 | `PIN.launch` | 240% / 200% | |
-| `PIN.squadron` | 240% / 200% | |
+| `PIN.squadron` | 320% / 260% | Long enough to watch the rollback fly its circuit |
 | `PIN.fleet` | 140% / 120% | |
 
 Use `pinLength(act, isDesktop)` rather than writing `+=N%`.
@@ -103,9 +106,20 @@ Use `pinLength(act, isDesktop)` rather than writing `+=N%`.
 ### 2.5 Pacing rules
 
 - **Fast vs slow.** Feedback to a user action is `instant`–`quick`. Content arriving is `slow`. Only the hero intro and story-scale moves get `epic`.
-- **Overlap.** Sequences overlap, they don't queue: start the next beat before the last one finishes (the hero starts the headline while the door is still rising; the launch flash starts as the jet leaves frame).
+- **Overlap.** Sequences overlap, they don't queue: start the next beat before the last one finishes (the hero starts the headline while the door is still rising; the launch flash fires as the jet clears the bow).
 - **Maximum simultaneous.** Outside the story, at most **one entrance sequence** per view (`useReveal`) plus state transitions. In a story act, one primary subject plus parallax layers; impact effects only at the launch.
 - **Once.** Entrance sequences run once per mount (`useReveal` guards this). Polling must never replay them.
+
+### 2.6 Vehicle physics
+
+Jets, ships and anything else that flies or drives obey these rules. Hangar parts snapping together are assembly, not flight, and are exempt.
+
+- **Nose first.** A vehicle only moves the way it points. Heading follows the path tangent: `motionPath: { path, autoRotate: true }`, or `autoRotate: 90` for top-down art drawn nose-up (`JetPlan`). No sideways or backwards slides, no spins in place.
+- **Turns are arcs.** Turn on an arc with a radius at least the vehicle's length. To reverse direction, fly a pattern (`squadron.tsx`: break, a corridor down the empty side, final approach), never a pivot. Keep the whole pattern inside the frame at 390px; move furniture out of its way rather than flying off-screen.
+- **Speed is continuous.** A moving thing never starts or stops instantly unless something stops it (the arrestor wire). When tweens chain on one subject, the speed must match at the seam: `exitSpeed(a) × distanceA / durationA = entrySpeed(b) × distanceB / durationB`. Measure path length with `MotionPathPlugin.getLength(path)`. Don't follow `throttle` with `settle` on the same axis.
+- **Climbs are gradual.** Pitch rises along a curve, never in a separate rotation tween: 10–25° for a jet near the deck. The launch climbs to 25° on a 900-unit arc that starts at the bow.
+- **Ground stays ground.** Wheels sit on the deck until lift-off. Rotate jets about the main gear (`svgOrigin` at the contact point) so the tail clears the deck as the nose rises.
+- **Static poses.** Put a jet's no-JS / reduced-motion pose on a wrapper (`data-jet-pose`, `data-back-pose`) that motion clears with `attr: { transform: '' }`. Don't mix a static `transform` attribute with GSAP transforms on the same element.
 
 ---
 
@@ -119,6 +133,7 @@ Use `pinLength(act, isDesktop)` rather than writing `+=N%`.
 | **Masked type reveal** | `SplitText.create(el, { type: 'words', mask: 'words' })`, then `from(words, { yPercent: 110, ease: settle })`. Hero uses lines + `autoSplit`; the coda uses chars | `story/acts/hangar.tsx`, `deck.tsx`, `fleet.tsx` (`Coda`) | Headlines only. Never on body copy or dashboard text |
 | **Parallax layers** | 3+ layers on one `.story-stage` box, each moving at a different rate: stars ≈ 3–8%, horizon ≈ 12%, scene 100%, rulers 45% | `story/acts/crew.tsx` | Story only |
 | **Camera move** | Scale or translate a wrapper, origin at the subject; `throttle` to push in, `glide`/`settle` to pull back | `deck.tsx` (push), `squadron.tsx` (pull back from the lead jet) | Story only |
+| **Vehicle on a path** | SVG `<g>` in stage units, `svgOrigin` at the pivot, path strings built from named constants, `autoRotate`; durations derived from path length and the speed handed over from the previous tween (§2.6) | `story/acts/launch.tsx` (`CLIMB`), `squadron.tsx` (`BREAK`, `PATTERN`, `ROLLOUT`) | Any flight or taxi that isn't a straight line |
 | **Launch impact** | Flash (white overlay 0 → 0.55 → 0), shake keyframes ±12px decaying over 0.55s, 14 speed lines, a shockwave ring, camera settle | `story/acts/launch.tsx` (`shot`) | **Launch only.** The squadron trap gets a ±4px echo (`squadron.tsx`). Nowhere else |
 | **Dashboard reveal** | Mark children `data-reveal`; call `useReveal(scope, ready)`. Staggers `y: 14 → 0`, `DUR.slow`, `settle`, `STAGGER.tight`, once | `routes/dashboard.tsx` | Every dashboard page. The only entrance animation the app UI uses |
 | **Count-up** | `useCountUp(ref, value)` tweens from the previous value, `DUR.slow`, `settle` | `routes/dashboard.tsx` (`Stat`) | Numbers that summarise state |

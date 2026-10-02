@@ -3,10 +3,11 @@ import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { SplitText } from 'gsap/SplitText';
 import { DrawSVGPlugin } from 'gsap/DrawSVGPlugin';
+import { MotionPathPlugin } from 'gsap/MotionPathPlugin';
 import { useGSAP } from '@gsap/react';
 import { EASE, MOTION_OK, registerEases } from '../lib/motion';
 
-export { EASE, DUR, STAGGER } from '../lib/motion';
+export { EASE, DUR, STAGGER, entrySpeed, exitSpeed } from '../lib/motion';
 
 export const SCRUB = 0.8;
 
@@ -15,7 +16,7 @@ export const PIN = {
 	hangar: { desktop: 260, mobile: 220 },
 	crew: { desktop: 320, mobile: 300 },
 	launch: { desktop: 240, mobile: 200 },
-	squadron: { desktop: 240, mobile: 200 },
+	squadron: { desktop: 320, mobile: 260 },
 	fleet: { desktop: 140, mobile: 120 },
 } as const;
 
@@ -23,7 +24,7 @@ let registered = false;
 function register() {
 	if (registered || typeof window === 'undefined') return;
 	registerEases();
-	gsap.registerPlugin(ScrollTrigger, SplitText, DrawSVGPlugin);
+	gsap.registerPlugin(ScrollTrigger, SplitText, DrawSVGPlugin, MotionPathPlugin);
 	registered = true;
 }
 
@@ -135,4 +136,4 @@ export function pinLength(act: keyof typeof PIN, isDesktop: boolean) {
 	return `+=${PIN[act][isDesktop ? 'desktop' : 'mobile']}%`;
 }
 
-export { gsap, ScrollTrigger, SplitText };
+export { gsap, MotionPathPlugin, ScrollTrigger, SplitText };

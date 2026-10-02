@@ -7,7 +7,7 @@ export const cn = createCn({
 				{ text: ['display-hero', 'display-act', 'display-finale', 'stencil', 'micro', 'mono', 'button', 'button-sm'] },
 			],
 			duration: [{ duration: ['impact', 'instant', 'quick', 'base', 'slow', 'epic'] }],
-			ease: [{ ease: ['throttle', 'settle', 'glide', 'snap', 'brake', 'spool'] }],
+			ease: [{ ease: ['throttle', 'settle', 'glide', 'snap', 'brake', 'spool', 'catapult', 'coast'] }],
 		},
 	},
 });

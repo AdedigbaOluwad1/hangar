@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { DUR, EASE, SplitText, actTimeline, gsap, useAct } from '../motion';
+import { DUR, EASE, MotionPathPlugin, SplitText, actTimeline, entrySpeed, exitSpeed, gsap, useAct } from '../motion';
 import { JetPlan } from '../art/jet';
 import { TAG_HISTORY } from '../data';
 import { ART } from '../art/palette';
@@ -22,7 +22,30 @@ const SQUADRON: Array<{ name: string; x: number; y: number; status: Status }> = 
 	{ name: 'status', x: 86, y: 46, status: 'deploying' },
 ];
 const ROLLBACK = SQUADRON.findIndex((j) => j.name === 'notes-api');
-const TRAP = { x: 64, y: 86 };
+const TRAP = { x: 40, y: 86 };
+const WIRE_X = 54.2;
+
+const VIEW = { w: 400, h: 300 };
+const JET_W = VIEW.w * 0.09;
+const JET_H = JET_W * 1.4;
+const toView = (p: { x: number; y: number }) => ({ x: (p.x / 100) * VIEW.w, y: (p.y / 100) * VIEW.h });
+const HOME = toView(SQUADRON[ROLLBACK]);
+const STOP = toView(TRAP);
+const WIRE = (WIRE_X / 100) * VIEW.w;
+const TURN_RADIUS = JET_H;
+const CORRIDOR_X = HOME.x + 2 * TURN_RADIUS;
+const CREST = { x: HOME.x + TURN_RADIUS, y: HOME.y - TURN_RADIUS };
+const FINAL = { x: CORRIDOR_X - TURN_RADIUS, y: STOP.y };
+
+const BREAK = `M${HOME.x},${HOME.y} A${TURN_RADIUS},${TURN_RADIUS} 0 0 1 ${CREST.x},${CREST.y}`;
+const PATTERN = [
+	`M${CREST.x},${CREST.y}`,
+	`A${TURN_RADIUS},${TURN_RADIUS} 0 0 1 ${CORRIDOR_X},${HOME.y}`,
+	`L${CORRIDOR_X},${STOP.y - TURN_RADIUS}`,
+	`A${TURN_RADIUS},${TURN_RADIUS} 0 0 1 ${FINAL.x},${FINAL.y}`,
+	`L${WIRE},${STOP.y}`,
+].join(' ');
+const ROLLOUT = `M${WIRE},${STOP.y} L${STOP.x},${STOP.y}`;
 
 const OPS = [
 	{ verb: 'Redeploy', body: 'Fresh clone, rebuilt on cached layers.' },
@@ -37,14 +60,26 @@ export function SquadronAct() {
 		const title = SplitText.create(q('[data-title]'), { type: 'words', mask: 'words' });
 		const lead = SQUADRON[0];
 		const box = q('[data-formation]')[0] as HTMLElement;
-		const back = q('[data-back]');
 		const backJet = q('[data-back-jet]');
-		const home = SQUADRON[ROLLBACK];
 
-		gsap.set(back, { xPercent: home.x - TRAP.x, yPercent: home.y - TRAP.y });
-		gsap.set(backJet, { rotation: 0 });
-		gsap.set(q('[data-back-label]'), { autoAlpha: 0 });
+		const flightAt = 0.38;
+		const stopAt = 0.86;
+		const breakLength = MotionPathPlugin.getLength(BREAK);
+		const patternLength = MotionPathPlugin.getLength(PATTERN);
+		const rolloutLength = MotionPathPlugin.getLength(ROLLOUT);
+		const breakSpan = exitSpeed(EASE.catapult) * breakLength;
+		const rolloutSpan = entrySpeed(EASE.coast) * rolloutLength;
+		const speed = (breakSpan + patternLength + rolloutSpan) / (stopAt - flightAt);
+		const breakDur = breakSpan / speed;
+		const patternDur = patternLength / speed;
+		const wireAt = flightAt + breakDur + patternDur;
+
+		gsap.set(q('[data-back-pose]'), { attr: { transform: '' } });
+		gsap.set(backJet, { svgOrigin: '0 0', x: HOME.x, y: HOME.y, rotation: 0 });
+		gsap.set(q('[data-home-label]'), { autoAlpha: 1 });
+		gsap.set(q('[data-trap-label]'), { autoAlpha: 0 });
 		gsap.set(q('[data-back-status]'), { autoAlpha: 1 });
+		gsap.set(q('[data-back-ring]'), { autoAlpha: 0, transformOrigin: '50% 50%' });
 
 		const tl = actTimeline(ref.current, 'squadron', isDesktop);
 
@@ -72,26 +107,37 @@ export function SquadronAct() {
 				0.3,
 			)
 
-			.to(q('[data-front-status]'), { autoAlpha: 0, duration: 0.03 }, 0.42)
-			.to(q('[data-back-label]'), { autoAlpha: 1, duration: 0.03 }, 0.42)
-			.to(backJet, { rotation: 180, duration: 0.12, ease: EASE.glide }, 0.44)
-			.to(back, { xPercent: 0, yPercent: 0, duration: 0.24, ease: EASE.brake }, 0.48)
-			.to(q('[data-impact]'), { keyframes: { x: [0, -4, 3, -1, 0], y: [0, 2, -2, 1, 0] }, duration: 0.05 }, 0.66)
+			.to(q('[data-home-label]'), { autoAlpha: 0, duration: 0.03 }, flightAt)
+			.to(
+				backJet,
+				{ motionPath: { path: BREAK, autoRotate: 90 }, duration: breakDur, ease: EASE.catapult },
+				flightAt,
+			)
+			.to(
+				backJet,
+				{ motionPath: { path: PATTERN, autoRotate: 90 }, duration: patternDur, ease: EASE.cruise },
+				flightAt + breakDur,
+			)
+			.to(
+				backJet,
+				{ motionPath: { path: ROLLOUT, autoRotate: 90 }, duration: stopAt - wireAt, ease: EASE.coast },
+				wireAt,
+			)
+			.to(q('[data-impact]'), { keyframes: { x: [0, -4, 3, -1, 0], y: [0, 2, -2, 1, 0] }, duration: 0.05 }, wireAt)
+			.to(q('[data-trap-label]'), { autoAlpha: 1, duration: 0.03 }, wireAt)
 			.fromTo(
 				q('[data-tag-marker]'),
 				{ y: 0, yPercent: 0 },
 				{ y: 0, yPercent: 100, duration: 0.06, ease: EASE.snap },
-				0.66,
+				stopAt,
 			)
 			.fromTo(
 				q('[data-back-ring]'),
 				{ scale: 0.6, autoAlpha: 0.9 },
-				{ scale: 2.6, autoAlpha: 0, duration: 0.08, ease: EASE.settle },
-				0.66,
+				{ scale: 2.6, autoAlpha: 0, duration: 0.08, ease: EASE.settle, immediateRender: false },
+				stopAt,
 			)
-			.to(backJet, { rotation: 360, duration: 0.1, ease: EASE.glide }, 0.74)
-			.to(q('[data-back-status]'), { autoAlpha: 0, duration: 0.03 }, 0.8)
-			.to(q('[data-front-status]'), { autoAlpha: 1, duration: 0.03 }, 0.8)
+			.to(q('[data-back-status]'), { autoAlpha: 0, duration: 0.03 }, stopAt + 0.04)
 			.to({}, { duration: 0.01 }, 0.99);
 
 		q('[data-bob]').forEach((el, i) => {
@@ -155,12 +201,12 @@ export function SquadronAct() {
 								<path d="M60,48 H560" stroke="rgb(255 178 74 / 0.45)" strokeDasharray="14 10" />
 								<path d="M300,20 V76 M330,20 V76 M360,20 V76" stroke="rgb(143 170 220 / 0.35)" />
 							</svg>
-							<span className="absolute -top-5 left-0 font-code text-micro tracking-[0.2em] text-steel-500">
+							<span className="absolute -bottom-5 left-0 font-code text-micro tracking-[0.2em] text-steel-500">
 								DECK · RECOVERY
 							</span>
 						</div>
 
-						<div className="absolute bottom-[22%] right-0 hidden w-[34%] font-code md:block text-micro md:text-mono">
+						<div className="absolute bottom-[22%] left-0 hidden w-[34%] font-code md:block text-micro md:text-mono">
 							<p className="mb-1.5 tracking-[0.18em] text-steel-500">NOTES-API · TAGS</p>
 							<div className="relative rounded border border-line bg-night-900/80">
 								<span
@@ -200,39 +246,55 @@ export function SquadronAct() {
 							),
 						)}
 
-						<div data-back className="absolute inset-0">
-							<div
-								className="absolute w-[9%] -translate-x-1/2 -translate-y-1/2"
-								style={{ left: `${TRAP.x}%`, top: `${TRAP.y}%` }}
-							>
-								<div data-back-jet>
-									<JetPlan className="w-full" color={ART.jetReturning} />
-								</div>
+						<p
+							data-label
+							data-home-label
+							className="absolute flex -translate-x-1/2 items-center gap-1.5 whitespace-nowrap font-code text-micro text-steel-300 md:text-mono"
+							style={{ left: `${SQUADRON[ROLLBACK].x}%`, top: `calc(${SQUADRON[ROLLBACK].y}% + 5.5%)`, opacity: 0 }}
+						>
+							<span className="h-2 w-2 rounded-full bg-deck-400" />
+							{SQUADRON[ROLLBACK].name}
+						</p>
+
+						<svg
+							viewBox={`0 0 ${VIEW.w} ${VIEW.h}`}
+							className="absolute inset-0 h-full w-full overflow-visible"
+							aria-hidden="true"
+						>
+							<circle
+								data-back-ring
+								cx={STOP.x}
+								cy={STOP.y}
+								r={JET_W * 0.7}
+								fill="none"
+								className="stroke-deck-400"
+								strokeWidth="0.6"
+								opacity="0"
+							/>
+							<g data-back-pose transform={`translate(${STOP.x} ${STOP.y}) rotate(-90)`}>
+								<g data-back-jet>
+									<JetPlan x={-JET_W / 2} y={-JET_H / 2} width={JET_W} height={JET_H} color={ART.jetReturning} />
+								</g>
+							</g>
+						</svg>
+						<p
+							data-trap-label
+							className="absolute flex -translate-x-1/2 items-center gap-1.5 whitespace-nowrap font-code text-micro text-steel-300 md:text-mono"
+							style={{ left: `${TRAP.x}%`, top: `calc(${TRAP.y}% + 5.5%)` }}
+						>
+							<span className="relative grid h-2 w-2">
+								<span data-front-status className="col-start-1 row-start-1 h-2 w-2 rounded-full bg-signal-400" />
 								<span
-									data-back-ring
-									className="absolute left-1/2 top-1/2 h-full w-full -translate-x-1/2 -translate-y-1/2 rounded-full border border-deck-400"
+									data-back-status
+									className="col-start-1 row-start-1 h-2 w-2 rounded-full bg-deck-400"
 									style={{ opacity: 0 }}
 								/>
-							</div>
-							<p
-								data-label
-								className="absolute flex -translate-x-1/2 items-center gap-1.5 whitespace-nowrap font-code text-micro text-steel-300 md:text-mono"
-								style={{ left: `${TRAP.x}%`, top: `calc(${TRAP.y}% + 5.5%)` }}
-							>
-								<span className="relative grid h-2 w-2">
-									<span data-front-status className="col-start-1 row-start-1 h-2 w-2 rounded-full bg-signal-400" />
-									<span
-										data-back-status
-										className="col-start-1 row-start-1 h-2 w-2 rounded-full bg-deck-400"
-										style={{ opacity: 0 }}
-									/>
-								</span>
-								{SQUADRON[ROLLBACK].name}
-								<span data-back-label className="text-deck-300">
-									· rolled back
-								</span>
-							</p>
-						</div>
+							</span>
+							{SQUADRON[ROLLBACK].name}
+							<span className="text-deck-300">
+								· rolled back
+							</span>
+						</p>
 					</div>
 				</div>
 			</div>
