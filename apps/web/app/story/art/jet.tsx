@@ -36,20 +36,64 @@ export function JetSide({
 	const t = TONES[tone];
 	return (
 		<svg viewBox="0 0 400 120" overflow="visible" aria-hidden="true" {...props}>
-			<defs>
-				<linearGradient id="jet-flame" x1="1" x2="0" y1="0" y2="0">
-					<stop offset="0" stopColor={ART.flameCore} />
-					<stop offset="0.25" stopColor={ART.amber} />
-					<stop offset="1" stopColor={ART.amberDeep} stopOpacity="0" />
-				</linearGradient>
-			</defs>
 			{flame && (
-				<path
-					data-part="flame"
-					d="M5,68 C-30,69 -70,72 -120,74 C-70,76 -30,79 5,80 Z"
-					fill="url(#jet-flame)"
-					style={{ transformOrigin: '5px 74px' }}
-				/>
+				<>
+					<defs>
+						<filter id="jet-flame-soft" x="-20%" y="-60%" width="140%" height="220%">
+							<feGaussianBlur stdDeviation="2.2" />
+						</filter>
+						<radialGradient id="jet-flame-bloom" cx="1" cy="0.5" r="1">
+							<stop offset="0" stopColor={ART.amber} stopOpacity="0.55" />
+							<stop offset="1" stopColor={ART.amberDeep} stopOpacity="0" />
+						</radialGradient>
+						<linearGradient id="jet-flame-outer" x1="1" x2="0" y1="0" y2="0">
+							<stop offset="0" stopColor={ART.amberDeep} stopOpacity="0.95" />
+							<stop offset="0.45" stopColor={ART.amberDeep} stopOpacity="0.55" />
+							<stop offset="1" stopColor={ART.amberDeep} stopOpacity="0" />
+						</linearGradient>
+						<linearGradient id="jet-flame-inner" x1="1" x2="0" y1="0" y2="0">
+							<stop offset="0" stopColor={ART.amberSoft} />
+							<stop offset="0.5" stopColor={ART.amber} stopOpacity="0.85" />
+							<stop offset="1" stopColor={ART.amber} stopOpacity="0" />
+						</linearGradient>
+						<linearGradient id="jet-flame-core" x1="1" x2="0" y1="0" y2="0">
+							<stop offset="0" stopColor={ART.flameCore} />
+							<stop offset="1" stopColor={ART.amberSoft} stopOpacity="0" />
+						</linearGradient>
+					</defs>
+					<g data-part="flame">
+						<ellipse
+							data-flame-layer
+							cx="-30"
+							cy="74"
+							rx="78"
+							ry="17"
+							fill="url(#jet-flame-bloom)"
+							filter="url(#jet-flame-soft)"
+						/>
+						<path
+							data-flame-layer
+							d="M5,65.5 C-22,66 -64,70.5 -132,74 C-64,77.5 -22,82 5,82.5 Z"
+							fill="url(#jet-flame-outer)"
+							filter="url(#jet-flame-soft)"
+						/>
+						<path
+							data-flame-layer
+							d="M5,68.5 C-16,69 -48,72 -88,74 C-48,76 -16,79 5,79.5 Z"
+							fill="url(#jet-flame-inner)"
+						/>
+						<path
+							data-flame-layer
+							d="M5,71.2 C-6,71.4 -20,73 -40,74 C-20,75 -6,76.6 5,76.8 Z"
+							fill="url(#jet-flame-core)"
+						/>
+						<g data-flame-diamonds fill={ART.flameCore}>
+							<path d="M-18,74 L-23,72.2 L-28,74 L-23,75.8 Z" opacity="0.85" />
+							<path d="M-40,74 L-44.5,72.6 L-49,74 L-44.5,75.4 Z" opacity="0.6" />
+							<path d="M-60,74 L-64,72.9 L-68,74 L-64,75.1 Z" opacity="0.38" />
+						</g>
+					</g>
+				</>
 			)}
 			{gear && (
 				<g data-part="gear" stroke={t.shade} strokeWidth="4" fill={t.shade}>

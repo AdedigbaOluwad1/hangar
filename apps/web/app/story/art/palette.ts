@@ -11,7 +11,6 @@ export const ART = {
 	deckEdge: '#101a2c',
 	post: '#1a2438',
 	jetShade: '#1b2740',
-	deflector: '#1d2840',
 	carrier: '#1d2a44',
 	jet: '#2a3a57',
 	jetReturning: '#3a4d70',

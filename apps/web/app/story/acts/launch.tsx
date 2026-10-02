@@ -36,7 +36,29 @@ export function LaunchAct() {
 		const thrust = { value: 0 };
 		const thrustEl = q('[data-thrust]')[0];
 
-		gsap.set(jet, { x: 0, y: 0, rotation: 0, scale: 1, transformOrigin: '50% 50%' });
+		gsap.set(q('[data-jet-pose]'), { attr: { transform: '' } });
+		gsap.set(jet, { transformOrigin: '50% 50%' });
+		gsap.set(flame, { transformOrigin: '100% 50%' });
+		q('[data-flame-layer]').forEach((layer, i) => {
+			gsap.to(layer, {
+				scaleX: `random(${0.86 + i * 0.03}, 1.06)`,
+				scaleY: 'random(0.9, 1.1)',
+				opacity: 'random(0.82, 1)',
+				transformOrigin: '100% 50%',
+				duration: DUR.impact,
+				ease: EASE.impact,
+				repeat: -1,
+				repeatRefresh: true,
+			});
+		});
+		gsap.to(q('[data-flame-diamonds] path'), {
+			opacity: 'random(0.25, 0.95)',
+			duration: DUR.impact,
+			ease: EASE.impact,
+			repeat: -1,
+			repeatRefresh: true,
+			stagger: { each: DUR.impact / 3, from: 'start' },
+		});
 		gsap.set(q('[data-terminal]'), { autoAlpha: 0, y: 40 });
 		gsap.set(q('[data-log]'), { autoAlpha: 0, x: -8 });
 		gsap.set(q('[data-pill-live]'), { autoAlpha: 0 });
@@ -52,8 +74,9 @@ export function LaunchAct() {
 				{ rotation: -95, transformOrigin: '50% 0%', duration: DUR.instant, ease: EASE.snap },
 				0,
 			)
-			.to(jet, { x: 2300, duration: DUR.slow, ease: EASE.throttle }, 0.06)
-			.to(jet, { y: -150, rotation: -9, duration: DUR.base, ease: EASE.spool }, 0.41)
+			.to(jet, { x: 380, duration: DUR.base, ease: EASE.throttle }, 0.06)
+			.to(jet, { rotation: -34, duration: DUR.quick, ease: EASE.settle }, 0.46)
+			.to(jet, { x: 1500, y: -980, scale: 0.7, duration: DUR.epic, ease: EASE.settle }, 0.5)
 			.to(flame, { scaleX: 1.6, duration: DUR.quick, ease: EASE.settle }, 0.06)
 			.fromTo(q('[data-flash]'), { autoAlpha: 0 }, { autoAlpha: 0.55, duration: DUR.impact, ease: EASE.impact }, 0.56)
 			.to(q('[data-flash]'), { autoAlpha: 0, duration: DUR.base, ease: EASE.settle }, 0.62)
@@ -95,21 +118,21 @@ export function LaunchAct() {
 			)
 			.fromTo(q('[data-camera]'), { scale: 1.03 }, { scale: 1, duration: DUR.slow, ease: EASE.settle }, 0.56)
 			.to(q('[data-hud]'), { autoAlpha: 0, duration: DUR.quick }, 0.84)
-			.to(q('[data-terminal]'), { autoAlpha: 1, y: 0, duration: DUR.slow, ease: EASE.settle }, 0.89)
-			.to(q('[data-log]'), { autoAlpha: 1, x: 0, duration: DUR.quick, ease: EASE.settle, stagger: STAGGER.loose }, 1.09)
-			.to(q('[data-pill-deploying]'), { autoAlpha: 0, duration: DUR.quick }, 2.39)
+			.to(q('[data-terminal]'), { autoAlpha: 1, y: 0, duration: DUR.slow, ease: EASE.settle }, 1.19)
+			.to(q('[data-log]'), { autoAlpha: 1, x: 0, duration: DUR.quick, ease: EASE.settle, stagger: STAGGER.loose }, 1.39)
+			.to(q('[data-pill-deploying]'), { autoAlpha: 0, duration: DUR.quick }, 2.69)
 			.fromTo(
 				q('[data-pill-live]'),
 				{ autoAlpha: 0, scale: 0.8 },
 				{ autoAlpha: 1, scale: 1, duration: DUR.base, ease: EASE.snap },
-				2.39,
+				2.69,
 			)
-			.to(q('[data-url-live]'), { autoAlpha: 1, duration: DUR.base, ease: EASE.settle }, 2.39)
+			.to(q('[data-url-live]'), { autoAlpha: 1, duration: DUR.base, ease: EASE.settle }, 2.69)
 			.fromTo(
 				q('[data-live-ring]'),
 				{ scale: 1, autoAlpha: 0.9 },
 				{ scale: 3, autoAlpha: 0, duration: DUR.slow, ease: EASE.settle },
-				2.44,
+				2.74,
 			);
 
 		let fired = false;
@@ -137,12 +160,6 @@ export function LaunchAct() {
 			.from(title.words, { yPercent: 110, duration: 0.08, ease: EASE.settle, stagger: 0.012 }, 0.01)
 			.from(q('[data-lede]'), { autoAlpha: 0, y: 14, duration: 0.06, ease: EASE.settle }, 0.05)
 			.from(q('[data-hud]'), { autoAlpha: 0, y: 10, duration: 0.05, ease: EASE.settle }, 0.06)
-			.fromTo(
-				q('[data-jbd]'),
-				{ rotation: 0 },
-				{ rotation: 58, svgOrigin: '300 700', duration: 0.16, ease: EASE.glide },
-				0.08,
-			)
 			.fromTo(jet, { x: 0 }, { x: -10, duration: 0.2, ease: EASE.spool }, 0.2)
 			.fromTo(flame, { scaleX: 0.05, autoAlpha: 0 }, { scaleX: 1, autoAlpha: 1, duration: 0.3, ease: EASE.spool }, 0.15)
 			.fromTo(
@@ -238,10 +255,6 @@ export function LaunchAct() {
 								strokeWidth="2"
 								strokeDasharray="22 10"
 							/>
-							<g data-jbd transform="rotate(58 300 700)">
-								<rect x="150" y="692" width="150" height="8" fill={ART.deflector} />
-								<path d="M160,696 H290" stroke="rgb(255 178 74 / 0.5)" strokeDasharray="10 8" />
-							</g>
 							{[380, 520, 680, 840, 1000, 1160].map((x, i) => (
 								<ellipse key={x} data-steam cx={x} cy={688 - (i % 2) * 6} rx="90" ry="26" fill="url(#steam)" />
 							))}
@@ -256,9 +269,11 @@ export function LaunchAct() {
 								strokeWidth="3"
 								opacity="0"
 							/>
-							<g data-jet transform="translate(900 -90) rotate(-9 600 640)">
-								<g data-jet-body>
-									<JetSide tone="steel" flame x="380" y="576" width="440" height="132" />
+							<g data-jet-pose transform="translate(760 -330) rotate(-34 600 640) scale(0.85)">
+								<g data-jet>
+									<g data-jet-body>
+										<JetSide tone="steel" flame x="380" y="572" width="440" height="132" />
+									</g>
 								</g>
 							</g>
 						</svg>
