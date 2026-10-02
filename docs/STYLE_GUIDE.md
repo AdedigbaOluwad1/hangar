@@ -45,8 +45,9 @@ Paths below are relative to `apps/web/app/` unless they start with the repo root
 | `EASE.glide` | `hangar.glide` | `0.65, 0, 0.35, 1` | `--ease-glide` / `ease-glide` | Heavy symmetric moves: doors, pans, turns |
 | `EASE.snap` | `hangar.snap` | `0.34, 1.45, 0.64, 1` | `--ease-snap` / `ease-snap` | Parts locking into place, status dots popping in |
 | `EASE.brake` | `hangar.brake` | `0.05, 0.7, 0.1, 1` | `--ease-brake` / `ease-brake` | Hard stops: arrested landings |
-| `EASE.spool` | `hangar.spool` | `0.5, 0, 0.75, 0` | *(no CSS twin)* | Pressure building before a release: thrust, anticipation dips |
+| `EASE.spool` | `hangar.spool` | `0.5, 0, 0.75, 0` | `--ease-spool` / `ease-spool` | Pressure building before a release: thrust, anticipation dips |
 | `EASE.scrub` | `none` | linear | — | Scroll-scrubbed tracks only. `SCRUB` lag supplies the smoothing |
+| `EASE.impact` | `none` | linear | — | Single-frame hits and keyframed shakes, which carry their own shape. Launch only |
 
 Curves are registered once by `registerEases()` (`lib/motion.ts`). There are no springs; overshoot comes from `snap`.
 
@@ -54,13 +55,24 @@ Curves are registered once by `registerEases()` (`lib/motion.ts`). There are no 
 
 | Token | Value | Use for |
 |---|---|---|
+| `DUR.impact` | 0.06 | Single-frame hits: the launch flash and shockwave appearing. Launch only |
 | `DUR.instant` | 0.12 | Micro feedback: a hand signal, a tick |
 | `DUR.quick` | 0.24 | Small state swaps: a status pill, a HUD line |
 | `DUR.base` | 0.48 | Default UI transition |
 | `DUR.slow` | 0.8 | Entrances, count-ups, page reveals |
 | `DUR.epic` | 1.4 | Hero-scale moves: the hero intro, big text reveals |
 
-CSS transitions use Tailwind's `duration-200` (controls and fields), `duration-300` (row hover, chevrons), `duration-500` (status colours, nodes) and `duration-700`/`duration-1000` (the flight-path track). These are not yet tied to `DUR`; see Open decisions.
+CSS uses the same scale as `--dur-*` variables and `duration-*` utilities (`app.css`). Each utility sets both `transition-duration` and `--tw-duration`, so it also times `tw-animate` popups.
+
+| Utility | Variable | Value | Use for |
+|---|---|---|---|
+| `duration-instant` | `--dur-instant` | 120ms | — |
+| `duration-quick` | `--dur-quick` | 240ms | Hover, focus, fields, popups, row tints, chevrons |
+| `duration-base` | `--dur-base` | 480ms | Status colours, flight-path nodes, selection bars |
+| `duration-slow` | `--dur-slow` | 800ms | The flight-path track and jet, the page glow turning green |
+| `duration-epic` | `--dur-epic` | 1400ms | — |
+
+Tailwind's numeric `duration-200` etc. are not used. Hold times that aren't motion (a "copied" tick, a fallback timer) are named constants in the file that uses them (`COPIED_HOLD_MS`, `GUARD_TIMEOUT_MS`).
 
 **Scrubbed timelines are different.** Inside a pinned, scrubbed timeline, `duration` and position are **fractions of the act's scroll length** (0–1), not seconds. `duration: 0.06` means "6% of the pin". Don't use `DUR` there.
 
@@ -112,7 +124,7 @@ Use `pinLength(act, isDesktop)` rather than writing `+=N%`.
 | **Count-up** | `useCountUp(ref, value)` tweens from the previous value, `DUR.slow`, `settle` | `routes/dashboard.tsx` (`Stat`) | Numbers that summarise state |
 | **Flight path** | Stage progress read from the build's log lines; CSS transitions on `scaleX` (track) and `translateX` (jet) | `components/flight-path.tsx` | Any multi-stage pipeline progress |
 | **Log line in** | `.log-line` keyframe: `opacity 0, translateX(-6px)` → rest, 0.24s `--ease-settle` | `app.css`, `components/log-stream.tsx` | Streamed lines only |
-| **Popups** | Base UI + `tw-animate-css` (`data-open:animate-in fade-in-0 zoom-in-95`), `duration-200 ease-settle`, `motion-reduce:animate-none` | `components/ui/select.tsx`, `ui/alert-dialog.tsx` | All menus, dialogs, popovers |
+| **Popups** | Base UI + `tw-animate-css` (`data-open:animate-in fade-in-0 zoom-in-95`), `duration-quick ease-settle`, `motion-reduce:animate-none` | `components/ui/select.tsx`, `ui/alert-dialog.tsx` | All menus, dialogs, popovers |
 
 ---
 
@@ -137,28 +149,33 @@ Use `pinLength(act, isDesktop)` rather than writing `+=N%`.
 | Deck light soft | `deck-300` | `#ffd391` | Hover on primary, deploying, rollback notes |
 | Deck light deep | `deck-500` | `#f39a1f` | Gradients only |
 | Live | `signal-400` | `#46e39a` | Running, live URL, success. Green means live, nothing else |
+| Live surface | `signal-950` | `#0c1e18` | Opaque background of live URL cards and pills |
 | Alarm | `alarm-400` | `#f2676b` | `--destructive`, failed, errors |
 | Alarm solid | `alarm-500` | `#e5484d` | The solid `danger` button only |
 
-`signal-500` is defined but unused.
+Status colours live in one place: `STATUS` in `lib/status.ts` (`dot`, `text`, `ring`, and `glyph` for jet icons).
 
 ### 4.2 Type — font roles
 
 | Role | Token | Font | Use |
 |---|---|---|---|
 | Display | `font-display`, `.display` | Big Shoulders Display, 800, uppercase, `line-height: .88` | Headlines, section titles, stage labels |
-| Text | `font-text` / `font-sans` | Inter | Body, buttons, descriptions |
+| Text | `font-sans` | Inter | Body, buttons, descriptions |
 | Code | `font-code` | JetBrains Mono | IDs, URLs, logs, labels, eyebrows, chips |
 
 | Style | Classes | Reference |
 |---|---|---|
-| Hero | `display text-[clamp(3rem,8.6vw,8.25rem)]` | `story/acts/deck.tsx` |
-| Act title | `display text-[clamp(2.5rem,5.4vw,5rem)]` | Every story act |
+| Hero | `display text-display-hero` (clamp 3rem → 8.25rem) | `story/acts/deck.tsx` |
+| Act title | `display text-display-act` (clamp 2.5rem → 5rem) | Every story act, including the fleet |
+| Finale | `display text-display-finale` (clamp 3.25rem → 10rem) | `story/acts/fleet.tsx` (`Coda`) |
+| Door stencil | `text-stencil` (22vh) | `story/acts/hangar.tsx` |
 | Page title | `display text-6xl md:text-8xl` (list) / `text-5xl md:text-7xl` (others) | `routes/dashboard.tsx`, `dashboard.deployments.$id.tsx` |
 | Section / card title | `font-display text-xl–3xl font-bold uppercase tracking-wide` | `deploy-form.tsx` `Section`, `crew.tsx` cards |
 | Eyebrow | `.eyebrow`: mono 11px, `tracking-[0.22em]`, uppercase, `deck-400` | Everywhere above a title |
-| Field label | `Label`: mono 10px, `tracking-[0.2em]`, uppercase, `steel-400` | `components/ui/label.tsx` |
-| Metadata | `font-code text-[11px] text-steel-500` | List rows, build rows |
+| Field label | `Label`: `font-code text-micro` (10px), `tracking-[0.2em]`, uppercase, `steel-400` | `components/ui/label.tsx` |
+| Metadata | `font-code text-mono` (11px) `text-steel-500` | List rows, build rows |
+| Logs | `font-code text-mono md:text-xs` | `log-stream.tsx`, launch console |
+| Button | `text-button` (15px) / `text-button-sm` (13px) | `ui/button.tsx` |
 | Body | `text-sm leading-relaxed text-steel-300/400` (dashboard), `text-base md:text-lg` (hero) | — |
 
 ### 4.3 Space, radius, border, shadow
@@ -168,8 +185,8 @@ Use `pinLength(act, isDesktop)` rather than writing `+=N%`.
 | Page width | `max-w-6xl` (dashboard), `max-w-[1440px]` (story) | Layout containers |
 | Page gutter | `px-5 md:px-8` (dashboard), `px-5 md:px-10` (story) | — |
 | Section rhythm | `mt-10`–`mt-12` between blocks, `gap-4` in grids | — |
-| `--radius` | `0.625rem` (10px) | shadcn base; fields and selects use it as `rounded-[10px]` |
-| Panel radius | `0.875rem` | `.panel`, toasts |
+| `rounded-lg` | `--radius` = 0.625rem (10px) | Fields, selects, field-height icon buttons |
+| `rounded-xl` | `--radius-xl` = 0.875rem | `.panel`, toasts, select menus |
 | Pills | `rounded-full` | All buttons, status badges, chips |
 | Dialog | `rounded-2xl` | `alert-dialog.tsx` |
 | Border | `1px` `border-line`; dashed for "not yet" (empty live URL, roadmap escorts) | — |
@@ -189,7 +206,8 @@ Use `pinLength(act, isDesktop)` rather than writing `+=N%`.
 ### 4.5 Illustration — `story/art/`
 
 - **Silhouettes, not drawings.** Flat fills, no outlines on solid shapes. Jets come in two views: `JetSide` (nose right) and `JetPlan` (nose up), from shared path constants so every jet matches.
-- **Tones.** `silhouette` (near-black against light) and `steel` (`#2a3a57` body, `#1b2740` shade, `#7fa6d9` canopy).
+- **Palette.** Every art colour is a named role in `story/art/palette.ts` (`ART.hull`, `ART.jet`, `ART.skyLow`, …); it is the only file allowed hex. Reuse a role before adding one. Jet tones: `silhouette` (near-black against light) and `steel` (`ART.jet` body, `ART.jetShade` shade, `ART.canopy` canopy).
+- **Dashboard jets** (`JetPlan` without `color`) take `currentColor`, so they're tinted with classes: `STATUS[status].glyph` in lists, `text-deck-400`/`text-alarm-400` on the flight path.
 - **Blueprint overlays.** 0.8–1px strokes at `rgb(143 170 220 / .45–.7)`; dimension lines via `Dimension`; labels in `font-code` with wide tracking.
 - **Light.** Amber radial gradients for deck and bay light; green only on the catapult track and live states.
 - **Text in SVG is decorative only** and the SVG is `aria-hidden`. Real content is HTML.
@@ -238,7 +256,7 @@ Hooks: `useReveal`, `useCountUp`, `registerEases` (`lib/motion.ts`); `useAct`, `
 | Loading (action) | Button label changes ("Launching…", "Saving…", "Stopping…"); spinner or `animate-spin` icon; button disabled | `deploy-form.tsx`, `deployment-actions.tsx` |
 | Empty | Panel + blueprint grid + dashed outline jet + eyebrow + display line + one primary CTA | `deployment-list.tsx` `EmptyHangar` |
 | Error (page) | `.panel` with `eyebrow text-alarm-400!` ("No contact", "Lost contact") and the API's message in mono | `routes/dashboard.tsx` |
-| Error (field/form) | `aria-invalid` red border + halo; message below in `font-code text-[11px] text-destructive` with `role="alert"` | `callsign-title.tsx`, `deploy-form.tsx` |
+| Error (field/form) | `aria-invalid` red border + halo; message below in `font-code text-mono text-destructive` with `role="alert"` | `callsign-title.tsx`, `deploy-form.tsx` |
 | Error (action) | `toast.error(title, { description: apiMessage })` | `deployment-actions.tsx` |
 | Success | `toast.success` with a lore title and a literal description | `deployment-actions.tsx` |
 | Disabled | 45% (buttons) / 50% (fields), no pointer events, no lift | `ui/*` |
@@ -330,7 +348,10 @@ Breakpoint is `md` (768px), the same one `useAct` uses for `isDesktop`.
 |---|---|
 | `ease: EASE.settle` | `ease: 'power3.out'`, `'ease'`, `'linear'` |
 | `duration: DUR.slow` in time-based tweens | `duration: 0.8` |
-| `className="ease-settle duration-300"` | `transition-all` with no curve |
+| `className="ease-settle duration-quick"` | `transition-all` with no curve, or `duration-300` |
+| `text-mono`, `text-micro`, `text-display-act` | `text-[11px]`, `text-[clamp(...)]` |
+| `JetPlan className={STATUS[s].glyph}` | `JetPlan color="#46e39a"` |
+| `line.includes(PIPELINE_LOG.live)` | `line.includes('Live at')` |
 | `text-deck-400`, `bg-card`, `border-line` | `text-[#ffb24a]`, `bg-white`, `text-white` |
 | `<Button variant="destructive">` → dialog → `variant="danger"` | `confirm()` |
 | Base UI `Select` | native `<select>` |
@@ -366,8 +387,8 @@ Every dashboard page stacks the same layers. Copy them from the nearest page rat
 
 - **Three levels only:** page (`night-950`) → panel (`.panel`: `night-900` at 85%, `border-line`, `0.875rem` radius) → floating (`popover`, `night-850`: menus, dialogs, toasts). Don't nest panels in panels.
 - **Lists live inside one panel,** divided by `divide-y divide-line`, not as a stack of separate cards (`deployment-list.tsx`, `build-list.tsx`).
-- **Hover** tints a row to `night-850` (list) or `night-900` (build log) with `duration-300 ease-settle`.
-- **Selection** is a 2px `deck-400` bar on the row's left edge that scales in (`scale-y-0 → 100`, `duration-500 ease-settle`) plus a `night-850` tint (`build-list.tsx`).
+- **Hover** tints a row to `night-850` (list) or `night-900` (build log) with `duration-quick ease-settle`.
+- **Selection** is a 2px `deck-400` bar on the row's left edge that scales in (`scale-y-0 → 100`, `duration-base ease-settle`) plus a `night-850` tint (`build-list.tsx`).
 - **"Not yet" is dashed.** A missing live URL renders as `.panel border-dashed` with a grey dot, never an empty box (`dashboard.deployments.$id.tsx`).
 - **Live is a surface change, not just a dot.** The live URL card switches to `border-signal-400/40` on a green-tinted surface with `.live-dot`; the page glow turns green with it.
 
@@ -401,7 +422,7 @@ Every dashboard page stacks the same layers. Copy them from the nearest page rat
 |---|---|---|
 | Page arrives | `useReveal` once: `[data-reveal]` children rise 14px and fade in, `DUR.slow`, `settle`, `STAGGER.tight`. Mark the blocks a reader scans, not every element | `routes/dashboard.tsx` |
 | Numbers | `useCountUp` from the previous value | `routes/dashboard.tsx` |
-| Status change | Badge, node and track colors transition (`duration-500`/`700`); in-flight statuses ping. Nothing moves position | `components/status-badge.tsx`, `flight-path.tsx` |
+| Status change | Badge, node and track colors transition (`duration-base`/`duration-slow`); in-flight statuses ping. Nothing moves position | `components/status-badge.tsx`, `flight-path.tsx` |
 | Progress | The flight-path jet and track move with CSS transforms; when live, the jet throttles off (`ease-throttle`) and fades | `components/flight-path.tsx` |
 | New log line | `.log-line` slide-in (0.24s); the panel follows the tail itself (`scrollTop`), never the page | `components/log-stream.tsx` |
 | Feedback | Toasts for action results; button label swaps for pending ("Saving…") | `components/deployment-actions.tsx` |
@@ -445,7 +466,7 @@ Lore names places and moments; plain words name data. Eyebrows and section label
 ## New-feature checklist
 
 - [ ] Found the closest precedent above and followed it
-- [ ] Tokens only: no new hex, curve, duration or radius literals (`pnpm --filter @hangar/web check:tokens` reports them)
+- [ ] Tokens only: `pnpm --filter @hangar/web lint` passes; any new token is registered in `lib/utils.ts`
 - [ ] Every state covered: loading, empty, error, success, disabled
 - [ ] Reduced motion handled; content visible without JavaScript
 - [ ] Checked at 390px and 1440px; no sideways scroll
@@ -454,16 +475,16 @@ Lore names places and moments; plain words name data. Eyebrows and section label
 - [ ] No comments added except `TODO`/`FIXME` or a `tokens-ok` marker
 - [ ] If a new pattern was introduced, this guide is updated in the same change
 
-## Open decisions
+## Guardrails
 
-Found during the audit and not yet changed in code:
+| Kind of value | Lives in | Notes |
+|---|---|---|
+| Colours | `app.css` `@theme`; story art in `story/art/palette.ts` | Status colours via `STATUS` (`lib/status.ts`) |
+| Easing, duration, stagger | `lib/motion.ts` (`EASE`, `DUR`, `STAGGER`); CSS twins `--ease-*`, `--dur-*` in `app.css` | Keep both sides in step |
+| Type sizes, radii | `app.css` `@theme` (`--text-*`, `--radius`) | |
+| Page paths | `lib/paths.ts` | |
+| Pipeline log text | `PIPELINE_LOG` in `packages/types/src/index.ts` | The API writes it; the flight path and the story read it |
 
-1. Time-based tweens with raw seconds instead of `DUR`: the launch shot (`launch.tsx`, 0.95/0.55/0.42/1.1), the hero door (`deck.tsx`, 1.7), and the copy tick (`copy-button.tsx`, 1500ms).
-2. CSS `duration-*` values have no link to `DUR`; there's no CSS duration token scale.
-3. `EASE.spool` has no CSS twin.
-4. Status colors are repeated as hex in `JET_TONE` (`deployment-list.tsx`) and `flight-path.tsx`; story art has many one-off hex values and gradient stops.
-5. The field radius is written `rounded-[10px]` instead of using `--radius`; `.panel` hardcodes `0.875rem`.
-6. Display sizes use four different `clamp()` expressions; mono micro sizes mix 10, 10.5, 11, 11.5, 13 and 15px.
-7. `signal-500` is unused; `--font-sans` and `--font-text` are the same font; `bg-white/[0.03]` and `text-white` escape the palette.
-8. Flight-path stage markers duplicate the API's log strings (`flight-path.tsx` ↔ `apps/api/src/pipeline/*`): changing a pipeline log line silently breaks the tracker.
-9. The empty dashboard shows two amber primaries: the header's "New deployment" and `EmptyHangar`'s "Deploy your first app" (`deployment-list.tsx`). Every other view has one. Either hide the header action when the list is empty or make the empty-state CTA `outline`.
+- **Register custom tokens with `cn`.** `cn` (`lib/utils.ts`) only knows Tailwind's built-in scale. A new `--text-*`, `duration-*` or `ease-*` token must be added to its `classGroups`, or `cn` silently drops it whenever a same-prefix class is also present (e.g. `text-micro` next to `text-steel-500`).
+- **Lint.** `pnpm --filter @hangar/web lint` runs `check:tokens --strict` and fails on hex outside the token files, quoted easings, numeric `duration-N`, pixel or `clamp()` text sizes, arbitrary radii, raw timeouts and raw seconds outside `story/`. It's part of `turbo run lint`.
+- **Escape hatch.** A line that must hold a literal (the `theme-color` meta tag) carries a `tokens-ok: <reason>` comment.
