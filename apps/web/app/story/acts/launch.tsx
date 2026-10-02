@@ -160,6 +160,7 @@ export function LaunchAct() {
 			.from(title.words, { yPercent: 110, duration: 0.08, ease: EASE.settle, stagger: 0.012 }, 0.01)
 			.from(q('[data-lede]'), { autoAlpha: 0, y: 14, duration: 0.06, ease: EASE.settle }, 0.05)
 			.from(q('[data-hud]'), { autoAlpha: 0, y: 10, duration: 0.05, ease: EASE.settle }, 0.06)
+			.fromTo(q('[data-jet-taxi]'), { x: -1300 }, { x: 0, duration: 0.14, ease: EASE.brake }, 0)
 			.fromTo(jet, { x: 0 }, { x: -10, duration: 0.2, ease: EASE.spool }, 0.2)
 			.fromTo(flame, { scaleX: 0.05, autoAlpha: 0 }, { scaleX: 1, autoAlpha: 1, duration: 0.3, ease: EASE.spool }, 0.15)
 			.fromTo(
@@ -270,9 +271,11 @@ export function LaunchAct() {
 								opacity="0"
 							/>
 							<g data-jet-pose transform="translate(760 -330) rotate(-34 600 640) scale(0.85)">
-								<g data-jet>
-									<g data-jet-body>
-										<JetSide tone="steel" flame x="380" y="572" width="440" height="132" />
+								<g data-jet-taxi>
+									<g data-jet>
+										<g data-jet-body>
+											<JetSide tone="steel" flame x="380" y="572" width="440" height="132" />
+										</g>
 									</g>
 								</g>
 							</g>

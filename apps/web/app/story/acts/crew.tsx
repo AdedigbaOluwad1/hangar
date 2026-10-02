@@ -68,8 +68,9 @@ export function CrewAct() {
 			.fromTo(q('[data-ruler]'), { xPercent: 0 }, { xPercent: -45, duration: 1 }, 0)
 			.fromTo(q('[data-far]'), { xPercent: 0 }, { xPercent: -12, duration: 1 }, 0)
 			.fromTo(q('[data-stars]'), { xPercent: 0 }, { xPercent: -3, duration: 1 }, 0)
-			.fromTo(q('[data-jet]'), { x: -60 }, { x: 90, duration: 1, ease: EASE.glide }, 0)
-			.fromTo(q('[data-jet-body]'), { y: 0 }, { y: -2, duration: 0.05, repeat: 19, yoyo: true }, 0);
+			.fromTo(q('[data-jet]'), { x: -60 }, { x: 90, duration: 0.86, ease: EASE.glide }, 0)
+			.to(q('[data-jet]'), { x: 1400, duration: 0.12, ease: EASE.throttle }, 0.87)
+			.fromTo(q('[data-jet-body]'), { y: 0 }, { y: -2, duration: 0.05, repeat: 16, yoyo: true }, 0);
 
 		STATION_X.forEach((x, i) => {
 			const at = passAt(x);
