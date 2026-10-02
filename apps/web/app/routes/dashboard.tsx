@@ -1,4 +1,3 @@
-// apps/web/app/routes/dashboard.tsx
 import { useRef } from 'react';
 import { Link } from 'react-router';
 import { useQuery } from '@tanstack/react-query';

@@ -2,7 +2,6 @@ import { Button as ButtonPrimitive } from '@base-ui/react/button';
 import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '~/lib/utils';
 
-// Pills throughout, matching the story page. Hover lifts 1px; press settles back.
 const variants = cva(
 	[
 		'group/button inline-flex shrink-0 items-center justify-center gap-2 rounded-full border border-transparent font-semibold whitespace-nowrap outline-none select-none',
@@ -23,12 +22,10 @@ const variants = cva(
 					'border-steel-300/25 text-foreground hover:border-steel-300/50 hover:bg-white/[0.03] aria-expanded:bg-white/[0.03]',
 				secondary: 'bg-secondary text-secondary-foreground hover:bg-accent',
 				ghost: 'text-steel-300 hover:bg-muted hover:text-foreground aria-expanded:bg-muted',
-				// quiet red outline for actions that open a confirmation
 				destructive: [
 					'border-destructive/35 text-destructive hover:border-destructive/70 hover:bg-destructive/[0.08]',
 					'focus-visible:ring-destructive/30',
 				],
-				// solid red for the confirmation itself
 				danger: [
 					'bg-alarm-500 text-white hover:bg-alarm-400',
 					'shadow-[inset_0_0_0_1px_rgb(255_255_255/0.12),0_10px_32px_-12px_rgb(229_72_77/0.7)]',
@@ -51,8 +48,6 @@ const variants = cva(
 	},
 );
 
-// Links styled as buttons call this directly, so it must resolve conflicts
-// (e.g. the base border-transparent vs a variant's border colour) itself.
 function buttonVariants({ className, ...props }: VariantProps<typeof variants> & { className?: string } = {}) {
 	return cn(variants(props), className);
 }
@@ -66,7 +61,6 @@ function Button({
 	return (
 		<ButtonPrimitive
 			data-slot="button"
-			// Base UI lets className be a function of the button's state
 			className={
 				typeof className === 'function'
 					? (state) => buttonVariants({ variant, size, className: className(state) })

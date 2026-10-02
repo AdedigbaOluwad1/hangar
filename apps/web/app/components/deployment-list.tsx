@@ -1,4 +1,3 @@
-// apps/web/app/components/deployment-list.tsx
 import { Link } from 'react-router';
 import { HugeiconsIcon } from '@hugeicons/react';
 import { ArrowRight01Icon, ExternalLinkIcon } from '@hugeicons/core-free-icons';
@@ -35,7 +34,6 @@ export function DeploymentList({ deployments }: { deployments: Deployment[] }) {
 							className="h-7 w-5 rotate-90 opacity-80 transition-transform duration-500 ease-settle group-hover:translate-y-[-4px]"
 						/>
 						<div className="min-w-0">
-							{/* the row's link stretches over the whole row; Visit sits above it */}
 							<Link
 								to={paths.deployment(d.id)}
 								className="block truncate font-medium text-steel-100 after:absolute after:inset-0"

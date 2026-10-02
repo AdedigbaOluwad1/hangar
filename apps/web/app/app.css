@@ -10,7 +10,6 @@
   --font-text: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
   --font-code: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, monospace;
 
-  /* night deck base, amber deck light, signal green for live */
   --color-night-950: #03050a;
   --color-night-900: #060a13;
   --color-night-850: #0a101d;
@@ -30,7 +29,6 @@
   --color-alarm-500: #e5484d;
   --color-line: rgb(143 170 220 / 0.16);
 
-  /* CSS twins of the GSAP curves in lib/motion.ts, for state-driven transitions */
   --ease-throttle: cubic-bezier(0.7, 0, 0.84, 0);
   --ease-settle: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-glide: cubic-bezier(0.65, 0, 0.35, 1);
@@ -53,7 +51,6 @@ body {
 }
 
 @layer components {
-  /* film grain: static, so it costs nothing while scrolling */
   .grain {
     position: fixed;
     inset: 0;
@@ -93,7 +90,6 @@ body {
     letter-spacing: -0.005em;
   }
 
-  /* SplitText masks clip each line; the padding keeps descenders out of the clip */
   .split-line {
     padding-bottom: 0.08em;
     margin-bottom: -0.08em;
@@ -174,7 +170,6 @@ body {
   }
 }
 
-/* thin, unobtrusive scrollbar for the log panel */
 .overflow-y-auto {
   scrollbar-width: thin;
   scrollbar-color: var(--color-night-600) transparent;
@@ -187,7 +182,6 @@ body {
   border-radius: 9999px;
 }
 
-/* each streamed log line slides in from the gutter */
 @keyframes log-in {
   from {
     opacity: 0;
@@ -200,8 +194,6 @@ body {
   }
 }
 
-/* shadcn tokens, mapped onto the night-deck palette. The app is dark only,
-   so these live on :root and <html> carries .dark for shadcn's dark: tweaks. */
 @theme inline {
   --font-heading: var(--font-display);
   --color-sidebar-ring: var(--sidebar-ring);
@@ -249,7 +241,6 @@ body {
   --foreground: var(--color-steel-100);
   --card: var(--color-night-900);
   --card-foreground: var(--color-steel-100);
-  /* floating surfaces sit one step lighter than the panels they float over */
   --popover: var(--color-night-850);
   --popover-foreground: var(--color-steel-100);
   --primary: var(--color-deck-400);
@@ -262,7 +253,6 @@ body {
   --accent-foreground: var(--color-steel-100);
   --destructive: var(--color-alarm-400);
   --border: var(--color-line);
-  /* field outlines read a touch stronger than panel borders */
   --input: rgb(143 170 220 / 0.24);
   --ring: var(--color-deck-400);
   --chart-1: var(--color-deck-400);
@@ -289,7 +279,6 @@ body {
   [role="button"]:not(:disabled) {
     cursor: pointer;
   }
-  /* components draw their own rings; this covers plain links and anything else */
   :focus-visible {
     outline: 2px solid var(--color-deck-400);
     outline-offset: 3px;

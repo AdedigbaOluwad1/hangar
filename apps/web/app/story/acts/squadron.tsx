@@ -1,7 +1,3 @@
-// apps/web/app/story/acts/squadron.tsx
-//
-// Act 5: the camera pulls back from one jet to the whole squadron, one jet per
-// deployed app. One breaks formation and traps back on deck: a rollback.
 import { useRef } from 'react';
 import { EASE, SCRUB, SplitText, gsap, pinLength, useAct } from '../motion';
 import { JetPlan } from '../art/jet';
@@ -15,7 +11,6 @@ const STATUS_DOT: Record<Status, string> = {
 	deploying: 'bg-steel-300',
 };
 
-// illustrative homelab apps; positions are % of the formation box
 const SQUADRON: Array<{ name: string; x: number; y: number; status: Status }> = [
 	{ name: 'portfolio', x: 50, y: 14, status: 'running' },
 	{ name: 'grafana', x: 38, y: 27, status: 'running' },
@@ -26,7 +21,6 @@ const SQUADRON: Array<{ name: string; x: number; y: number; status: Status }> = 
 	{ name: 'status', x: 86, y: 46, status: 'deploying' },
 ];
 const ROLLBACK = SQUADRON.findIndex((j) => j.name === 'notes-api');
-// where the returning jet traps on the deck strip, as % of the formation box
 const TRAP = { x: 64, y: 86 };
 
 const OPS = [
@@ -46,8 +40,6 @@ export function SquadronAct() {
 		const backJet = q('[data-back-jet]');
 		const home = SQUADRON[ROLLBACK];
 
-		// The rollback jet's composed frame has it on deck. The wrapper is the
-		// size of the formation box, so percent offsets are box-relative.
 		gsap.set(back, { xPercent: home.x - TRAP.x, yPercent: home.y - TRAP.y });
 		gsap.set(backJet, { rotation: 0 });
 		gsap.set(q('[data-back-label]'), { autoAlpha: 0 });
@@ -67,7 +59,6 @@ export function SquadronAct() {
 		tl.from(q('[data-eyebrow]'), { autoAlpha: 0, y: 12, duration: 0.04, ease: EASE.settle }, 0)
 			.from(title.words, { yPercent: 110, duration: 0.07, ease: EASE.settle, stagger: 0.01 }, 0.01)
 			.from(q('[data-lede]'), { autoAlpha: 0, y: 14, duration: 0.05, ease: EASE.settle }, 0.05)
-			// pull back from the lead jet to the whole formation
 			.fromTo(
 				box,
 				{ scale: 3.2, transformOrigin: `${lead.x}% ${lead.y}%` },
@@ -89,12 +80,10 @@ export function SquadronAct() {
 				0.3,
 			)
 
-			// rollback: the jet peels off, turns back and traps on deck
 			.to(q('[data-front-status]'), { autoAlpha: 0, duration: 0.03 }, 0.42)
 			.to(q('[data-back-label]'), { autoAlpha: 1, duration: 0.03 }, 0.42)
 			.to(backJet, { rotation: 180, duration: 0.12, ease: EASE.glide }, 0.44)
 			.to(back, { xPercent: 0, yPercent: 0, duration: 0.24, ease: EASE.brake }, 0.48)
-			// echo of the launch impact, much smaller
 			.to(q('[data-impact]'), { keyframes: { x: [0, -4, 3, -1, 0], y: [0, 2, -2, 1, 0] }, duration: 0.05 }, 0.66)
 			.fromTo(
 				q('[data-tag-marker]'),
@@ -113,7 +102,6 @@ export function SquadronAct() {
 			.to(q('[data-front-status]'), { autoAlpha: 1, duration: 0.03 }, 0.8)
 			.to({}, { duration: 0.01 }, 0.99);
 
-		// jets in formation never sit perfectly still
 		q('[data-bob]').forEach((el, i) => {
 			gsap.to(el, { y: i % 2 ? 4 : -4, duration: 1.6 + (i % 3) * 0.3, ease: EASE.glide, repeat: -1, yoyo: true });
 		});

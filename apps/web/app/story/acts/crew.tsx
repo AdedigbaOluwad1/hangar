@@ -1,7 +1,3 @@
-// apps/web/app/story/acts/crew.tsx
-//
-// Act 3: the jet taxis down the deck and each crew station lights up as it
-// passes. The camera tracks the jet, so the deck pans and the sky lags behind.
 import { useRef } from 'react';
 import { EASE, SCRUB, SplitText, gsap, pinLength, useAct } from '../motion';
 import { JetSide } from '../art/jet';
@@ -39,8 +35,6 @@ const CREDITS = [
 	{ tool: 'BullMQ', body: 'The launch queue. One build at a time.' },
 ];
 
-// The deck is three stages wide. The jet sits at JET_X on screen, so station
-// i passes it when the deck has panned (STATION_X[i] - JET_X) / DECK_TRAVEL.
 const DECK_WIDTH = 4800;
 const DECK_TRAVEL = DECK_WIDTH - 1600;
 const JET_X = 600;
@@ -54,7 +48,6 @@ export function CrewAct() {
 		const title = SplitText.create(q('[data-title]'), { type: 'words', mask: 'words' });
 		const roles = q('[data-role]');
 
-		// portrait: one role card at a time, stacked in the same slot
 		if (!isDesktop) gsap.set(roles.slice(1), { position: 'absolute', inset: 0 });
 
 		const tl = gsap.timeline({
@@ -70,19 +63,16 @@ export function CrewAct() {
 
 		tl.from(q('[data-eyebrow]'), { autoAlpha: 0, y: 12, duration: 0.04, ease: EASE.settle }, 0)
 			.from(title.words, { yPercent: 110, duration: 0.07, ease: EASE.settle, stagger: 0.01 }, 0.01)
-			// camera: deck pans 1:1, horizon at a third, stars barely move, rulers overshoot
 			.fromTo(q('[data-deck]'), { xPercent: 0 }, { xPercent: -(DECK_TRAVEL / DECK_WIDTH) * 100, duration: 1 }, 0)
 			.fromTo(q('[data-ruler]'), { xPercent: 0 }, { xPercent: -45, duration: 1 }, 0)
 			.fromTo(q('[data-far]'), { xPercent: 0 }, { xPercent: -12, duration: 1 }, 0)
 			.fromTo(q('[data-stars]'), { xPercent: 0 }, { xPercent: -3, duration: 1 }, 0)
-			// the jet creeps forward in frame so the move never feels mechanical
 			.fromTo(q('[data-jet]'), { x: -60 }, { x: 90, duration: 1, ease: EASE.glide }, 0)
 			.fromTo(q('[data-jet-body]'), { y: 0 }, { y: -2, duration: 0.05, repeat: 19, yoyo: true }, 0);
 
 		STATION_X.forEach((x, i) => {
 			const at = passAt(x);
 			const station = q(`[data-station="${i}"]`)[0];
-			// anticipation: the crew member crouches slightly, then signals
 			tl.to(
 				station.querySelector('[data-arm]'),
 				{ rotation: 20, transformOrigin: '50% 0%', duration: 0.02, ease: EASE.spool },

@@ -1,8 +1,5 @@
-// apps/web/app/story/art/jet.tsx
 import type { SVGProps } from 'react';
 
-// Shared outline so the blueprint stroke, the silhouette and the assembled jet
-// always line up exactly.
 export const FUSELAGE =
 	'M18,74 L30,66 L80,61 L230,58 C270,56 300,55 330,60 L370,66 C384,68 394,70 398,71 C394,73 384,74 370,76 L330,80 L230,84 L80,86 L30,84 L18,80 Z';
 export const CANOPY = 'M262,58 C276,40 306,40 326,58 Z';
@@ -29,8 +26,6 @@ const TONES: Record<Tone, { body: string; shade: string; glass: string; line: st
 	},
 };
 
-// Side profile, nose to the right. Each part is its own group (data-part) so
-// the hangar act can assemble it piece by piece.
 export function JetSide({
 	tone = 'steel',
 	flame = false,
@@ -79,7 +74,6 @@ export function JetSide({
 	);
 }
 
-// Top-down view, nose up. Used for the squadron and the deck plan.
 export function JetPlan({ color = '#2a3a57', ...props }: SVGProps<SVGSVGElement> & { color?: string }) {
 	return (
 		<svg viewBox="0 0 100 140" aria-hidden="true" {...props}>

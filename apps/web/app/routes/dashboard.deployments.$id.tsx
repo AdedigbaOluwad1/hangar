@@ -1,4 +1,3 @@
-// apps/web/app/routes/dashboard.deployments.$id.tsx
 import { useEffect, useRef, useState } from 'react';
 import { useParams, Link } from 'react-router';
 import { useQuery } from '@tanstack/react-query';

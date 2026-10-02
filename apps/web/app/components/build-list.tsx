@@ -1,4 +1,3 @@
-// apps/web/app/components/build-list.tsx
 import type { Build } from '@hangar/types';
 import { StatusBadge } from './status-badge';
 import { cn } from '../lib/utils';

@@ -1,7 +1,3 @@
-// apps/web/app/story/acts/hangar.tsx
-//
-// Act 2: the bay doors part and the jet is assembled on the blueprint, one
-// pipeline stage per scroll beat: clone → detect → build → push.
 import { useRef } from 'react';
 import { DUR, EASE, SCRUB, STAGGER, SplitText, gsap, pinLength, useAct } from '../motion';
 import { CANOPY, FIN, FUSELAGE, JetSide, STAB, WING } from '../art/jet';
@@ -35,7 +31,6 @@ const STEPS = [
 	},
 ];
 
-// scroll position (0–1 of the pinned length) where each stage begins
 const BEAT = { open: 0.03, clone: 0.22, detect: 0.38, build: 0.52, push: 0.76 };
 
 export function HangarAct() {
@@ -58,7 +53,6 @@ export function HangarAct() {
 			},
 		});
 
-		// doors: the seam brightens first, then the leaves part
 		tl.fromTo(
 			q('[data-seam]'),
 			{ autoAlpha: 0.2, scaleX: 0.4 },
@@ -107,9 +101,7 @@ export function HangarAct() {
 				0.18,
 			)
 
-			// clone: the airframe is drawn as a blueprint
 			.from(q('[data-outline] path'), { drawSVG: '0%', duration: 0.14, ease: EASE.glide, stagger: 0.012 }, BEAT.clone)
-			// detect: a scanner reads the frame, the hull fills in behind it
 			.fromTo(
 				q('[data-scan]'),
 				{ x: -30, autoAlpha: 0 },
@@ -122,7 +114,6 @@ export function HangarAct() {
 				{ autoAlpha: 0, duration: 0.1, ease: EASE.settle },
 				BEAT.detect + 0.03,
 			)
-			// build: parts arrive from their own directions and lock in with a small overshoot
 			.from(q('[data-part="wing"]'), { y: 60, autoAlpha: 0, duration: 0.07, ease: EASE.snap }, BEAT.build)
 			.from(q('[data-part="fin"]'), { y: -70, autoAlpha: 0, duration: 0.07, ease: EASE.snap }, BEAT.build + 0.035)
 			.from(q('[data-part="stab"]'), { x: -60, autoAlpha: 0, duration: 0.07, ease: EASE.snap }, BEAT.build + 0.07)
@@ -143,7 +134,6 @@ export function HangarAct() {
 				BEAT.build + 0.18,
 			)
 			.to(q('[data-outline]'), { autoAlpha: 0.25, duration: 0.08 }, BEAT.build + 0.1)
-			// push: the image lands in the registry
 			.from(q('[data-registry]'), { autoAlpha: 0, y: 20, duration: 0.06, ease: EASE.settle }, BEAT.push)
 			.from(
 				q('[data-tag]'),
@@ -157,7 +147,6 @@ export function HangarAct() {
 				BEAT.push + 0.04,
 			);
 
-		// step list and status line follow the beats
 		const beats = [BEAT.clone, BEAT.detect, BEAT.build, BEAT.push];
 		q('[data-step]').forEach((step, i) => {
 			const start = beats[i];

@@ -1,4 +1,3 @@
-// apps/web/app/lib/status.ts
 import type { Deployment } from '@hangar/types';
 
 interface StatusStyle {
@@ -9,7 +8,6 @@ interface StatusStyle {
 	pulse?: boolean;
 }
 
-// amber while it's being built, green once it's airborne, red when it isn't
 export const STATUS: Record<string, StatusStyle> = {
 	pending: { label: 'Queued', dot: 'bg-steel-400', text: 'text-steel-300', ring: 'border-steel-500/40', pulse: true },
 	building: { label: 'Building', dot: 'bg-deck-400', text: 'text-deck-300', ring: 'border-deck-400/40', pulse: true },
@@ -25,9 +23,6 @@ export function statusOf(status: string): StatusStyle {
 
 export const ACTIVE_BUILD_STATUSES = ['building', 'deploying'];
 
-// The latest build says more than the deployment while a build is in flight,
-// but stopping a deployment used to leave its serving build marked running,
-// and a stopped deployment can't be running.
 export function deploymentStatus(d: Pick<Deployment, 'status' | 'latestBuild'>): string {
 	const build = d.latestBuild?.status;
 	if (d.status === 'stopped' && build === 'running') return 'stopped';

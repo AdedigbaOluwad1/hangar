@@ -1,4 +1,3 @@
-// apps/web/app/components/status-badge.tsx
 import { cn } from '../lib/utils';
 import { statusOf } from '../lib/status';
 

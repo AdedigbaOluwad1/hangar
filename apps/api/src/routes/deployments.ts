@@ -31,8 +31,6 @@ import {
   RenameDeploymentBody,
 } from '../schemas/deployments'
 
-// Validation failures answer in the documented ErrorSchema shape rather than
-// zod's raw issue list, so clients can show the message as-is.
 export const deployments = new OpenAPIHono({
   defaultHook: (result, c) => {
     if (!result.success) {
@@ -42,8 +40,6 @@ export const deployments = new OpenAPIHono({
     }
   },
 })
-
-// ── GET / — list ──────────────────────────────────────────
 
 const listRoute = createRoute({
   method: 'get',
@@ -61,8 +57,6 @@ const listRoute = createRoute({
 deployments.openapi(listRoute, async (c) => {
   return c.json(await listDeployments(), 200)
 })
-
-// ── GET /:id — get one ────────────────────────────────────
 
 const getOneRoute = createRoute({
   method: 'get',
@@ -88,8 +82,6 @@ deployments.openapi(getOneRoute, async (c) => {
   if (!deployment) return c.json({ error: 'Not found' }, 404)
   return c.json(deployment, 200)
 })
-
-// ── POST / — create ───────────────────────────────────────
 
 const createRoute_ = createRoute({
   method: 'post',
@@ -150,8 +142,6 @@ deployments.openapi(createRoute_, async (c) => {
   return c.json({ ...deployment, latestBuild: build }, 201)
 })
 
-// ── PATCH /:id — rename ───────────────────────────────────
-
 const renameRoute = createRoute({
   method: 'patch',
   path: '/{id}',
@@ -192,8 +182,6 @@ deployments.openapi(renameRoute, async (c) => {
   return c.json({ ...renamed, latestBuild: deployment.latestBuild }, 200)
 })
 
-// ── DELETE /:id — stop + remove ───────────────────────────
-
 const deleteRoute = createRoute({
   method: 'delete',
   path: '/{id}',
@@ -217,20 +205,17 @@ deployments.openapi(deleteRoute, async (c) => {
   const deployment = await getDeployment(id)
   if (!deployment) return c.json({ error: 'Not found' }, 404)
 
-  try { await stopJob(id) } catch { /* already stopped */ }
+  try { await stopJob(id) } catch { }
   if (deployment.liveUrl) {
-    try { await unpatchCaddy(id) } catch { /* route may not exist */ }
+    try { await unpatchCaddy(id) } catch { }
   }
 
   await updateDeployment(id, { status: 'stopped' })
-  // the build that was serving traffic is stopped too, or it keeps reporting running
   if (deployment.latestBuild?.status === 'running') {
     await updateBuild(deployment.latestBuild.id, { status: 'stopped' })
   }
   return c.json({ message: 'Deployment stopped' }, 200)
 })
-
-// ── POST /:id/redeploy ────────────────────────────────────
 
 const redeployRoute = createRoute({
   method: 'post',
@@ -255,7 +240,6 @@ deployments.openapi(redeployRoute, async (c) => {
   const deployment = await getDeployment(id)
   if (!deployment) return c.json({ error: 'Not found' }, 404)
 
-  // create a new build under the same deployment — same registry repo, cache reused
   const build = await createBuild({
     id: uuidv7(),
     deploymentId: id,
@@ -269,8 +253,6 @@ deployments.openapi(redeployRoute, async (c) => {
 
   return c.json({ ...deployment, latestBuild: build }, 200)
 })
-
-// ── GET /:id/health ───────────────────────────────────────
 
 const healthRoute = createRoute({
   method: 'get',
@@ -302,8 +284,6 @@ deployments.openapi(healthRoute, async (c) => {
   )
 })
 
-// ── GET /:id/tags — list available rollback tags ──────────
-
 const tagsRoute = createRoute({
   method: 'get',
   path: '/{id}/tags',
@@ -334,7 +314,6 @@ deployments.openapi(tagsRoute, async (c) => {
   const { tags } = await res.json() as { tags: string[] | null }
   if (!tags) return c.json({ tags: [] }, 200)
 
-  // uuidv7 is lexicographically time-ordered — sort descending, exclude latest + cache
   const versioned = tags
     .filter(t => t !== 'latest' && t !== 'cache')
     .sort()
@@ -343,8 +322,6 @@ deployments.openapi(tagsRoute, async (c) => {
 
   return c.json({ tags: versioned }, 200)
 })
-
-// ── POST /:id/rollback ────────────────────────────────────
 
 const rollbackRoute = createRoute({
   method: 'post',
@@ -381,7 +358,6 @@ deployments.openapi(rollbackRoute, async (c) => {
   const deployment = await getDeployment(id)
   if (!deployment) return c.json({ error: 'Not found' }, 404)
 
-  // verify the tag actually exists in the registry before queuing
   const registryHost = process.env.REGISTRY_HOST ?? 'registry.hangar.local:5000'
   const checkRes = await fetch(
     `http://${registryHost}/v2/hangar-${id}/manifests/${tag}`,
@@ -394,7 +370,6 @@ deployments.openapi(rollbackRoute, async (c) => {
   )
   if (!checkRes.ok) return c.json({ error: `Tag ${tag} not found in registry` }, 400)
 
-  // create a build record for the rollback — no clone/build, just redeploy existing image
   const build = await createBuild({
     id: uuidv7(),
     deploymentId: id,
@@ -412,8 +387,6 @@ deployments.openapi(rollbackRoute, async (c) => {
 
   return c.json({ ...deployment, latestBuild: build }, 200)
 })
-
-// ── GET /:id/builds — list builds ─────────────────────────
 
 const listBuildsRoute = createRoute({
   method: 'get',
@@ -439,8 +412,6 @@ deployments.openapi(listBuildsRoute, async (c) => {
   if (!deployment) return c.json({ error: 'Not found' }, 404)
   return c.json(await listBuilds(id), 200)
 })
-
-// ── GET /:id/builds/:buildId — get one build ──────────────
 
 const getBuildRoute = createRoute({
   method: 'get',

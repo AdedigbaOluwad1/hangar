@@ -1,18 +1,9 @@
-// apps/web/scripts/check-tokens.mjs
-//
-// Flags values that should come from a design token (see docs/STYLE_GUIDE.md):
-// hex colours, raw easing, raw durations and palette escapes. Reports by
-// default; `--strict` exits non-zero so it can gate CI once the open
-// decisions in the guide are resolved.
-//
-// A line can opt out with a trailing `// tokens-ok: <reason>` comment.
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
 const ROOT = new URL('../app/', import.meta.url).pathname;
 const strict = process.argv.includes('--strict');
 
-// token definitions themselves
 const SKIP = new Set(['lib/motion.ts']);
 
 const RULES = [
@@ -22,7 +13,6 @@ const RULES = [
 	{ id: 'raw-ease', re: /ease:\s*['"](?!none['"])[^'"]+['"]|\bease-(?:linear|in|out|in-out)\b/g, hint: 'use EASE.* / ease-settle etc.' },
 	{ id: 'arbitrary-duration', re: /\bduration-\[[^\]]+\]/g, hint: 'use a duration step' },
 	{ id: 'raw-timeout', re: /setTimeout\(.*,\s*\d{3,}\s*\)/g, hint: 'name the delay or use DUR' },
-	// scrubbed story timelines use 0–1 fractions, so seconds are only checked outside story/
 	{ id: 'raw-seconds', re: /\b(?:duration|delay):\s*\d*\.?\d+\b/g, hint: 'use DUR.*', outsideStoryOnly: true },
 ];
 

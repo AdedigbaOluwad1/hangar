@@ -1,4 +1,3 @@
-// apps/web/app/lib/format.ts
 export function formatRelativeTime(iso: string): string {
 	const diffMs = Date.now() - new Date(iso).getTime();
 	const diffSec = Math.round(diffMs / 1000);
@@ -22,7 +21,6 @@ export function shortId(id: string, length = 8): string {
 	return id.length > length ? id.slice(0, length) : id;
 }
 
-// "https://github.com/user/repo.git" → "user/repo"
 export function repoName(url: string | null | undefined): string | null {
 	if (!url) return null;
 	const path = url

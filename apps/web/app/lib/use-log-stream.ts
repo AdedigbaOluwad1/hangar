@@ -1,4 +1,3 @@
-// apps/web/app/lib/use-log-stream.ts
 import { useState, useEffect } from 'react';
 
 export interface LogLine {

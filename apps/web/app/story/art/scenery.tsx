@@ -1,7 +1,5 @@
-// apps/web/app/story/art/scenery.tsx
 import type { SVGProps } from 'react';
 
-// Deterministic star field so server and client render the same markup.
 function stars(count: number, seed: number) {
 	let s = seed;
 	const rand = () => {
@@ -28,7 +26,6 @@ export function StarField(props: SVGProps<SVGSVGElement>) {
 	);
 }
 
-// Distant escorts on the horizon line: just enough to read as a carrier group.
 export function Horizon(props: SVGProps<SVGSVGElement>) {
 	return (
 		<svg viewBox="0 0 1600 900" preserveAspectRatio="xMidYMax slice" aria-hidden="true" {...props}>
@@ -41,8 +38,6 @@ export function Horizon(props: SVGProps<SVGSVGElement>) {
 	);
 }
 
-// Flight deck crew, side view. Jersey colour follows real carrier practice:
-// the colour tells you the job at a glance.
 export function CrewFigure({ jersey, ...props }: SVGProps<SVGGElement> & { jersey: string }) {
 	return (
 		<g {...props}>
@@ -57,7 +52,6 @@ export function CrewFigure({ jersey, ...props }: SVGProps<SVGGElement> & { jerse
 	);
 }
 
-// Thin technical-drawing annotation: a dimension line with end ticks and a label.
 export function Dimension({
 	x1,
 	x2,

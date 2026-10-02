@@ -1,4 +1,3 @@
-// apps/web/app/components/mark.tsx
 export function Mark({ className }: { className?: string }) {
 	return (
 		<svg viewBox="0 0 32 32" aria-hidden="true" className={className}>

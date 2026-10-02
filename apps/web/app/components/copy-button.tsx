@@ -1,4 +1,3 @@
-// apps/web/app/components/copy-button.tsx
 import { useState } from 'react';
 import { HugeiconsIcon } from '@hugeicons/react';
 import { Copy01Icon, Tick01Icon } from '@hugeicons/core-free-icons';
@@ -11,9 +10,7 @@ export function CopyButton({ value, label = 'Copy' }: { value: string; label?: s
 			await navigator.clipboard.writeText(value);
 			setCopied(true);
 			setTimeout(() => setCopied(false), 1500);
-		} catch {
-			// clipboard API unavailable — no-op
-		}
+		} catch {}
 	}
 
 	return (

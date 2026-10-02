@@ -1,9 +1,3 @@
-// apps/web/app/story/data.ts
-//
-// One illustrative deployment threaded through every act. Formats mirror the
-// API exactly: dep-<nanoid> deployment ids, uuidv7 build ids, registry tags
-// from build.ts, the live URL from caddy.ts and log text from the pipeline
-// (emoji prefixes dropped).
 export const DEPLOYMENT_ID = 'dep-k7m2x9qa';
 export const BUILD_ID = '0199a3f4-1b7a-7c2e-8f03-a46d92e1c5b8';
 const EVAL_ID = 'b1c4e8a2-73f9-4d61-a0e5-2f8c6d9b3e17';
@@ -33,5 +27,4 @@ export const LOG_LINES: Array<{ stage: LogStage; text: string }> = [
 	{ stage: 'system', text: 'Deployment complete' },
 ];
 
-// earlier builds of the same deployment, newest first; the registry keeps three
 export const TAG_HISTORY = [BUILD_ID, '0199a2c8-90f1-7d3a-b6e4-1c7f20a9d5e2', '0199a1b0-3e5c-7a19-8d72-f04b6c1e9a37'];

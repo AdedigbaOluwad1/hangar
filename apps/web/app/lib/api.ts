@@ -1,4 +1,3 @@
-// apps/web/app/lib/api.ts
 import type { Deployment, Build, CreateDeploymentInput, Health } from '@hangar/types';
 
 const BASE = typeof window !== 'undefined' ? '/api' : 'http://api:3001';

@@ -1,4 +1,3 @@
-// apps/web/app/story/nav.tsx
 import type { MouseEvent } from 'react';
 import { Link } from 'react-router';
 import { jumpToAct } from './motion';

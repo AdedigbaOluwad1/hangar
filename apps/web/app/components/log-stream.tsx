@@ -1,4 +1,3 @@
-// apps/web/app/components/log-stream.tsx
 import { useEffect, useRef } from 'react';
 import type { LogLine } from '../lib/use-log-stream';
 import { shortId } from '../lib/format';
@@ -12,7 +11,6 @@ const STREAM_COLORS: Record<string, string> = {
 export function LogStream({ lines, done, buildId }: { lines: LogLine[]; done: boolean; buildId?: string | null }) {
 	const scroller = useRef<HTMLDivElement>(null);
 
-	// follow the tail inside the panel without dragging the page along
 	useEffect(() => {
 		const el = scroller.current;
 		if (el) el.scrollTop = el.scrollHeight;

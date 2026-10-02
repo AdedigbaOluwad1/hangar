@@ -1,4 +1,3 @@
-// apps/web/app/components/deployment-actions.tsx
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { HugeiconsIcon } from '@hugeicons/react';

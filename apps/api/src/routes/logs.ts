@@ -5,9 +5,6 @@ import { subscribeToLogs } from '../lib'
 
 export const logs = new Hono()
 
-// ── GET /:id/logs — stream latest build logs ──────────────
-// Accepts optional ?buildId= to stream a specific build
-
 logs.get('/:id/logs', (c) => {
   const { id } = c.req.param()
   const buildId = c.req.query('buildId')
@@ -60,8 +57,6 @@ logs.get('/:id/logs', (c) => {
     })
   })
 })
-
-// ── GET /:id/builds/:buildId/logs — stream specific build logs
 
 logs.get('/:id/builds/:buildId/logs', (c) => {
   const buildId = c.req.param('buildId')

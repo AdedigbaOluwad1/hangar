@@ -1,4 +1,3 @@
-// apps/web/app/components/callsign-title.tsx
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { HugeiconsIcon } from '@hugeicons/react';
@@ -9,7 +8,6 @@ import { api } from '../lib/api';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 
-// mirrors the API's rule so most mistakes are caught before a round trip
 const CALLSIGN = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
 
 function problemWith(value: string) {
@@ -50,7 +48,6 @@ export function CallsignTitle({ deployment }: { deployment: Deployment }) {
 
 	function close() {
 		setEditing(false);
-		// hand focus back to the control that opened the editor
 		requestAnimationFrame(() => trigger.current?.focus());
 	}
 

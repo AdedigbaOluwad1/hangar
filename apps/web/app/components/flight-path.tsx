@@ -1,8 +1,3 @@
-// apps/web/app/components/flight-path.tsx
-//
-// The pipeline as a flight path. Stage progress is read from the build's own
-// log lines (the same text the API pipeline writes), so the tracker never
-// claims a step the pipeline hasn't reported.
 import type { LogLine } from '../lib/use-log-stream';
 import { JetPlan } from '../story/art/jet';
 import { cn } from '../lib/utils';
@@ -41,10 +36,8 @@ function readFlight(lines: LogLine[], status?: string) {
 		});
 	}
 
-	// "Image pushed" closes the build; the next thing in flight is Nomad
 	if (reached === PUSH && !failed) reached = SCHEDULE;
 	if (reached === LIVE) complete = true;
-	// no logs yet: fall back to what the build status implies
 	if (reached < 0) reached = status === 'deploying' ? SCHEDULE : 0;
 
 	const states: StageState[] = FLIGHT_PLAN.map((_, i) => {
@@ -79,7 +72,6 @@ export function FlightPath({ lines, status }: { lines: LogLine[]; status?: strin
 			</div>
 
 			<div className="relative mt-7 overflow-x-clip">
-				{/* track runs between the first and last node centres */}
 				<div className="absolute left-[calc(100%/14)] right-[calc(100%/14)] top-[11px] h-px bg-night-600">
 					<div
 						className={cn(

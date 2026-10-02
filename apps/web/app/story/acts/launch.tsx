@@ -1,8 +1,3 @@
-// apps/web/app/story/acts/launch.tsx
-//
-// Act 4: the catapult. Scroll winds it up (blast deflector, steam, thrust,
-// the shooter's salute); crossing FIRE_AT releases a timed shot that scroll
-// can't scrub, because a catapult can't fire halfway. Then the app goes live.
 import { useRef } from 'react';
 import { DUR, EASE, SCRUB, STAGGER, SplitText, gsap, pinLength, useAct } from '../motion';
 import { JetSide } from '../art/jet';
@@ -24,7 +19,6 @@ const STAGE_TONE: Record<LogStage, string> = {
 	deploy: 'text-signal-400',
 };
 
-// deterministic so server and client agree
 const SPEED_LINES = Array.from({ length: 14 }, (_, i) => ({
 	top: 18 + ((i * 37) % 64),
 	width: 18 + ((i * 53) % 30),
@@ -50,7 +44,6 @@ export function LaunchAct() {
 		gsap.set(q('[data-speed]'), { autoAlpha: 0, xPercent: 0 });
 		gsap.set(q('[data-boom]'), { autoAlpha: 0, scale: 0.2, transformOrigin: '50% 50%' });
 
-		// the shot: timed, not scrubbed
 		const shot = gsap.timeline({ paused: true });
 		shot
 			.to(
@@ -95,7 +88,6 @@ export function LaunchAct() {
 			)
 			.fromTo(q('[data-camera]'), { scale: 1.03 }, { scale: 1, duration: DUR.slow, ease: EASE.settle }, 0.62)
 			.to(q('[data-hud]'), { autoAlpha: 0, duration: DUR.quick }, 0.9)
-			// cut to the console: the deployment streams in and goes green
 			.to(q('[data-terminal]'), { autoAlpha: 1, y: 0, duration: DUR.slow, ease: EASE.settle }, 0.95)
 			.to(q('[data-log]'), { autoAlpha: 1, x: 0, duration: DUR.quick, ease: EASE.settle, stagger: 0.16 }, 1.15)
 			.to(q('[data-pill-deploying]'), { autoAlpha: 0, duration: DUR.quick }, 2.45)
@@ -128,7 +120,6 @@ export function LaunchAct() {
 						shot.timeScale(1).play();
 					} else if (self.progress < FIRE_AT - 0.04 && fired) {
 						fired = false;
-						// rewind quickly rather than flying the jet backwards in real time
 						shot.timeScale(3).reverse();
 					}
 				},
@@ -139,7 +130,6 @@ export function LaunchAct() {
 			.from(title.words, { yPercent: 110, duration: 0.08, ease: EASE.settle, stagger: 0.012 }, 0.01)
 			.from(q('[data-lede]'), { autoAlpha: 0, y: 14, duration: 0.06, ease: EASE.settle }, 0.05)
 			.from(q('[data-hud]'), { autoAlpha: 0, y: 10, duration: 0.05, ease: EASE.settle }, 0.06)
-			// wind-up
 			.fromTo(
 				q('[data-jbd]'),
 				{ rotation: 0 },
@@ -172,7 +162,6 @@ export function LaunchAct() {
 				},
 				0.06,
 			)
-			// engine shudder that builds as thrust builds
 			.to(q('[data-jet-body]'), { keyframes: { y: [0, -1, 1, -1.5, 1.5, -2, 2, -2.5, 2.5, 0] }, duration: 0.3 }, 0.2)
 			.fromTo(q('[data-far]'), { xPercent: 0 }, { xPercent: -4, duration: 1 }, 0);
 
@@ -181,7 +170,6 @@ export function LaunchAct() {
 			if (HUD[i + 1]) tl.to(line, { autoAlpha: 0, y: -6, duration: 0.03 }, HUD[i + 1].at - 0.02);
 		});
 
-		// hold the final frame for the back half of the pin
 		tl.to({}, { duration: 0.01 }, 0.99);
 
 		return () => {

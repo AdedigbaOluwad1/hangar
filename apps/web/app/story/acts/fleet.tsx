@@ -1,7 +1,3 @@
-// apps/web/app/story/acts/fleet.tsx
-//
-// Act 6: pull back to the whole carrier group. The carrier is what ships
-// today; the dashed escorts are the multi-node roadmap. Then the final call.
 import { useRef } from 'react';
 import { Link } from 'react-router';
 import { HugeiconsIcon } from '@hugeicons/react';
@@ -19,11 +15,9 @@ const ROADMAP = [
 	{ title: 'Custom domains', body: 'Your own hostnames in front of every app.', coming: true },
 ];
 
-// plan view, bow to the right
 const CARRIER = 'M8,62 L36,34 L300,30 L338,22 L372,26 L396,60 L372,94 L300,96 L36,92 Z';
 const ESCORT = 'M4,15 L22,4 L96,4 L118,15 L96,26 L22,26 Z';
 
-// escorts: [x, y, scale, role] in the 1600x900 scene
 const ESCORTS: Array<[number, number, number, string]> = [
 	[300, 650, 1.6, 'server'],
 	[860, 200, 1.6, 'server'],
@@ -87,7 +81,6 @@ export function FleetAct() {
 			<div aria-hidden="true" className="story-stage fleet-stage">
 				<svg data-group viewBox="0 0 1600 900" className="absolute inset-0 h-full w-full overflow-visible">
 					<g data-ships>
-						{/* wakes trail to the left of each hull */}
 						<g stroke="rgb(232 236 243 / 0.12)" fill="none" strokeWidth="2">
 							<path data-wake d="M612,452 L300,400 M612,472 L300,524" />
 							{ESCORTS.map(([x, y, s], i) => (

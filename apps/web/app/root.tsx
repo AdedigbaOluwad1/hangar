@@ -1,4 +1,3 @@
-// apps/web/app/root.tsx
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Links, Meta, Outlet, Scripts, ScrollRestoration } from 'react-router';

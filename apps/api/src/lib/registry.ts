@@ -19,7 +19,6 @@ export async function gcOldTags(registryHost: string, deploymentId: string): Pro
   const toDelete = versioned.slice(0, Math.max(0, versioned.length - REGISTRY_KEEP))
 
   for (const tag of toDelete) {
-    // skip if any build still references this tag
     if (await isBuildTagInUse(tag)) continue
 
     const headRes = await fetch(`${base}/manifests/${tag}`, {

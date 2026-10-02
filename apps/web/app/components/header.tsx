@@ -1,4 +1,3 @@
-// apps/web/app/components/header.tsx
 import { Link, NavLink } from 'react-router';
 import { cn } from '../lib/utils';
 import { paths } from '../lib/paths';

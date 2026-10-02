@@ -1,7 +1,3 @@
-// apps/web/app/story/acts/deck.tsx
-//
-// Act 1: dawn on the deck. A jet waits under a half-raised hangar door; scroll
-// pushes the camera through the door into the bay.
 import { useRef } from 'react';
 import { Link } from 'react-router';
 import { HugeiconsIcon } from '@hugeicons/react';
@@ -14,7 +10,6 @@ import { DOCS_URL } from '../nav';
 import { JetSide } from '../art/jet';
 import { Dimension, StarField } from '../art/scenery';
 
-// door is drawn closed; this is how far it sits raised in the composed frame
 const DOOR_RAISED = -260;
 
 export function DeckAct() {
@@ -40,7 +35,6 @@ export function DeckAct() {
 				)
 				.from(q('[data-horizon-line]'), { scaleX: 0, transformOrigin: '50% 50%', duration: DUR.epic }, 0.2)
 				.from(q('[data-structure-intro]'), { y: 50, autoAlpha: 0, duration: DUR.epic }, 0.15)
-				// anticipation: the door dips before the motors take its weight
 				.fromTo(q('[data-door]'), { y: 0 }, { y: 8, duration: DUR.quick, ease: EASE.spool }, 0.45)
 				.to(q('[data-door]'), { y: DOOR_RAISED, duration: 1.7, ease: EASE.glide })
 				.from(

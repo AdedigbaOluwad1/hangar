@@ -1,27 +1,15 @@
-// apps/web/app/lib/motion.ts
-//
-// Motion tokens shared by the story page and the dashboard, so the whole app
-// moves with one feel. The CSS twins of these curves live in app.css as
-// --ease-* for state-driven transitions.
 import { type RefObject, useEffect, useRef } from 'react';
 import { gsap } from 'gsap';
 import { CustomEase } from 'gsap/CustomEase';
 import { useGSAP } from '@gsap/react';
 
 export const EASE = {
-	// heavy, slow start then explosive: anything gaining speed
 	throttle: 'hangar.throttle',
-	// long soft tail: arrivals, text, camera settling
 	settle: 'hangar.settle',
-	// symmetric weighty move: doors, elevators, camera pans
 	glide: 'hangar.glide',
-	// small overshoot: parts locking into place
 	snap: 'hangar.snap',
-	// hard stop: arrested landings
 	brake: 'hangar.brake',
-	// building pressure before a release
 	spool: 'hangar.spool',
-	// scrubbed tracks map scroll 1:1; the scrub lag supplies the smoothing
 	scrub: 'none',
 } as const;
 
@@ -64,8 +52,6 @@ function motionAllowed() {
 	return typeof window !== 'undefined' && window.matchMedia(MOTION_OK).matches;
 }
 
-// Staggers [data-reveal] children in once, the first time `ready` is true.
-// Polling refetches re-render the list constantly; they must not replay it.
 export function useReveal(scope: RefObject<HTMLElement | null>, ready: boolean) {
 	const played = useRef(false);
 	useGSAP(
@@ -87,7 +73,6 @@ export function useReveal(scope: RefObject<HTMLElement | null>, ready: boolean) 
 	);
 }
 
-// Counts a number up from its previous value; jumps straight there without motion.
 export function useCountUp(ref: RefObject<HTMLElement | null>, value: number) {
 	const from = useRef(0);
 	useEffect(() => {

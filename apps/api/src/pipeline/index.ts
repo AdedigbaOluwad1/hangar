@@ -19,22 +19,19 @@ export async function runPipeline(
     let imageTag: string
 
     if (options.rollbackImageTag) {
-      // rollback path — skip clone and build entirely
       imageTag = options.rollbackImageTag
       await updateBuild(buildId, { status: 'deploying', imageTag })
       await writeLog(buildId, 'system', `⏪ Rolling back to image: ${imageTag}`)
       await emitLog(buildId, 'system', `⏪ Rolling back to image: ${imageTag}`)
     } else {
-      // normal path — clone, build, push
       await updateBuild(buildId, { status: 'building' })
       dir = await clone(deploymentId, buildId)
       imageTag = await build(deploymentId, buildId, dir)
       await updateBuild(buildId, { status: 'deploying', imageTag })
     }
 
-    // stop current running container before starting new one (Option A — same deploymentId)
-    try { await stopJob(deploymentId) } catch { /* not running */ }
-    try { await unpatchCaddy(deploymentId) } catch { /* no route yet */ }
+    try { await stopJob(deploymentId) } catch { }
+    try { await unpatchCaddy(deploymentId) } catch { }
 
     const { containerId } = await runContainer(deploymentId, buildId, imageTag, options.resources)
     await updateDeployment(deploymentId, { containerId, imageTag, status: 'running' })

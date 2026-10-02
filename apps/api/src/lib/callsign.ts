@@ -1,7 +1,3 @@
-// Callsigns: a memorable adjective-noun handle for each deployment, so two
-// deployments of the same repo can be told apart at a glance.
-// The 20261002 migration copies these lists to backfill existing rows; keep
-// them append-only so backfilled names stay valid entries.
 export const ADJECTIVES = [
   'amber', 'ashen', 'bold', 'brass', 'bright', 'cinder', 'cobalt', 'copper',
   'crimson', 'dawn', 'dusk', 'ember', 'feral', 'frost', 'gilded', 'granite',
@@ -20,7 +16,6 @@ export const NOUNS = [
   'talon', 'vector', 'viper', 'zephyr', 'nomad', 'ranger', 'drifter', 'outrider',
 ] as const
 
-// lowercase words joined by single hyphens, 3–40 characters
 export const CALLSIGN_PATTERN = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/
 
 function pick<T>(list: readonly T[]): T {
@@ -32,7 +27,6 @@ export async function generateCallsign(isTaken: (callsign: string) => Promise<bo
     const callsign = `${pick(ADJECTIVES)}-${pick(NOUNS)}`
     if (!(await isTaken(callsign))) return callsign
   }
-  // the 2,304 plain pairs are getting crowded; a number keeps it unique and readable
   for (;;) {
     const callsign = `${pick(ADJECTIVES)}-${pick(NOUNS)}-${Math.floor(Math.random() * 90) + 10}`
     if (!(await isTaken(callsign))) return callsign

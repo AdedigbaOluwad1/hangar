@@ -8,7 +8,6 @@ import {
 	Loading03Icon,
 } from '@hugeicons/core-free-icons';
 
-// The app is dark only, so the theme is fixed rather than read from next-themes.
 const Toaster = ({ ...props }: ToasterProps) => {
 	return (
 		<Sonner

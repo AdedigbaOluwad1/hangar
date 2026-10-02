@@ -1,4 +1,3 @@
-// apps/web/app/routes/_index.tsx
 import { useEffect } from 'react';
 import type { Route } from './+types/_index';
 import '../story/story.css';
