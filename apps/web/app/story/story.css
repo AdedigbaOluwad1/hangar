@@ -1,0 +1,48 @@
+/* apps/web/app/story/story.css */
+.story {
+	overflow-x: clip;
+}
+
+/* Every act draws on a 16:9 stage anchored to the bottom of the viewport.
+   Layers inside share the same box, so parallax layers stay registered. */
+.story-stage {
+	position: absolute;
+	bottom: 0;
+	left: 50%;
+	height: 100%;
+	aspect-ratio: 16 / 9;
+	min-width: 100%;
+	transform: translateX(-50%);
+}
+
+@media (max-width: 767px) {
+	/* portrait: shorter stage, re-centred on the hangar door instead of the sea */
+	.hero-stage {
+		height: 54svh;
+		min-width: 0;
+		transform: translateX(-70%);
+	}
+	.launch-stage {
+		height: 62svh;
+		min-width: 0;
+		transform: translateX(-37.5%);
+	}
+	.fleet-stage {
+		height: 46svh;
+		bottom: 30svh;
+		min-width: 0;
+	}
+	.crew-stage {
+		height: 76svh;
+		min-width: 0;
+		transform: translateX(-34%);
+	}
+}
+
+/* bay door leaves: panel seams, a lit top edge and hazard striping at the foot */
+.hangar-door {
+	background:
+		repeating-linear-gradient(-45deg, rgb(255 178 74 / 0.16) 0 14px, transparent 14px 28px) bottom / 100% 36px no-repeat,
+		repeating-linear-gradient(180deg, transparent 0 calc(12.5% - 2px), rgb(3 5 10 / 0.7) calc(12.5% - 2px) 12.5%),
+		linear-gradient(180deg, var(--color-night-700), var(--color-night-800) 60%, var(--color-night-850));
+}

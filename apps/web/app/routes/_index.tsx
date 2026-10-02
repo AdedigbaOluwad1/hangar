@@ -1,64 +1,50 @@
 // apps/web/app/routes/_index.tsx
-import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { api } from '../lib/api';
-import { DeployForm } from '../components/deploy-form';
-import { DeploymentList } from '../components/deployment-list';
-import { LogStream } from '../components/log-stream';
+import { useEffect } from 'react';
+import type { Route } from './+types/_index';
+import '../story/story.css';
+import { IntroGuard } from '../story/intro-guard';
+import { jumpToAct } from '../story/motion';
+import { StoryNav } from '../story/nav';
+import { DeckAct } from '../story/acts/deck';
+import { HangarAct } from '../story/acts/hangar';
+import { CrewAct } from '../story/acts/crew';
+import { LaunchAct } from '../story/acts/launch';
+import { SquadronAct } from '../story/acts/squadron';
+import { Coda, FleetAct } from '../story/acts/fleet';
 
-export default function Index() {
-	const [selectedId, setSelectedId] = useState<string | null>(null);
-
-	const { data: deployments = [] } = useQuery({
-		queryKey: ['deployments'],
-		queryFn: api.listDeployments,
-		refetchInterval: (query) => {
-			const hasActive = query.state.data?.some((d) =>
-				['pending', 'building', 'deploying'].includes(d.status),
-			);
-			return hasActive ? 2000 : 10000;
+export function meta({}: Route.MetaArgs) {
+	return [
+		{ title: 'Hangar · Your apps deserve a runway' },
+		{
+			name: 'description',
+			content:
+				'Hangar is a self-hosted platform built on Nomad, Consul, Vault and Caddy. Push a Git URL; it builds, schedules, routes and goes live.',
 		},
-	});
+	];
+}
+
+export default function Story() {
+	useEffect(() => {
+		const id = window.location.hash.slice(1);
+		if (id && id !== 'main') requestAnimationFrame(() => jumpToAct(id));
+	}, []);
 
 	return (
-		<div
-			style={{
-				maxWidth: '900px',
-				margin: '0 auto',
-				padding: '2rem',
-				fontFamily: 'sans-serif',
-			}}
-		>
-			<h1 style={{ marginBottom: '2rem' }}>⚓ Hangar</h1>
-
-			<DeployForm onDeployed={(id) => setSelectedId(id)} />
-
-			<div
-				style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}
-			>
-				<div>
-					<h2>Deployments</h2>
-					<DeploymentList
-						deployments={deployments}
-						selectedId={selectedId}
-						onSelect={setSelectedId}
-					/>
-				</div>
-
-				<div>
-					<h2>
-						Logs{' '}
-						{selectedId && (
-							<code style={{ fontSize: '0.8rem' }}>{selectedId}</code>
-						)}
-					</h2>
-					{selectedId ? (
-						<LogStream deploymentId={selectedId} />
-					) : (
-						<p style={{ color: '#888' }}>Select a deployment to view logs</p>
-					)}
-				</div>
-			</div>
+		<div className="story">
+			<IntroGuard />
+			<a href="#main" className="skip-link">
+				Skip to content
+			</a>
+			<StoryNav />
+			<main id="main">
+				<DeckAct />
+				<HangarAct />
+				<CrewAct />
+				<LaunchAct />
+				<SquadronAct />
+				<FleetAct />
+				<Coda />
+			</main>
 		</div>
 	);
 }
