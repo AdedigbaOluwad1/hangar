@@ -6,31 +6,30 @@
 	position: absolute;
 	bottom: 0;
 	left: 50%;
-	height: 100%;
+	width: max(100%, calc(100svh * 16 / 9));
 	aspect-ratio: 16 / 9;
-	min-width: 100%;
 	transform: translateX(-50%);
 }
 
 @media (max-width: 767px) {
 	.hero-stage {
 		height: 54svh;
-		min-width: 0;
+		width: auto;
 		transform: translateX(-70%);
 	}
 	.launch-stage {
 		height: 62svh;
-		min-width: 0;
+		width: auto;
 		transform: translateX(-37.5%);
 	}
 	.fleet-stage {
 		height: 46svh;
 		bottom: 30svh;
-		min-width: 0;
+		width: auto;
 	}
 	.crew-stage {
 		height: 76svh;
-		min-width: 0;
+		width: auto;
 		transform: translateX(-34%);
 	}
 }
