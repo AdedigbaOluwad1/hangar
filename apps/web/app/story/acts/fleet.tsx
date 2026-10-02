@@ -7,6 +7,7 @@ import { ArrowRight01Icon } from '@hugeicons/core-free-icons';
 import { DUR, EASE, SCRUB, STAGGER, SplitText, gsap, pinLength, useAct } from '../motion';
 import { GITHUB_URL } from '../nav';
 import { Mark } from '../../components/mark';
+import { Emblem } from '../../components/emblem';
 import { ART } from '../art/palette';
 
 const ROADMAP = [
@@ -174,6 +175,7 @@ export function Coda() {
 				{ autoAlpha: 0, y: 16, duration: DUR.base, ease: EASE.settle, stagger: STAGGER.base },
 				'-=0.4',
 			)
+			.from(q('[data-emblem]'), { autoAlpha: 0, y: 16, duration: DUR.slow, ease: EASE.settle }, 0)
 			.from(
 				q('[data-runway] span'),
 				{ scaleX: 0, transformOrigin: '0% 50%', duration: DUR.slow, ease: EASE.throttle, stagger: 0.03 },
@@ -189,6 +191,9 @@ export function Coda() {
 				aria-hidden="true"
 			/>
 			<div className="relative mx-auto max-w-[1440px] px-5 pb-16 pt-28 md:px-10 md:pb-24 md:pt-40">
+				<div data-emblem className="mb-10 md:mb-12">
+					<Emblem className="h-14 w-auto md:h-20" />
+				</div>
 				<div data-runway aria-hidden="true" className="mb-10 flex gap-3 md:mb-14">
 					{Array.from({ length: 12 }, (_, i) => (
 						<span key={i} className="block h-1 flex-1 rounded-full bg-deck-400" style={{ opacity: 0.15 + i * 0.07 }} />

@@ -1,11 +1,18 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useState } from 'react';
-import { Links, Meta, Outlet, Scripts, ScrollRestoration } from 'react-router';
+import { Links, Meta, Outlet, Scripts, ScrollRestoration, type LinksFunction } from 'react-router';
 import '@fontsource-variable/big-shoulders-display';
 import '@fontsource-variable/inter';
 import '@fontsource-variable/jetbrains-mono';
 import './app.css';
 import { Toaster } from './components/ui/sonner';
+
+export const links: LinksFunction = () => [
+	{ rel: 'icon', href: '/favicon.svg', type: 'image/svg+xml' },
+	{ rel: 'icon', href: '/favicon.ico', sizes: '48x48' },
+	{ rel: 'apple-touch-icon', href: '/apple-touch-icon.png' },
+	{ rel: 'manifest', href: '/site.webmanifest' },
+];
 
 export default function App() {
 	const [queryClient] = useState(

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><defs><clipPath id="s"><path d="M6 4.5 H26 V14.5 C26 21.6 21.5 26.2 16 28.6 C10.5 26.2 6 21.6 6 14.5 Z"/></clipPath></defs>
+<path d="M6 4.5 H26 V14.5 C26 21.6 21.5 26.2 16 28.6 C10.5 26.2 6 21.6 6 14.5 Z" fill="#03050a"/>
+<rect x="0" y="0" width="32" height="9.2" fill="#ffb24a" clip-path="url(#s)"/>
+<path d="M16 11.2 L21.4 20.6 L16 18 L10.6 20.6 Z" fill="#ffb24a"/>
+<path d="M11.6 23 H20.4" stroke="#ffb24a" stroke-width="1.5" stroke-linecap="round"/>
+<path d="M6 4.5 H26 V14.5 C26 21.6 21.5 26.2 16 28.6 C10.5 26.2 6 21.6 6 14.5 Z" fill="none" stroke="#ffb24a" stroke-width="1.8" stroke-linejoin="round"/></svg>

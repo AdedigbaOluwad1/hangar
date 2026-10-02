@@ -19,6 +19,18 @@ export function meta({}: Route.MetaArgs) {
 			content:
 				'Hangar is a self-hosted platform built on Nomad, Consul, Vault and Caddy. Push a Git URL; it builds, schedules, routes and goes live.',
 		},
+		{ property: 'og:type', content: 'website' },
+		{ property: 'og:title', content: 'Hangar · Your apps deserve a runway' },
+		{
+			property: 'og:description',
+			content:
+				'The self-hosted platform that launches everything on your homelab. Built on Nomad, Consul, Vault and Caddy.',
+		},
+		{ property: 'og:image', content: '/brand/og.png' },
+		{ property: 'og:image:width', content: '1200' },
+		{ property: 'og:image:height', content: '630' },
+		{ name: 'twitter:card', content: 'summary_large_image' },
+		{ name: 'twitter:image', content: '/brand/og.png' },
 	];
 }
 

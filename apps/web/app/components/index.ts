@@ -9,3 +9,4 @@ export * from './log-stream';
 export * from './mark';
 export * from './flight-path';
 export * from './callsign-title';
+export * from './emblem';
