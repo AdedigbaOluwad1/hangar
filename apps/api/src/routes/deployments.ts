@@ -9,6 +9,7 @@ import {
   getDeployment,
   getBuild,
   updateDeployment,
+  updateBuild,
   isCallsignTaken,
 } from '@hangar/db'
 import { getVault, deployQueue, stopJob, getJobStatus } from '../lib'
@@ -222,6 +223,10 @@ deployments.openapi(deleteRoute, async (c) => {
   }
 
   await updateDeployment(id, { status: 'stopped' })
+  // the build that was serving traffic is stopped too, or it keeps reporting running
+  if (deployment.latestBuild?.status === 'running') {
+    await updateBuild(deployment.latestBuild.id, { status: 'stopped' })
+  }
   return c.json({ message: 'Deployment stopped' }, 200)
 })
 
