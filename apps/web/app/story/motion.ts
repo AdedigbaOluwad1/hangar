@@ -20,6 +20,20 @@ export const PIN = {
 	fleet: { desktop: 140, mobile: 120 },
 } as const;
 
+export const TAXI_HANDOFF = 2700;
+
+export function taxiHandoff(act: 'crew' | 'launch', isDesktop: boolean) {
+	const crew = document.querySelector<HTMLElement>('.crew-stage')?.offsetHeight ?? 1;
+	const own = document.querySelector<HTMLElement>(`.${act}-stage`)?.offsetHeight ?? crew;
+	return TAXI_HANDOFF * (PIN[act][isDesktop ? 'desktop' : 'mobile'] / 100) * (crew / own);
+}
+
+export function visibleSpan(stage: Element, width = 1600) {
+	const box = stage.getBoundingClientRect();
+	const unit = box.width / width;
+	return { left: Math.max(0, -box.left / unit), right: Math.min(width, (window.innerWidth - box.left) / unit) };
+}
+
 let registered = false;
 function register() {
 	if (registered || typeof window === 'undefined') return;

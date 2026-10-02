@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { EASE, SplitText, actTimeline, gsap, useAct } from '../motion';
+import { EASE, SplitText, actTimeline, entrySpeed, exitSpeed, gsap, taxiHandoff, useAct, visibleSpan } from '../motion';
 import { JetSide } from '../art/jet';
 import { CrewFigure, StarField } from '../art/scenery';
 import { ART } from '../art/palette';
@@ -40,7 +40,21 @@ const DECK_WIDTH = 4800;
 const DECK_TRAVEL = DECK_WIDTH - 1600;
 const JET_X = 600;
 const STATION_X = [1000, 1800, 2600, 3400];
-const passAt = (x: number) => (x - JET_X) / DECK_TRAVEL;
+const JET_REST = 90;
+const JET_TAIL = JET_X - 286;
+const CLEARANCE = 24;
+const CREW_END = 0.99;
+
+function solve(f: (t: number) => number, target: number) {
+	let lo = 0;
+	let hi = 1;
+	for (let i = 0; i < 40; i++) {
+		const mid = (lo + hi) / 2;
+		if (f(mid) < target) lo = mid;
+		else hi = mid;
+	}
+	return lo;
+}
 
 export function CrewAct() {
 	const ref = useRef<HTMLElement>(null);
@@ -51,17 +65,40 @@ export function CrewAct() {
 
 		if (!isDesktop) gsap.set(roles.slice(1), { position: 'absolute', inset: 0 });
 
+		const jetGone = visibleSpan(q('.crew-stage')[0]).right - JET_TAIL + CLEARANCE;
+		const exitDur = (exitSpeed(EASE.catapult) * (jetGone - JET_REST)) / taxiHandoff('crew', isDesktop);
+		const pullAt = CREW_END - exitDur;
+		const coastSpan = exitDur / entrySpeed(EASE.coast);
+		const panSpeed = DECK_TRAVEL / (pullAt + coastSpan);
+		const cruiseShare = pullAt / (pullAt + coastSpan);
+		const travelled = (t: number) => {
+			if (t <= pullAt) return panSpeed * t;
+			const k = Math.min(1, (t - pullAt) / exitDur);
+			return panSpeed * (pullAt + coastSpan * (2 * k - k * k)) + (jetGone - JET_REST) * k * k;
+		};
+		const passAt = (x: number) => solve(travelled, x - JET_X);
+
 		const tl = actTimeline(ref.current, 'crew', isDesktop);
 
 		tl.from(q('[data-eyebrow]'), { autoAlpha: 0, y: 12, duration: 0.04, ease: EASE.settle }, 0)
 			.from(title.words, { yPercent: 110, duration: 0.07, ease: EASE.settle, stagger: 0.01 }, 0.01)
-			.fromTo(q('[data-deck]'), { xPercent: 0 }, { xPercent: -(DECK_TRAVEL / DECK_WIDTH) * 100, duration: 1 }, 0)
-			.fromTo(q('[data-ruler]'), { xPercent: 0 }, { xPercent: -45, duration: 1 }, 0)
-			.fromTo(q('[data-far]'), { xPercent: 0 }, { xPercent: -12, duration: 1 }, 0)
-			.fromTo(q('[data-stars]'), { xPercent: 0 }, { xPercent: -3, duration: 1 }, 0)
-			.fromTo(q('[data-jet]'), { x: -60 }, { x: 90, duration: 0.86, ease: EASE.glide }, 0)
-			.to(q('[data-jet]'), { x: 1400, duration: 0.12, ease: EASE.throttle }, 0.87)
+			.fromTo(q('[data-jet]'), { x: -60 }, { x: JET_REST, duration: pullAt, ease: EASE.glide }, 0)
+			.to(q('[data-jet]'), { x: jetGone, duration: exitDur, ease: EASE.catapult }, pullAt)
 			.fromTo(q('[data-jet-body]'), { y: 0 }, { y: -2, duration: 0.05, repeat: 16, yoyo: true }, 0);
+
+		const pan: Array<[string, number]> = [
+			['[data-deck]', -(DECK_TRAVEL / DECK_WIDTH) * 100],
+			['[data-ruler]', -45],
+			['[data-far]', -12],
+			['[data-stars]', -3],
+		];
+		pan.forEach(([layer, xPercent]) => {
+			tl.fromTo(q(layer), { xPercent: 0 }, { xPercent: xPercent * cruiseShare, duration: pullAt }, 0).to(
+				q(layer),
+				{ xPercent, duration: exitDur, ease: EASE.coast },
+				pullAt,
+			);
+		});
 
 		STATION_X.forEach((x, i) => {
 			const at = passAt(x);

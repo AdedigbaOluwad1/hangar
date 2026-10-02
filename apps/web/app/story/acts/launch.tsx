@@ -6,9 +6,12 @@ import {
 	STAGGER,
 	SplitText,
 	actTimeline,
+	entrySpeed,
 	exitSpeed,
 	gsap,
+	taxiHandoff,
 	useAct,
+	visibleSpan,
 } from '../motion';
 import { JetSide } from '../art/jet';
 import { CrewFigure } from '../art/scenery';
@@ -19,7 +22,10 @@ const FIRE_AT = 0.5;
 
 const GEAR = { x: 545, y: 700 };
 const BOW = 1270;
+const JET_NOSE = 818;
+const CLEARANCE = 60;
 const TENSION = 6;
+const SPOOLED_AT = 0.48;
 const STROKE = 605;
 const PITCH = 25;
 const TURN_RADIUS = 900;
@@ -181,6 +187,9 @@ export function LaunchAct() {
 				bowAt + 2.18,
 			);
 
+		const taxiIn = JET_NOSE - visibleSpan(q('.launch-stage')[0]).left + CLEARANCE;
+		const parkedAt = (entrySpeed(EASE.coast) * taxiIn) / taxiHandoff('launch', isDesktop);
+
 		let fired = false;
 		const tl = actTimeline(ref.current, 'launch', isDesktop, (progress) => {
 			if (progress >= FIRE_AT && !fired) {
@@ -196,9 +205,19 @@ export function LaunchAct() {
 			.from(title.words, { yPercent: 110, duration: 0.08, ease: EASE.settle, stagger: 0.012 }, 0.01)
 			.from(q('[data-lede]'), { autoAlpha: 0, y: 14, duration: 0.06, ease: EASE.settle }, 0.05)
 			.from(q('[data-hud]'), { autoAlpha: 0, y: 10, duration: 0.05, ease: EASE.settle }, 0.06)
-			.fromTo(q('[data-jet-taxi]'), { x: -1300 }, { x: 0, duration: 0.14, ease: EASE.brake }, 0)
-			.fromTo(jet, { x: 0 }, { x: TENSION, duration: 0.2, ease: EASE.spool }, 0.2)
-			.fromTo(flame, { scaleX: 0.05, autoAlpha: 0 }, { scaleX: 1, autoAlpha: 1, duration: 0.3, ease: EASE.spool }, 0.15)
+			.fromTo(q('[data-jet-taxi]'), { x: -taxiIn }, { x: 0, duration: parkedAt, ease: EASE.coast }, 0)
+			.fromTo(
+				jet,
+				{ x: 0 },
+				{ x: TENSION, duration: SPOOLED_AT - parkedAt - 0.06, ease: EASE.spool },
+				parkedAt + 0.02,
+			)
+			.fromTo(
+				flame,
+				{ scaleX: 0.05, autoAlpha: 0 },
+				{ scaleX: 1, autoAlpha: 1, duration: SPOOLED_AT - parkedAt, ease: EASE.spool },
+				parkedAt,
+			)
 			.fromTo(
 				q('[data-steam]'),
 				{ scale: 0.2, autoAlpha: 0, transformOrigin: '50% 100%' },
@@ -215,15 +234,19 @@ export function LaunchAct() {
 				thrust,
 				{
 					value: 100,
-					duration: 0.42,
+					duration: SPOOLED_AT - parkedAt,
 					ease: EASE.spool,
 					onUpdate: () => {
 						if (thrustEl) thrustEl.textContent = String(Math.round(thrust.value)).padStart(3, '0');
 					},
 				},
-				0.06,
+				parkedAt,
 			)
-			.to(q('[data-jet-body]'), { keyframes: { y: [0, -1, 1, -1.5, 1.5, -2, 2, -2.5, 2.5, 0] }, duration: 0.3 }, 0.2)
+			.to(
+				q('[data-jet-body]'),
+				{ keyframes: { y: [0, -1, 1, -1.5, 1.5, -2, 2, -2.5, 2.5, 0] }, duration: SPOOLED_AT - parkedAt },
+				parkedAt,
+			)
 			.fromTo(q('[data-far]'), { xPercent: 0 }, { xPercent: -4, duration: 1 }, 0);
 
 		q('[data-hud-line]').forEach((line, i) => {
