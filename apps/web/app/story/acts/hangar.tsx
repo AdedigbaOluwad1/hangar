@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { DUR, EASE, SCRUB, STAGGER, SplitText, gsap, pinLength, useAct } from '../motion';
+import { DUR, EASE, STAGGER, SplitText, actTimeline, gsap, useAct } from '../motion';
 import { CANOPY, FIN, FUSELAGE, JetSide, STAB, WING } from '../art/jet';
 import { Dimension } from '../art/scenery';
 import { REGISTRY_REPO, REGISTRY_TAGS, SHORT_ID } from '../data';
@@ -43,16 +43,7 @@ export function HangarAct() {
 			mask: 'words',
 		});
 
-		const tl = gsap.timeline({
-			defaults: { ease: EASE.scrub },
-			scrollTrigger: {
-				trigger: ref.current,
-				start: 'top top',
-				end: pinLength('hangar', isDesktop),
-				pin: true,
-				scrub: SCRUB,
-			},
-		});
+		const tl = actTimeline(ref.current, 'hangar', isDesktop);
 
 		tl.fromTo(
 			q('[data-seam]'),

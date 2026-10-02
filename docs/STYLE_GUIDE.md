@@ -113,9 +113,9 @@ Use `pinLength(act, isDesktop)` rather than writing `+=N%`.
 
 | Pattern | Recipe | Reference | Reuse / off limits |
 |---|---|---|---|
-| **Pinned scrubbed act** | `useAct(ref, setup)`, one `gsap.timeline` with `scrollTrigger: { trigger, start: 'top top', end: pinLength(act), pin: true, scrub: SCRUB }`. Positions are 0–1 beats. Markup is the composed final frame; animate with `from`/`fromTo` | `story/acts/hangar.tsx` (`BEAT` map) | Story page only. The dashboard never pins |
+| **Pinned scrubbed act** | `useAct(ref, setup)`, then `const tl = actTimeline(ref.current, act, isDesktop)`: pinned for `pinLength(act)`, scrubbed with `SCRUB` lag, and reversible, so scrolling back up rewinds the act. Positions are 0–1 beats. Markup is the composed final frame; animate with `from`/`fromTo` | `story/acts/hangar.tsx` (`BEAT` map) | Story page only. The dashboard never pins |
 | **Lazy act build** | Acts below the hero queue in `useAct`; an `IntersectionObserver` (`rootMargin: 0 0 100% 0`) builds them in document order. In-page links call `jumpToAct(id)` | `story/motion.ts` | Every new act must use `useAct`, never raw `useGSAP` |
-| **Timed release inside a scrub** | Scrub builds tension; crossing a threshold plays a paused timeline (`shot.play()`), scrolling back reverses it at 3× | `story/acts/launch.tsx` (`FIRE_AT`) | Only for moments that can't happen halfway |
+| **Timed release inside a scrub** | Scrub builds tension; crossing a threshold (the `onUpdate` callback of `actTimeline`) plays a paused timeline (`shot.play()`), scrolling back reverses it at 3× | `story/acts/launch.tsx` (`FIRE_AT`) | Only for moments that can't happen halfway |
 | **Masked type reveal** | `SplitText.create(el, { type: 'words', mask: 'words' })`, then `from(words, { yPercent: 110, ease: settle })`. Hero uses lines + `autoSplit`; the coda uses chars | `story/acts/hangar.tsx`, `deck.tsx`, `fleet.tsx` (`Coda`) | Headlines only. Never on body copy or dashboard text |
 | **Parallax layers** | 3+ layers on one `.story-stage` box, each moving at a different rate: stars ≈ 3–8%, horizon ≈ 12%, scene 100%, rulers 45% | `story/acts/crew.tsx` | Story only |
 | **Camera move** | Scale or translate a wrapper, origin at the subject; `throttle` to push in, `glide`/`settle` to pull back | `deck.tsx` (push), `squadron.tsx` (pull back from the lead jet) | Story only |

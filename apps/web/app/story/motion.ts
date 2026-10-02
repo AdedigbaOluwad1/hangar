@@ -4,7 +4,7 @@ import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { SplitText } from 'gsap/SplitText';
 import { DrawSVGPlugin } from 'gsap/DrawSVGPlugin';
 import { useGSAP } from '@gsap/react';
-import { MOTION_OK, registerEases } from '../lib/motion';
+import { EASE, MOTION_OK, registerEases } from '../lib/motion';
 
 export { EASE, DUR, STAGGER } from '../lib/motion';
 
@@ -110,6 +110,25 @@ export function jumpToAct(id: string) {
 	ScrollTrigger.refresh();
 	const top = actTop(id);
 	if (top !== null) window.scrollTo({ top, behavior: 'auto' });
+}
+
+export function actTimeline(
+	trigger: Element | null,
+	act: keyof typeof PIN,
+	isDesktop: boolean,
+	onUpdate?: (progress: number) => void,
+) {
+	return gsap.timeline({
+		defaults: { ease: EASE.scrub },
+		scrollTrigger: {
+			trigger,
+			start: 'top top',
+			end: pinLength(act, isDesktop),
+			pin: true,
+			scrub: SCRUB,
+			onUpdate: onUpdate && ((self) => onUpdate(self.progress)),
+		},
+	});
 }
 
 export function pinLength(act: keyof typeof PIN, isDesktop: boolean) {

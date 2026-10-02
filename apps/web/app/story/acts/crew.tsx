@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { EASE, SCRUB, SplitText, gsap, pinLength, useAct } from '../motion';
+import { EASE, SplitText, actTimeline, gsap, useAct } from '../motion';
 import { JetSide } from '../art/jet';
 import { CrewFigure, StarField } from '../art/scenery';
 import { ART } from '../art/palette';
@@ -51,16 +51,7 @@ export function CrewAct() {
 
 		if (!isDesktop) gsap.set(roles.slice(1), { position: 'absolute', inset: 0 });
 
-		const tl = gsap.timeline({
-			defaults: { ease: EASE.scrub },
-			scrollTrigger: {
-				trigger: ref.current,
-				start: 'top top',
-				end: pinLength('crew', isDesktop),
-				pin: true,
-				scrub: SCRUB,
-			},
-		});
+		const tl = actTimeline(ref.current, 'crew', isDesktop);
 
 		tl.from(q('[data-eyebrow]'), { autoAlpha: 0, y: 12, duration: 0.04, ease: EASE.settle }, 0)
 			.from(title.words, { yPercent: 110, duration: 0.07, ease: EASE.settle, stagger: 0.01 }, 0.01)

@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { DUR, EASE, SCRUB, SplitText, gsap, pinLength, useAct } from '../motion';
+import { DUR, EASE, SplitText, actTimeline, gsap, useAct } from '../motion';
 import { JetPlan } from '../art/jet';
 import { TAG_HISTORY } from '../data';
 import { ART } from '../art/palette';
@@ -46,16 +46,7 @@ export function SquadronAct() {
 		gsap.set(q('[data-back-label]'), { autoAlpha: 0 });
 		gsap.set(q('[data-back-status]'), { autoAlpha: 1 });
 
-		const tl = gsap.timeline({
-			defaults: { ease: EASE.scrub },
-			scrollTrigger: {
-				trigger: ref.current,
-				start: 'top top',
-				end: pinLength('squadron', isDesktop),
-				pin: true,
-				scrub: SCRUB,
-			},
-		});
+		const tl = actTimeline(ref.current, 'squadron', isDesktop);
 
 		tl.from(q('[data-eyebrow]'), { autoAlpha: 0, y: 12, duration: 0.04, ease: EASE.settle }, 0)
 			.from(title.words, { yPercent: 110, duration: 0.07, ease: EASE.settle, stagger: 0.01 }, 0.01)

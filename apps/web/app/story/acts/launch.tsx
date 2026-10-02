@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { DUR, EASE, SCRUB, STAGGER, SplitText, gsap, pinLength, useAct } from '../motion';
+import { DUR, EASE, STAGGER, SplitText, actTimeline, gsap, useAct } from '../motion';
 import { JetSide } from '../art/jet';
 import { CrewFigure } from '../art/scenery';
 import { LIVE_URL, LOG_LINES, SHORT_ID, type LogStage } from '../data';
@@ -136,24 +136,14 @@ export function LaunchAct() {
 			);
 
 		let fired = false;
-		const tl = gsap.timeline({
-			defaults: { ease: EASE.scrub },
-			scrollTrigger: {
-				trigger: ref.current,
-				start: 'top top',
-				end: pinLength('launch', isDesktop),
-				pin: true,
-				scrub: SCRUB,
-				onUpdate: (self) => {
-					if (self.progress >= FIRE_AT && !fired) {
-						fired = true;
-						shot.timeScale(1).play();
-					} else if (self.progress < FIRE_AT - 0.04 && fired) {
-						fired = false;
-						shot.timeScale(3).reverse();
-					}
-				},
-			},
+		const tl = actTimeline(ref.current, 'launch', isDesktop, (progress) => {
+			if (progress >= FIRE_AT && !fired) {
+				fired = true;
+				shot.timeScale(1).play();
+			} else if (progress < FIRE_AT - 0.04 && fired) {
+				fired = false;
+				shot.timeScale(3).reverse();
+			}
 		});
 
 		tl.from(q('[data-eyebrow]'), { autoAlpha: 0, y: 12, duration: 0.05, ease: EASE.settle }, 0)

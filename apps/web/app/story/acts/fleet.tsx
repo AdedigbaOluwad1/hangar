@@ -4,7 +4,7 @@ import { HugeiconsIcon } from '@hugeicons/react';
 import { buttonVariants } from '../../components/ui/button';
 import { paths } from '../../lib/paths';
 import { ArrowRight01Icon } from '@hugeicons/core-free-icons';
-import { DUR, EASE, SCRUB, STAGGER, SplitText, gsap, pinLength, useAct } from '../motion';
+import { DUR, EASE, STAGGER, SplitText, actTimeline, gsap, useAct } from '../motion';
 import { GITHUB_URL } from '../nav';
 import { Mark } from '../../components/mark';
 import { Emblem } from '../../components/emblem';
@@ -34,16 +34,7 @@ export function FleetAct() {
 	useAct(ref, ({ isDesktop, q }) => {
 		const title = SplitText.create(q('[data-title]'), { type: 'words', mask: 'words' });
 
-		const tl = gsap.timeline({
-			defaults: { ease: EASE.scrub },
-			scrollTrigger: {
-				trigger: ref.current,
-				start: 'top top',
-				end: pinLength('fleet', isDesktop),
-				pin: true,
-				scrub: SCRUB,
-			},
-		});
+		const tl = actTimeline(ref.current, 'fleet', isDesktop);
 
 		tl.fromTo(
 			q('[data-group]'),
