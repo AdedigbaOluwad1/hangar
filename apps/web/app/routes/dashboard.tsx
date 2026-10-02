@@ -6,6 +6,7 @@ import { HugeiconsIcon } from '@hugeicons/react';
 import { PlusSignIcon } from '@hugeicons/core-free-icons';
 import type { Route } from './+types/dashboard';
 import { api } from '../lib/api';
+import { paths } from '../lib/paths';
 import { useCountUp, useReveal } from '../lib/motion';
 import { cn } from '../lib/utils';
 import { Header } from '../components/header';
@@ -63,7 +64,7 @@ export default function Dashboard() {
 
 			<Header
 				action={
-					<Link to="/deployments/new" className={buttonVariants({ size: 'sm' })}>
+					<Link to={paths.newDeployment} className={buttonVariants({ size: 'sm' })}>
 						<HugeiconsIcon icon={PlusSignIcon} className="h-3.5 w-3.5" />
 						New deployment
 					</Link>

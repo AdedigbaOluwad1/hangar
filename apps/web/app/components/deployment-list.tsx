@@ -8,6 +8,7 @@ import { StatusBadge } from './status-badge';
 import { buttonVariants } from './ui/button';
 import { formatRelativeTime, repoName } from '../lib/format';
 import { deploymentStatus } from '../lib/status';
+import { paths } from '../lib/paths';
 
 const JET_TONE: Record<string, string> = {
 	running: '#46e39a',
@@ -36,7 +37,7 @@ export function DeploymentList({ deployments }: { deployments: Deployment[] }) {
 						<div className="min-w-0">
 							{/* the row's link stretches over the whole row; Visit sits above it */}
 							<Link
-								to={`/deployments/${d.id}`}
+								to={paths.deployment(d.id)}
 								className="block truncate font-medium text-steel-100 after:absolute after:inset-0"
 							>
 								{d.callsign}
@@ -94,7 +95,7 @@ function EmptyHangar() {
 				<p className="mx-auto mt-4 max-w-sm text-sm leading-relaxed text-steel-400">
 					Push a Git URL. Hangar builds it, schedules it on Nomad and routes it through Caddy.
 				</p>
-				<Link to="/deployments/new" className={buttonVariants({ className: 'mt-8' })}>
+				<Link to={paths.newDeployment} className={buttonVariants({ className: 'mt-8' })}>
 					Deploy your first app
 					<HugeiconsIcon icon={ArrowRight01Icon} className="h-4 w-4" />
 				</Link>

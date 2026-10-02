@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router';
 import { HugeiconsIcon } from '@hugeicons/react';
 import { ArrowRight01Icon, Cancel01Icon, PlusSignIcon } from '@hugeicons/core-free-icons';
 import { api } from '../lib/api';
+import { paths } from '../lib/paths';
 import { repoName } from '../lib/format';
 import { toast } from 'sonner';
 import { Button } from './ui/button';
@@ -73,7 +74,7 @@ export function DeployForm() {
 		onSuccess: (deployment) => {
 			queryClient.invalidateQueries({ queryKey: ['deployments'] });
 			toast.success(`${deployment.callsign} is cleared for launch`, { description: deployment.id });
-			navigate(`/deployments/${deployment.id}`);
+			navigate(paths.deployment(deployment.id));
 		},
 	});
 

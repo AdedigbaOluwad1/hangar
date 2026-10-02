@@ -4,6 +4,7 @@ import { Link } from 'react-router';
 import { jumpToAct } from './motion';
 import { Mark } from '../components/mark';
 import { buttonVariants } from '../components/ui/button';
+import { paths } from '../lib/paths';
 
 export const GITHUB_URL = 'https://github.com/AdedigbaOluwad1/hangar';
 export const DOCS_URL = `${GITHUB_URL}#readme`;
@@ -47,7 +48,7 @@ export function StoryNav() {
 						</a>
 					</li>
 				</ul>
-				<Link to="/dashboard" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+				<Link to={paths.dashboard} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
 					Dashboard
 				</Link>
 			</nav>

@@ -6,6 +6,7 @@ import { useRef } from 'react';
 import { Link } from 'react-router';
 import { HugeiconsIcon } from '@hugeicons/react';
 import { buttonVariants } from '../../components/ui/button';
+import { paths } from '../../lib/paths';
 import { ArrowRight01Icon } from '@hugeicons/core-free-icons';
 import { DUR, EASE, SCRUB, STAGGER, SplitText, gsap, pinLength, useAct } from '../motion';
 import { releaseIntroGuard } from '../intro-guard';
@@ -261,7 +262,7 @@ export function DeckAct() {
 					Hangar is the self-hosted platform that launches everything on your homelab.
 				</p>
 				<div data-intro data-ctas className="mt-6 flex flex-wrap gap-3 md:mt-9">
-					<Link to="/deployments/new" className={buttonVariants()}>
+					<Link to={paths.newDeployment} className={buttonVariants()}>
 						Deploy your first app
 						<HugeiconsIcon icon={ArrowRight01Icon} className="h-4 w-4" />
 					</Link>

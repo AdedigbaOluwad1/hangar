@@ -1,10 +1,11 @@
-// apps/web/app/routes/deployments.new.tsx
+// apps/web/app/routes/dashboard.deployments.new.tsx
 import { useRef } from 'react';
 import { Link } from 'react-router';
 import { HugeiconsIcon } from '@hugeicons/react';
 import { ArrowLeft01Icon } from '@hugeicons/core-free-icons';
-import type { Route } from './+types/deployments.new';
+import type { Route } from './+types/dashboard.deployments.new';
 import { useReveal } from '../lib/motion';
+import { paths } from '../lib/paths';
 import { Header } from '../components/header';
 import { DeployForm } from '../components/deploy-form';
 import { FLIGHT_PLAN } from '../components/flight-path';
@@ -27,7 +28,7 @@ export default function NewDeployment() {
 			<main className="relative mx-auto grid max-w-6xl gap-10 px-5 pb-20 pt-10 md:grid-cols-[minmax(0,340px)_1fr] md:gap-16 md:px-8 md:pt-14">
 				<div className="md:sticky md:top-28 md:self-start">
 					<Link
-						to="/dashboard"
+						to={paths.dashboard}
 						data-reveal
 						className="inline-flex items-center gap-1.5 font-code text-[11px] uppercase tracking-[0.16em] text-steel-400 transition-colors hover:text-steel-100"
 					>

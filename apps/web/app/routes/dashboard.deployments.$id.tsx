@@ -1,13 +1,14 @@
-// apps/web/app/routes/deployments.$id.tsx
+// apps/web/app/routes/dashboard.deployments.$id.tsx
 import { useEffect, useRef, useState } from 'react';
 import { useParams, Link } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { HugeiconsIcon } from '@hugeicons/react';
 import { ArrowLeft01Icon, ExternalLinkIcon, GitBranchIcon } from '@hugeicons/core-free-icons';
-import type { Route } from './+types/deployments.$id';
+import type { Route } from './+types/dashboard.deployments.$id';
 import { api } from '../lib/api';
 import { useLogStream } from '../lib/use-log-stream';
 import { useReveal } from '../lib/motion';
+import { paths } from '../lib/paths';
 import { shortId } from '../lib/format';
 import { ACTIVE_BUILD_STATUSES, deploymentStatus } from '../lib/status';
 import { Header } from '../components/header';
@@ -87,7 +88,7 @@ export default function DeploymentDetail() {
 
 			<main className="relative mx-auto max-w-6xl px-5 pb-20 pt-10 md:px-8 md:pt-12">
 				<Link
-					to="/dashboard"
+					to={paths.dashboard}
 					className="inline-flex items-center gap-1.5 font-code text-[11px] uppercase tracking-[0.16em] text-steel-400 transition-colors hover:text-steel-100"
 				>
 					<HugeiconsIcon icon={ArrowLeft01Icon} className="h-3.5 w-3.5" />

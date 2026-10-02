@@ -12,7 +12,7 @@ Paths below are relative to `apps/web/app/` unless they start with the repo root
 
 **Brand.** Hangar is a self-hosted platform that launches apps. The lore is an aircraft carrier: apps are jets, the pipeline is the deck, going live is a launch. It's a night deck: dark, quiet, technical, lit by amber deck lights, with green reserved for "live".
 
-**Two volumes.** The story page (`/`) is the airshow: pinned, scrubbed, cinematic. The dashboard (`/dashboard`, `/deployments/*`) is the instrument panel: same palette, type and curves, almost still. Section 11 covers the dashboard; don't carry story choreography into it.
+**Two volumes.** The story page (`/`) is the airshow: pinned, scrubbed, cinematic. The dashboard (`/dashboard` and everything under it) is the instrument panel: same palette, type and curves, almost still. Section 11 covers the dashboard; don't carry story choreography into it.
 
 **Velocity.** Motion explains how things move, not just that they changed.
 
@@ -154,7 +154,7 @@ Use `pinLength(act, isDesktop)` rather than writing `+=N%`.
 |---|---|---|
 | Hero | `display text-[clamp(3rem,8.6vw,8.25rem)]` | `story/acts/deck.tsx` |
 | Act title | `display text-[clamp(2.5rem,5.4vw,5rem)]` | Every story act |
-| Page title | `display text-6xl md:text-8xl` (list) / `text-5xl md:text-7xl` (others) | `routes/dashboard.tsx`, `deployments.$id.tsx` |
+| Page title | `display text-6xl md:text-8xl` (list) / `text-5xl md:text-7xl` (others) | `routes/dashboard.tsx`, `dashboard.deployments.$id.tsx` |
 | Section / card title | `font-display text-xl–3xl font-bold uppercase tracking-wide` | `deploy-form.tsx` `Section`, `crew.tsx` cards |
 | Eyebrow | `.eyebrow`: mono 11px, `tracking-[0.22em]`, uppercase, `deck-400` | Everywhere above a title |
 | Field label | `Label`: mono 10px, `tracking-[0.2em]`, uppercase, `steel-400` | `components/ui/label.tsx` |
@@ -215,12 +215,12 @@ Shared UI lives in `components/ui/` (shadcn, Base UI style `base-nova`, Hugeicon
 | `Header` | `action?` | active nav link `steel-100` | Every dashboard page |
 | `Mark` | `className` | — | Logo |
 | `DeploymentList` | `deployments` | empty state built in | `routes/dashboard.tsx` |
-| `FlightPath` | `lines`, `status` | done / active / waiting / skipped / failed per stage | `routes/deployments.$id.tsx` |
-| `BuildList` | `builds`, `selectedBuildId`, `onSelect` | selected bar `deck-400` | `routes/deployments.$id.tsx` |
-| `LogStream` | `lines`, `done`, `buildId` | Live pill / Stream closed | `routes/deployments.$id.tsx` |
-| `DeploymentActions` | `deploymentId`, `currentImageTag`, `status` | — | `routes/deployments.$id.tsx` |
-| `CallsignTitle` | `deployment` | view / editing / invalid / saving | `routes/deployments.$id.tsx` |
-| `DeployForm` | — | pending "Launching…", inline error | `routes/deployments.new.tsx` |
+| `FlightPath` | `lines`, `status` | done / active / waiting / skipped / failed per stage | `routes/dashboard.deployments.$id.tsx` |
+| `BuildList` | `builds`, `selectedBuildId`, `onSelect` | selected bar `deck-400` | `routes/dashboard.deployments.$id.tsx` |
+| `LogStream` | `lines`, `done`, `buildId` | Live pill / Stream closed | `routes/dashboard.deployments.$id.tsx` |
+| `DeploymentActions` | `deploymentId`, `currentImageTag`, `status` | — | `routes/dashboard.deployments.$id.tsx` |
+| `CallsignTitle` | `deployment` | view / editing / invalid / saving | `routes/dashboard.deployments.$id.tsx` |
+| `DeployForm` | — | pending "Launching…", inline error | `routes/dashboard.deployments.new.tsx` |
 | Classes | `.panel`, `.chip`, `.chip-coming`, `.eyebrow`, `.display`, `.live-dot` | — | `app.css` |
 
 Hooks: `useReveal`, `useCountUp`, `registerEases` (`lib/motion.ts`); `useAct`, `pinLength`, `flushActs`, `jumpToAct` (`story/motion.ts`); `deploymentStatus` (`lib/status.ts`); `cn` (`lib/utils.ts`).
@@ -335,6 +335,7 @@ Breakpoint is `md` (768px), the same one `useAct` uses for `isDesktop`.
 | `<Button variant="destructive">` → dialog → `variant="danger"` | `confirm()` |
 | Base UI `Select` | native `<select>` |
 | `deploymentStatus(d)` | `d.latestBuild?.status ?? d.status` |
+| `<Link to={paths.deployment(id)}>` | `` to={`/deployments/${id}`} `` |
 | `buttonVariants({ variant: 'outline' })` on a `Link` | Copying button classes by hand |
 | Lore title + literal description in toasts | Lore in error messages or IDs |
 | Impact effects only in the launch | Shaking the page on a successful save |
@@ -354,11 +355,11 @@ Every dashboard page stacks the same layers. Copy them from the nearest page rat
 | Layer | Recipe | Reference |
 |---|---|---|
 | Header | `Header`, sticky, `h-16`, `bg-night-950/85 backdrop-blur-md border-b border-line`, content `max-w-6xl px-5 md:px-8`. Mark + wordmark left, nav (`Deployments`, `Docs`), at most one action right | `components/header.tsx` |
-| Atmosphere | One absolute layer behind the page head: `.blueprint-grid` masked to fade downward (`[mask-image:linear-gradient(to_bottom,black,transparent)]`, `h-[420px]`–`h-[480px]`) plus one `blur-3xl` glow blob at `/10` opacity. Glow is `deck-400`, or `signal-400` when the subject is live | `routes/dashboard.tsx`, `routes/deployments.$id.tsx` |
+| Atmosphere | One absolute layer behind the page head: `.blueprint-grid` masked to fade downward (`[mask-image:linear-gradient(to_bottom,black,transparent)]`, `h-[420px]`–`h-[480px]`) plus one `blur-3xl` glow blob at `/10` opacity. Glow is `deck-400`, or `signal-400` when the subject is live | `routes/dashboard.tsx`, `routes/dashboard.deployments.$id.tsx` |
 | Main | `relative mx-auto max-w-6xl px-5 md:px-8 pb-20`, `pt-10`–`pt-16` | All three routes |
-| Back link | Only on pages below the list: mono 11px uppercase `tracking-[0.16em] text-steel-400`, `ArrowLeft01Icon`, hover `steel-100` | `routes/deployments.$id.tsx`, `deployments.new.tsx` |
-| Page head | `.eyebrow` (place, not decoration), then `.display` title `mt-4`. Status badge sits next to the eyebrow; actions or stats align to the title's baseline on the right (`lg:items-end lg:justify-between`) | `routes/dashboard.tsx` (stats), `deployments.$id.tsx` (actions) |
-| Content | `.panel` blocks separated by `mt-4` (related) or `mt-10`–`mt-12` (new section). Section labels above panels use `.eyebrow mb-3` | `routes/deployments.$id.tsx` |
+| Back link | Only on pages below the list: mono 11px uppercase `tracking-[0.16em] text-steel-400`, `ArrowLeft01Icon`, hover `steel-100` | `routes/dashboard.deployments.$id.tsx`, `dashboard.deployments.new.tsx` |
+| Page head | `.eyebrow` (place, not decoration), then `.display` title `mt-4`. Status badge sits next to the eyebrow; actions or stats align to the title's baseline on the right (`lg:items-end lg:justify-between`) | `routes/dashboard.tsx` (stats), `dashboard.deployments.$id.tsx` (actions) |
+| Content | `.panel` blocks separated by `mt-4` (related) or `mt-10`–`mt-12` (new section). Section labels above panels use `.eyebrow mb-3` | `routes/dashboard.deployments.$id.tsx` |
 
 ### 11.2 Surfaces and selection
 
@@ -366,7 +367,7 @@ Every dashboard page stacks the same layers. Copy them from the nearest page rat
 - **Lists live inside one panel,** divided by `divide-y divide-line`, not as a stack of separate cards (`deployment-list.tsx`, `build-list.tsx`).
 - **Hover** tints a row to `night-850` (list) or `night-900` (build log) with `duration-300 ease-settle`.
 - **Selection** is a 2px `deck-400` bar on the row's left edge that scales in (`scale-y-0 → 100`, `duration-500 ease-settle`) plus a `night-850` tint (`build-list.tsx`).
-- **"Not yet" is dashed.** A missing live URL renders as `.panel border-dashed` with a grey dot, never an empty box (`deployments.$id.tsx`).
+- **"Not yet" is dashed.** A missing live URL renders as `.panel border-dashed` with a grey dot, never an empty box (`dashboard.deployments.$id.tsx`).
 - **Live is a surface change, not just a dot.** The live URL card switches to `border-signal-400/40` on a green-tinted surface with `.live-dot`; the page glow turns green with it.
 
 ### 11.3 Anatomy
@@ -375,10 +376,10 @@ Every dashboard page stacks the same layers. Copy them from the nearest page rat
 |---|---|---|
 | List row | `[JetPlan tinted by status] [callsign · text font] / [repo · id, mono 11px steel-500] … [StatusBadge] [Visit, md+, running only] [time + chevron, md+]`. The callsign is a stretched link (`after:absolute after:inset-0`); Visit sits above it with `relative z-10` so links never nest | `components/deployment-list.tsx` |
 | Stat | `.display` number `text-4xl md:text-5xl tabular-nums` in its status color, mono 10px label below, `border-l border-line pl-4`. Four in a row: Running, In flight, Failed, Total | `routes/dashboard.tsx` |
-| Detail head | Eyebrow + `StatusBadge`; `CallsignTitle`; a mono line with id + `CopyButton` and the source link; `DeploymentActions` on the right | `routes/deployments.$id.tsx` |
-| Detail body | Live card + facts panel (`lg:grid-cols-[1.3fr_1fr]`) → `FlightPath` → flight log + logs (`md:grid-cols-[280px_1fr]`) | `routes/deployments.$id.tsx` |
-| Form | Explainer column left (`md:grid-cols-[340px_1fr]`, sticky on desktop) + one `.panel` of numbered sections: mono `01` in `deck-400`, display title, one-line description, then fields. Footer bar `bg-night-850/60 border-t`: inline error left, the single primary action right | `routes/deployments.new.tsx`, `components/deploy-form.tsx` |
-| Facts | `<dl>` grid; `<dt>` mono 10px uppercase `steel-500`, `<dd>` `text-sm steel-300`, truncated | `routes/deployments.$id.tsx` (`Fact`) |
+| Detail head | Eyebrow + `StatusBadge`; `CallsignTitle`; a mono line with id + `CopyButton` and the source link; `DeploymentActions` on the right | `routes/dashboard.deployments.$id.tsx` |
+| Detail body | Live card + facts panel (`lg:grid-cols-[1.3fr_1fr]`) → `FlightPath` → flight log + logs (`md:grid-cols-[280px_1fr]`) | `routes/dashboard.deployments.$id.tsx` |
+| Form | Explainer column left (`md:grid-cols-[340px_1fr]`, sticky on desktop) + one `.panel` of numbered sections: mono `01` in `deck-400`, display title, one-line description, then fields. Footer bar `bg-night-850/60 border-t`: inline error left, the single primary action right | `routes/dashboard.deployments.new.tsx`, `components/deploy-form.tsx` |
+| Facts | `<dl>` grid; `<dt>` mono 10px uppercase `steel-500`, `<dd>` `text-sm steel-300`, truncated | `routes/dashboard.deployments.$id.tsx` (`Fact`) |
 
 ### 11.4 Data typography
 
@@ -407,7 +408,7 @@ Every dashboard page stacks the same layers. Copy them from the nearest page rat
 
 ### 11.7 Live data
 
-- **Poll faster while something is in flight:** lists and the deployment refetch every 2s while any status is `pending`/`building`/`deploying`, otherwise every 10s; builds and health every 5s (`routes/dashboard.tsx`, `routes/deployments.$id.tsx`). Logs stream over SSE.
+- **Poll faster while something is in flight:** lists and the deployment refetch every 2s while any status is `pending`/`building`/`deploying`, otherwise every 10s; builds and health every 5s (`routes/dashboard.tsx`, `routes/dashboard.deployments.$id.tsx`). Logs stream over SSE.
 - **Refetches are silent.** No skeletons, no re-reveal, no layout shift. Skeletons appear only on the first load.
 - **Mutations invalidate** the deployment, its builds and the list (`deployment-actions.tsx`), or write the response straight into the cache (`callsign-title.tsx`).
 
@@ -421,7 +422,7 @@ Lore names places and moments; plain words name data. Eyebrows and section label
 
 | Doing this | Start from |
 |---|---|
-| Create / deploy | `components/deploy-form.tsx`, `routes/deployments.new.tsx` |
+| Create / deploy | `components/deploy-form.tsx`, `routes/dashboard.deployments.new.tsx` |
 | Redeploy | `components/deployment-actions.tsx` (`redeploy`) |
 | Rollback / choose from a list | `components/deployment-actions.tsx` (Base UI `Select`) |
 | Destructive confirm | `components/deployment-actions.tsx` (`AlertDialog`) |
@@ -433,8 +434,9 @@ Lore names places and moments; plain words name data. Eyebrows and section label
 | Empty state | `components/deployment-list.tsx` (`EmptyHangar`) |
 | Page-level error | `routes/dashboard.tsx` (`isError` panel) |
 | Toast feedback | `components/deployment-actions.tsx` |
-| List row → detail | `components/deployment-list.tsx` (stretched link) → `routes/deployments.$id.tsx` |
-| New dashboard page | §11.1 template; copy `routes/deployments.$id.tsx` (detail) or `routes/deployments.new.tsx` (form) |
+| List row → detail | `components/deployment-list.tsx` (stretched link) → `routes/dashboard.deployments.$id.tsx` |
+| Link to an app page | `lib/paths.ts` (`paths.dashboard`, `paths.newDeployment`, `paths.deployment(id)`) |
+| New dashboard page | Register it under `dashboard/` in `routes.ts` and add it to `lib/paths.ts`; §11.1 template; copy `routes/dashboard.deployments.$id.tsx` (detail) or `routes/dashboard.deployments.new.tsx` (form) |
 | Page entrance | `useReveal` in `routes/dashboard.tsx` |
 | Page transition | None yet: route changes are instant. Add one to this guide before building it |
 | Story scene | `story/acts/hangar.tsx` (clearest scrubbed act), `story/motion.ts` |

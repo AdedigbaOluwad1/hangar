@@ -1,6 +1,7 @@
 // apps/web/app/components/header.tsx
 import { Link, NavLink } from 'react-router';
 import { cn } from '../lib/utils';
+import { paths } from '../lib/paths';
 import { Mark } from './mark';
 
 const DOCS_URL = 'https://github.com/AdedigbaOluwad1/hangar#readme';
@@ -16,7 +17,7 @@ export function Header({ action }: { action?: React.ReactNode }) {
 					</Link>
 					<nav aria-label="App" className="hidden items-center gap-6 text-sm sm:flex">
 						<NavLink
-							to="/dashboard"
+							to={paths.dashboard}
 							className={({ isActive }) =>
 								cn('transition-colors hover:text-steel-100', isActive ? 'text-steel-100' : 'text-steel-400')
 							}

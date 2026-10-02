@@ -6,6 +6,7 @@ import { useRef } from 'react';
 import { Link } from 'react-router';
 import { HugeiconsIcon } from '@hugeicons/react';
 import { buttonVariants } from '../../components/ui/button';
+import { paths } from '../../lib/paths';
 import { ArrowRight01Icon } from '@hugeicons/core-free-icons';
 import { DUR, EASE, SCRUB, STAGGER, SplitText, gsap, pinLength, useAct } from '../motion';
 import { GITHUB_URL } from '../nav';
@@ -207,7 +208,7 @@ export function Coda() {
 					Clear for takeoff.
 				</h2>
 				<div data-cta className="mt-8 flex flex-wrap gap-3 md:mt-12">
-					<Link to="/deployments/new" className={buttonVariants()}>
+					<Link to={paths.newDeployment} className={buttonVariants()}>
 						Deploy your first app
 						<HugeiconsIcon icon={ArrowRight01Icon} className="h-4 w-4" />
 					</Link>
@@ -224,7 +225,7 @@ export function Coda() {
 						Hangar · a self-hosted platform on the HashiCorp stack
 					</p>
 					<nav aria-label="Footer" className="flex gap-6">
-						<Link to="/dashboard" className="hover:text-steel-100">
+						<Link to={paths.dashboard} className="hover:text-steel-100">
 							Dashboard
 						</Link>
 						<a href={`${GITHUB_URL}#readme`} className="hover:text-steel-100">
