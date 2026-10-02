@@ -2,6 +2,11 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Links, Meta, Outlet, Scripts, ScrollRestoration } from 'react-router';
+import '@fontsource-variable/big-shoulders-display';
+import '@fontsource-variable/inter';
+import '@fontsource-variable/jetbrains-mono';
+import './app.css';
+import { Toaster } from './components/ui/sonner';
 
 export default function App() {
 	const [queryClient] = useState(
@@ -14,20 +19,20 @@ export default function App() {
 	);
 
 	return (
-		<html lang='en'>
+		<html lang="en" className="dark">
 			<head>
-				<meta charSet='utf-8' />
-				<meta
-					name='viewport'
-					content='width=device-width, initial-scale=1'
-				/>
+				<meta charSet="utf-8" />
+				<meta name="viewport" content="width=device-width, initial-scale=1" />
+				<meta name="theme-color" content="#03050a" />
 				<Meta />
 				<Links />
 			</head>
 			<body>
+				<div className="grain" aria-hidden="true" />
 				<QueryClientProvider client={queryClient}>
 					<Outlet />
 				</QueryClientProvider>
+				<Toaster />
 				<ScrollRestoration />
 				<Scripts />
 			</body>

@@ -1,0 +1,118 @@
+// apps/web/app/lib/motion.ts
+//
+// Motion tokens shared by the story page and the dashboard, so the whole app
+// moves with one feel. The CSS twins of these curves live in app.css as
+// --ease-* for state-driven transitions.
+import { type RefObject, useEffect, useRef } from 'react';
+import { gsap } from 'gsap';
+import { CustomEase } from 'gsap/CustomEase';
+import { useGSAP } from '@gsap/react';
+
+export const EASE = {
+	// heavy, slow start then explosive: anything gaining speed
+	throttle: 'hangar.throttle',
+	// long soft tail: arrivals, text, camera settling
+	settle: 'hangar.settle',
+	// symmetric weighty move: doors, elevators, camera pans
+	glide: 'hangar.glide',
+	// small overshoot: parts locking into place
+	snap: 'hangar.snap',
+	// hard stop: arrested landings
+	brake: 'hangar.brake',
+	// building pressure before a release
+	spool: 'hangar.spool',
+	// scrubbed tracks map scroll 1:1; the scrub lag supplies the smoothing
+	scrub: 'none',
+} as const;
+
+const CURVES: Record<string, string> = {
+	[EASE.throttle]: '0.7,0,0.84,0',
+	[EASE.settle]: '0.16,1,0.3,1',
+	[EASE.glide]: '0.65,0,0.35,1',
+	[EASE.snap]: '0.34,1.45,0.64,1',
+	[EASE.brake]: '0.05,0.7,0.1,1',
+	[EASE.spool]: '0.5,0,0.75,0',
+};
+
+export const DUR = {
+	instant: 0.12,
+	quick: 0.24,
+	base: 0.48,
+	slow: 0.8,
+	epic: 1.4,
+} as const;
+
+export const STAGGER = {
+	chars: 0.018,
+	tight: 0.04,
+	base: 0.08,
+	loose: 0.14,
+	wide: 0.22,
+} as const;
+
+export const MOTION_OK = '(prefers-reduced-motion: no-preference)';
+
+let eased = false;
+export function registerEases() {
+	if (eased || typeof window === 'undefined') return;
+	gsap.registerPlugin(useGSAP, CustomEase);
+	for (const [name, curve] of Object.entries(CURVES)) CustomEase.create(name, curve);
+	eased = true;
+}
+
+function motionAllowed() {
+	return typeof window !== 'undefined' && window.matchMedia(MOTION_OK).matches;
+}
+
+// Staggers [data-reveal] children in once, the first time `ready` is true.
+// Polling refetches re-render the list constantly; they must not replay it.
+export function useReveal(scope: RefObject<HTMLElement | null>, ready: boolean) {
+	const played = useRef(false);
+	useGSAP(
+		() => {
+			if (!ready || played.current) return;
+			played.current = true;
+			if (!motionAllowed()) return;
+			registerEases();
+			gsap.from('[data-reveal]', {
+				autoAlpha: 0,
+				y: 14,
+				duration: DUR.slow,
+				ease: EASE.settle,
+				stagger: STAGGER.tight,
+				clearProps: 'transform,opacity,visibility',
+			});
+		},
+		{ scope, dependencies: [ready] },
+	);
+}
+
+// Counts a number up from its previous value; jumps straight there without motion.
+export function useCountUp(ref: RefObject<HTMLElement | null>, value: number) {
+	const from = useRef(0);
+	useEffect(() => {
+		const el = ref.current;
+		if (!el) return;
+		if (!motionAllowed()) {
+			el.textContent = String(value);
+			from.current = value;
+			return;
+		}
+		registerEases();
+		const counter = { n: from.current };
+		const tween = gsap.to(counter, {
+			n: value,
+			duration: DUR.slow,
+			ease: EASE.settle,
+			onUpdate: () => {
+				el.textContent = String(Math.round(counter.n));
+			},
+		});
+		from.current = value;
+		return () => {
+			tween.kill();
+		};
+	}, [ref, value]);
+}
+
+export { gsap };
