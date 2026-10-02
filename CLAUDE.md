@@ -15,4 +15,5 @@ Full guide: `docs/STYLE_GUIDE.md`. These rules are non-negotiable for anything i
 - **Dashboard is the instrument panel, the story page is the airshow.** Dashboard pages follow the template in guide §11: one amber primary per view, silent refetches, no pinning or scroll choreography.
 - **Motion.** Animate transform and opacity only. Impact effects (shake, flash, speed lines) belong to the launch alone. Dashboard entrances use `useReveal` and play once. The story page uses `useAct`.
 - **Reduced motion and no-JS** must still show complete content. Check 390px and 1440px; nothing scrolls sideways.
+- **Brand.** Use `<Mark />` and `<Emblem />`; never redraw the logo. Change `app/lib/brand.ts` and run `pnpm --filter @hangar/web brand` to regenerate icons.
 - **Honest copy.** Claims match the code; roadmap items carry the "Coming" chip. Lore words go in titles, never in IDs, logs or error text.

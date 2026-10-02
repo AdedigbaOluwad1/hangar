@@ -440,6 +440,27 @@ Lore names places and moments; plain words name data. Eyebrows and section label
 
 ---
 
+## 12. Brand
+
+**The mark is a squadron shield.** An amber top band is the hangar door; beneath it a delta lifts off a deck line: out of the hangar, off the deck. The **emblem** puts that shield between aviator wings, for ceremonial moments. Geometry lives in `app/lib/brand.ts`; colours come from tokens.
+
+| Asset | Component / file | Use | Minimum |
+|---|---|---|---|
+| Shield | `<Mark />` (`components/mark.tsx`) | Header and nav lockups, footer, anywhere the brand is small | 16px |
+| Emblem | `<Emblem />` (`components/emblem.tsx`) | Landing finale (`Coda`), social card. Never in UI chrome | 48px tall |
+| Favicon / app icons | `public/favicon.svg`, `favicon.ico`, `apple-touch-icon.png`, `brand/icon-*.png`, `site.webmanifest` | Browser tabs, home screens | — |
+| Social card | `public/brand/og.png` (1200×630) | `og:image` / `twitter:image` on `/` | — |
+
+**Lockup.** Shield + `HANGAR` in `font-display` bold uppercase `tracking-wide`, `gap-2.5`, shield `h-7 w-7` next to `text-xl` (`components/header.tsx`, `story/nav.tsx`).
+
+**Rules**
+- Place the shield on night surfaces. On light surfaces, use the tiled favicon version (`favicon.svg`), never the bare shield.
+- Keep clear space of at least half the shield's width around it.
+- Two colours only: `deck-400` and `night-950`. Don't recolour, outline, add shadows, rotate or stretch it.
+- Don't redraw it or put a literal plane back; change `lib/brand.ts` and regenerate.
+
+**Regenerating assets.** After changing `lib/brand.ts` or the palette, run `pnpm --filter @hangar/web brand` (`scripts/generate-brand.mjs`; needs `npx playwright install chromium` once). It reads colours from `app.css` and rewrites every file in the table above.
+
 ## Find the precedent
 
 | Doing this | Start from |
@@ -462,6 +483,7 @@ Lore names places and moments; plain words name data. Eyebrows and section label
 | Page entrance | `useReveal` in `routes/dashboard.tsx` |
 | Page transition | None yet: route changes are instant. Add one to this guide before building it |
 | Story scene | `story/acts/hangar.tsx` (clearest scrubbed act), `story/motion.ts` |
+| Logo, icon, social card | `components/mark.tsx`, `components/emblem.tsx`, `scripts/generate-brand.mjs` (§12) |
 
 ## New-feature checklist
 
