@@ -2,6 +2,17 @@ import { type DeploymentStatus, type BuildStatus, type BuildTrigger } from '@pri
 
 export type { DeploymentStatus, BuildStatus, BuildTrigger }
 
+export interface Build {
+  id: string
+  deploymentId: string
+  status: BuildStatus
+  trigger: BuildTrigger
+  rollbackOf: string | null
+  imageTag: string | null
+  createdAt: string
+  updatedAt: string
+}
+
 export interface Deployment {
   id: string
   status: DeploymentStatus
@@ -13,15 +24,7 @@ export interface Deployment {
   userId: string | null
   createdAt: string
   updatedAt: string
-}
-
-export interface Build {
-  id: string
-  deploymentId: string
-  status: BuildStatus
-  imageTag: string | null
-  createdAt: string
-  updatedAt: string
+  latestBuild: Build | null
 }
 
 export interface LogLine {
@@ -31,9 +34,21 @@ export interface LogLine {
   createdAt: string
 }
 
+export interface Resources {
+  cpu?: number
+  memoryMb?: number
+}
+
 export interface CreateDeploymentInput {
   sourceType: 'git' | 'zip'
   sourceUrl?: string
+  env?: Record<string, string>
+  resources?: Resources
+}
+
+export interface Health {
+  status: string
+  allocId: string | null
 }
 
 export interface ApiResponse<T> {
