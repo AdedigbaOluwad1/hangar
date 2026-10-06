@@ -66,3 +66,20 @@ export const AttachDatabaseBody = z
       .openapi({ example: 'DATABASE_URL' }),
   })
   .openapi('AttachDatabaseBody')
+
+export const DatabaseBackupSchema = z
+  .object({
+    id: z.string().openapi({ example: 'bak-a1b2c3d4e5' }),
+    databaseId: z.string(),
+    kind: z.enum(['scheduled', 'manual', 'final']),
+    status: z.enum(['running', 'completed', 'failed']),
+    sizeBytes: z.number().int().nullable(),
+    restorableFrom: z.coerce.date().nullable(),
+    restorableTo: z.coerce.date().nullable(),
+    error: z.string().nullable(),
+    startedAt: z.coerce.date(),
+    finishedAt: z.coerce.date().nullable(),
+  })
+  .openapi('DatabaseBackup')
+
+export const DatabaseBackupListSchema = z.array(DatabaseBackupSchema).openapi('DatabaseBackupList')

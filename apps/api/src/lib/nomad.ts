@@ -95,3 +95,11 @@ export async function getJobStatus(deploymentId: string) {
     allocId: latest?.ID,
   }
 }
+
+export async function readAllocStdout(allocId: string, task: string): Promise<string> {
+  const NOMAD_ADDR = await getNomadAddr()
+  const params = new URLSearchParams({ task, type: 'stdout', plain: 'true', origin: 'start', offset: '0' })
+  const res = await fetch(`${NOMAD_ADDR}/v1/client/fs/logs/${allocId}?${params}`, { headers: await nomadHeaders() })
+  if (!res.ok) throw new Error(`Reading task output failed: ${res.status}`)
+  return res.text()
+}

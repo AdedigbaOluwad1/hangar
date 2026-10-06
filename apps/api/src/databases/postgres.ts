@@ -80,6 +80,35 @@ export const postgresDriver: DatabaseDriver = {
     ].join('\n')
   },
 
+  backupScript(retentionDays) {
+    const cutoff = `$(date -u -d @$(( $(date +%s) - ${retentionDays} * 86400 )) +%Y-%m-%dT%H:%M:%SZ)`
+    return [
+      'wal-g backup-push /var/lib/postgresql/data',
+      `wal-g delete before FIND_FULL "${cutoff}" --confirm`,
+      'wal-g backup-list --json',
+    ].join(' && ')
+  },
+
+  backupEnv(db, host) {
+    return {
+      ...this.staticEnv(db),
+      PGHOST: host,
+      PGPORT: String(db.port),
+      PGUSER: ADMIN_USER,
+      PGDATABASE: 'postgres',
+    }
+  },
+
+  backupTemplate(secretPath) {
+    return [
+      `{{ with secret "${secretPath}" }}`,
+      'PGPASSWORD={{ .Data.data.password | toJSON }}',
+      'AWS_ACCESS_KEY_ID={{ .Data.data.access_key | toJSON }}',
+      'AWS_SECRET_ACCESS_KEY={{ .Data.data.secret_key | toJSON }}',
+      '{{ end }}',
+    ].join('\n')
+  },
+
   async bootstrap(conn) {
     await withClient(conn, 'postgres', async (client) => {
       if (!(await roleExists(client, OWNER_ROLE))) await client.query(`CREATE ROLE ${OWNER_ROLE} NOLOGIN`)

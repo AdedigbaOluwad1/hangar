@@ -131,3 +131,15 @@ export async function updateBackup(
 ): Promise<DatabaseBackup> {
   return prisma.databaseBackup.update({ where: { id }, data })
 }
+
+export async function getBackup(id: string): Promise<DatabaseBackup | null> {
+  return prisma.databaseBackup.findUnique({ where: { id } })
+}
+
+export async function listBackupsByStatus(statuses: BackupStatus[]): Promise<DatabaseBackup[]> {
+  return prisma.databaseBackup.findMany({ where: { status: { in: statuses } } })
+}
+
+export async function deleteBackupsBefore(databaseId: string, cutoff: Date): Promise<void> {
+  await prisma.databaseBackup.deleteMany({ where: { databaseId, status: 'completed', startedAt: { lt: cutoff } } })
+}

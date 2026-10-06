@@ -9,9 +9,9 @@ import type {
 export type { DatabaseEngine, DatabaseStatus, AttachmentStatus, BackupKind, BackupStatus }
 
 export const DATABASE_PLANS = {
-  small: { label: 'Small', cpu: 250, memoryMb: 512, storageGb: 5 },
-  medium: { label: 'Medium', cpu: 500, memoryMb: 1024, storageGb: 20 },
-  large: { label: 'Large', cpu: 1000, memoryMb: 2048, storageGb: 50 },
+  small: { label: 'Small', cpu: 250, memoryMb: 512, storageGb: 5, backupRetentionDays: 7 },
+  medium: { label: 'Medium', cpu: 500, memoryMb: 1024, storageGb: 20, backupRetentionDays: 14 },
+  large: { label: 'Large', cpu: 1000, memoryMb: 2048, storageGb: 50, backupRetentionDays: 14 },
 } as const
 
 export type DatabasePlan = keyof typeof DATABASE_PLANS

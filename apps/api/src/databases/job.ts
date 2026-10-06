@@ -1,7 +1,16 @@
 import { DATABASE_PLANS } from '@hangar/types'
 import type { DatabasePlan } from '@hangar/types'
 import type { DatabaseDriver, DatabaseSpec } from './driver'
-import { adminVaultPath, cleanupJobId, databaseJobId, databaseVolumeDir, walgVaultPath } from './names'
+import {
+  adminVaultPath,
+  backupJobId,
+  backupSecretPath,
+  cleanupJobId,
+  databaseFqdn,
+  databaseJobId,
+  databaseVolumeDir,
+  walgVaultPath,
+} from './names'
 
 export const DATABASE_VAULT_ROLE = 'nomad-databases'
 export const QUOTA_COMMAND = '/usr/local/bin/hangar-db-quota'
@@ -117,6 +126,52 @@ export function buildCleanupJobSpec(db: Pick<DatabaseSpec, 'id' | 'projectId'>) 
               Driver: 'raw_exec',
               Config: { command: QUOTA_COMMAND, args: ['purge', databaseVolumeDir(db.id), String(db.projectId)] },
               Resources: { CPU: 50, MemoryMB: 32 },
+            },
+          ],
+        },
+      ],
+    },
+  }
+}
+
+export function buildBackupJobSpec(db: DatabaseSpec, driver: DatabaseDriver, backupId: string) {
+  const id = backupJobId(db.id, backupId)
+  const retentionDays = DATABASE_PLANS[db.plan as DatabasePlan]?.backupRetentionDays ?? 7
+  return {
+    Job: {
+      ID: id,
+      Name: id,
+      Type: 'batch',
+      Datacenters: ['dc1'],
+      TaskGroups: [
+        {
+          Name: 'backup',
+          Count: 1,
+          Networks: [{ DNS: { Servers: ['10.88.0.1'] } }],
+          RestartPolicy: { Attempts: 0, Mode: 'fail' },
+          ReschedulePolicy: { Attempts: 0, Unlimited: false },
+          Tasks: [
+            {
+              Name: 'backup',
+              Driver: 'podman',
+              User: driver.dataOwner.split(':')[0],
+              Config: {
+                image: driver.image(db.version),
+                command: '/bin/sh',
+                args: ['-c', driver.backupScript(retentionDays)],
+                volumes: [`${databaseVolumeDir(db.id)}:${driver.dataPath}:ro`],
+              },
+              Env: driver.backupEnv(db, databaseFqdn(db.host)),
+              Vault: { Role: DATABASE_VAULT_ROLE, Env: false, DisableFile: true, ChangeMode: 'noop' },
+              Templates: [
+                {
+                  EmbeddedTmpl: driver.backupTemplate(backupSecretPath(id)),
+                  DestPath: 'secrets/backup.env',
+                  Envvars: true,
+                  ChangeMode: 'noop',
+                },
+              ],
+              Resources: { CPU: 256, MemoryMB: 256 },
             },
           ],
         },

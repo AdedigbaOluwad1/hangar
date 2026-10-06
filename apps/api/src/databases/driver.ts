@@ -35,6 +35,9 @@ export interface DatabaseDriver {
   args(db: DatabaseSpec, memoryMb: number): string[]
   staticEnv(db: DatabaseSpec): Record<string, string>
   envTemplate(adminPath: string, walgPath: string): string
+  backupScript(retentionDays: number): string
+  backupEnv(db: DatabaseSpec, host: string): Record<string, string>
+  backupTemplate(secretPath: string): string
   bootstrap(conn: DatabaseConnection): Promise<void>
   createRole(conn: DatabaseConnection, role: RoleCredentials): Promise<void>
   rotateRole(conn: DatabaseConnection, role: RoleCredentials): Promise<void>

@@ -4,7 +4,9 @@ import {
   createDatabase,
   getDatabase,
   isDatabaseCallsignTaken,
+  getBackup,
   listAttachmentsForDatabase,
+  listBackups,
   listDatabases,
   reservedStorageGb,
   updateDatabase,
@@ -14,8 +16,15 @@ import { generateCallsign } from '../lib/callsign'
 import { checkCapacity, resolveRequest } from '../databases/admission'
 import { getDriver } from '../databases/driver'
 import { databaseHost } from '../databases/names'
-import { enqueueDeprovision, enqueueProvision } from '../databases/queue'
-import { CreateDatabaseBody, DatabaseDetailSchema, DatabaseIdParam, DatabaseListSchema, DatabaseSchema } from '../schemas/databases'
+import { enqueueDeprovision, enqueueProvision, requestBackup } from '../databases/queue'
+import {
+  CreateDatabaseBody,
+  DatabaseBackupListSchema,
+  DatabaseBackupSchema,
+  DatabaseDetailSchema, DatabaseIdParam,
+  DatabaseListSchema,
+  DatabaseSchema,
+} from '../schemas/databases'
 import { ErrorSchema } from '../schemas/deployments'
 
 export const databases = new OpenAPIHono({
@@ -85,6 +94,32 @@ databases.openapi(getOneRoute, async (c) => {
   const attachments = await listAttachmentsForDatabase(id)
   return c.json({ ...publicDatabase(database), attachments: attachments.map(publicAttachment) }, 200)
 })
+
+function publicBackup(b: {
+  id: string
+  databaseId: string
+  kind: 'scheduled' | 'manual' | 'final'
+  status: 'running' | 'completed' | 'failed'
+  sizeBytes: bigint | null
+  restorableFrom: Date | null
+  restorableTo: Date | null
+  error: string | null
+  startedAt: Date
+  finishedAt: Date | null
+}) {
+  return {
+    id: b.id,
+    databaseId: b.databaseId,
+    kind: b.kind,
+    status: b.status,
+    sizeBytes: b.sizeBytes === null ? null : Number(b.sizeBytes),
+    restorableFrom: b.restorableFrom,
+    restorableTo: b.restorableTo,
+    error: b.error,
+    startedAt: b.startedAt,
+    finishedAt: b.finishedAt,
+  }
+}
 
 const createRoute_ = createRoute({
   method: 'post',
@@ -183,4 +218,67 @@ databases.openapi(deleteRoute, async (c) => {
   await enqueueDeprovision(id)
 
   return c.json(publicDatabase(deleting), 202)
+})
+
+const listBackupsRoute = createRoute({
+  method: 'get',
+  path: '/{id}/backups',
+  tags: ['Databases'],
+  summary: 'List backups of a database',
+  request: { params: DatabaseIdParam },
+  responses: {
+    200: {
+      content: { 'application/json': { schema: DatabaseBackupListSchema } },
+      description: 'Backups, newest first',
+    },
+    404: {
+      content: { 'application/json': { schema: ErrorSchema } },
+      description: 'Not found',
+    },
+  },
+})
+
+databases.openapi(listBackupsRoute, async (c) => {
+  const { id } = c.req.valid('param')
+  if (!(await getDatabase(id))) return c.json({ error: 'Not found' }, 404)
+  return c.json((await listBackups(id)).map(publicBackup), 200)
+})
+
+const backupNowRoute = createRoute({
+  method: 'post',
+  path: '/{id}/backups',
+  tags: ['Databases'],
+  summary: 'Back up a database now',
+  request: { params: DatabaseIdParam },
+  responses: {
+    202: {
+      content: { 'application/json': { schema: DatabaseBackupSchema } },
+      description: 'Backup started',
+    },
+    404: {
+      content: { 'application/json': { schema: ErrorSchema } },
+      description: 'Not found',
+    },
+    409: {
+      content: { 'application/json': { schema: ErrorSchema } },
+      description: 'The database is not ready or a backup is already running',
+    },
+  },
+})
+
+databases.openapi(backupNowRoute, async (c) => {
+  const { id } = c.req.valid('param')
+  const database = await getDatabase(id)
+  if (!database) return c.json({ error: 'Not found' }, 404)
+  if (database.status !== 'ready') return c.json({ error: `The database is ${database.status}, not ready.` }, 409)
+
+  const existing = await listBackups(id)
+  if (existing.some((backup) => backup.status === 'running')) {
+    return c.json({ error: 'A backup is already running.' }, 409)
+  }
+
+  const backupId = await requestBackup(id, 'manual')
+  const backup = await getBackup(backupId)
+  if (!backup) return c.json({ error: 'Not found' }, 404)
+  return c.json(publicBackup(backup), 202)
 })

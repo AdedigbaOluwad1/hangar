@@ -4,7 +4,8 @@ import { DATABASE_PLANS } from '@hangar/types'
 import { getDriver } from './driver'
 import { postgresDriver, quoteIdentifier } from './postgres'
 import { attachmentEnv, attachmentEnvKeys, connectionUrl, envPrefix } from './env'
-import { buildCleanupJobSpec, buildDatabaseJobSpec, planResources, quotaHeadroomMb, quotaLimits } from './job'
+import { parseBackupList } from './backup-list'
+import { buildBackupJobSpec, buildCleanupJobSpec, buildDatabaseJobSpec, planResources, quotaHeadroomMb, quotaLimits } from './job'
 import { checkCapacity, resolveRequest } from './admission'
 import { adminVaultPath, databaseFqdn, databaseHost, databaseJobId, databaseVolumeDir, walgVaultPath } from './names'
 
@@ -144,4 +145,26 @@ test('lists the variables an attachment manages so detach removes exactly those'
   assert.deepEqual(keys.sort(), Object.keys(attachmentEnv('postgres', 'DATABASE_URL', conn, role, 'app')).sort())
   assert.ok(keys.includes('DATABASE_NAME'))
   assert.ok(!attachmentEnvKeys('valkey', 'CACHE_URL', null).includes('CACHE_NAME'))
+})
+
+test('reads the newest backup out of wal-g backup-list output', () => {
+  const out = `INFO: noise\n[{"backup_name":"base_1","start_time":"2026-10-05T02:00:00Z","finish_time":"2026-10-05T02:01:00Z","compressed_size":100},{"backup_name":"base_2","start_time":"2026-10-06T02:00:00Z","finish_time":"2026-10-06T02:01:00Z","compressed_size":250}]\n`
+  const parsed = parseBackupList(out)
+  assert.equal(parsed?.name, 'base_2')
+  assert.equal(parsed?.sizeBytes, 250)
+  assert.equal(parsed?.finishedAt?.toISOString(), '2026-10-06T02:01:00.000Z')
+  assert.equal(parseBackupList('[]'), null)
+  assert.equal(parseBackupList('no json here'), null)
+})
+
+test('runs the backup as a one-shot job on the database volume, read-only, with its own secret path', () => {
+  const job = buildBackupJobSpec(db, postgresDriver, 'bak-0123456789').Job
+  const task = job.TaskGroups[0].Tasks[0] as any
+  assert.match(job.ID, /^hangar-db-abc12345-bak-/)
+  assert.equal(job.Type, 'batch')
+  assert.deepEqual(task.Config.volumes, [`${databaseVolumeDir(db.id)}:/var/lib/postgresql/data:ro`])
+  assert.equal(task.Env.PGHOST, databaseFqdn(db.host))
+  assert.ok(task.Templates[0].EmbeddedTmpl.includes(`hangar/data/databases/${job.ID}/backup`))
+  assert.match(task.Config.args[1], /--confirm/)
+  for (const key of ['PGPASSWORD', 'AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY']) assert.equal(key in task.Env, false)
 })

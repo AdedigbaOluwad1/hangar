@@ -31,3 +31,11 @@ export function cleanupJobId(id: string): string {
 export function backupPrefix(id: string): string {
   return `s3://hangar-backups/databases/${id}`
 }
+
+export function backupJobId(databaseId: string, backupId: string): string {
+  return `${databaseJobId(databaseId)}-bak-${backupId.slice(-8)}`
+}
+
+export function backupSecretPath(jobId: string): string {
+  return `hangar/data/databases/${jobId}/backup`
+}
