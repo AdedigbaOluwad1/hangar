@@ -38,6 +38,12 @@ export interface DatabaseDriver {
   backupScript(retentionDays: number): string
   backupEnv(db: DatabaseSpec, host: string): Record<string, string>
   backupTemplate(secretPath: string): string
+  restoreScript(sourcePrefix: string, backup: string, target: string): string
+  restoreEnv(sourcePrefix: string): Record<string, string>
+  restoreTemplate(secretPath: string): string
+  isRecovering(conn: DatabaseConnection): Promise<boolean>
+  setAdminPassword(conn: DatabaseConnection, password: string): Promise<void>
+  dropAppRoles(conn: DatabaseConnection): Promise<void>
   bootstrap(conn: DatabaseConnection): Promise<void>
   createRole(conn: DatabaseConnection, role: RoleCredentials): Promise<void>
   rotateRole(conn: DatabaseConnection, role: RoleCredentials): Promise<void>

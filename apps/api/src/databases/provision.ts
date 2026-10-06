@@ -8,22 +8,28 @@ import {
   readSecret,
   stopJobById,
   submitJobSpec,
+  writeSecret,
   writeSecretOnce,
 } from '../lib'
 import { getDriver } from './driver'
 import type { DatabaseConnection, DatabaseSpec } from './driver'
-import { buildCleanupJobSpec, buildDatabaseJobSpec } from './job'
+import { buildCleanupJobSpec, buildDatabaseJobSpec, buildRestoreJobSpec } from './job'
 import {
   adminVaultPath,
+  backupPrefix,
+  backupSecretPath,
   cleanupJobId,
   databaseFqdn,
   databaseJobId,
   databaseVolumeDir,
+  restoreJobId,
   walgVaultPath,
 } from './names'
 
 const HEALTH_TIMEOUT_MS = 180_000
+const RESTORE_TIMEOUT_MS = 30 * 60_000
 const POLL_MS = 3000
+const TERMINAL = ['complete', 'failed', 'lost']
 
 async function sleep(ms: number) {
   await new Promise((resolve) => setTimeout(resolve, ms))
@@ -103,6 +109,60 @@ async function ensureCredentials(db: DatabaseSpec, adminUser: string): Promise<{
   return readAdminCredentials(db.id)
 }
 
+async function restoreIntoVolume(
+  db: DatabaseSpec,
+  driver: ReturnType<typeof getDriver>,
+  restore: { sourceId: string; backup: string; target: string },
+): Promise<void> {
+  const jobId = restoreJobId(db.id)
+  if ((await listJobAllocations(databaseJobId(db.id))).length > 0) return
+
+  const walg = await readSecret(walgVaultPath(db.id))
+  if (!walg?.access_key || !walg?.secret_key) throw new Error('Backup credentials are missing')
+  await writeSecret(backupSecretPath(jobId), { access_key: walg.access_key, secret_key: walg.secret_key })
+  try {
+    await stopJobById(jobId, true)
+    await submitJobSpec(buildRestoreJobSpec(db, driver, backupPrefix(restore.sourceId), restore.backup, restore.target))
+    await waitFor(async () => {
+      const allocs = await listJobAllocations(jobId)
+      return allocs.length > 0 && allocs.every((alloc) => TERMINAL.includes(alloc.ClientStatus))
+    }, RESTORE_TIMEOUT_MS, 'the backup to be restored')
+    const allocs = await listJobAllocations(jobId)
+    if (allocs.some((alloc) => alloc.ClientStatus !== 'complete')) throw new Error('Restoring the backup failed')
+  } finally {
+    await stopJobById(jobId, true).catch(() => {})
+    await destroySecret(backupSecretPath(jobId)).catch(() => {})
+  }
+}
+
+async function finishRestore(
+  db: DatabaseSpec,
+  driver: ReturnType<typeof getDriver>,
+  admin: { username: string; password: string },
+  source: { username: string; password: string },
+): Promise<string[]> {
+  const candidates = [admin, source]
+  let working: { username: string; password: string } | null = null
+  await waitFor(async () => {
+    for (const candidate of candidates) {
+      try {
+        if (await driver.isRecovering(connectionFor(db, candidate))) return false
+        working = candidate
+        return true
+      } catch {
+        continue
+      }
+    }
+    return false
+  }, RESTORE_TIMEOUT_MS, 'recovery to finish')
+
+  if (working && working !== admin) await driver.setAdminPassword(connectionFor(db, working), admin.password)
+  const conn = connectionFor(db, admin)
+  await driver.dropAppRoles(conn)
+  await driver.allowWrites(conn)
+  return [source.password]
+}
+
 export async function provisionDatabase(id: string): Promise<void> {
   const row = await getDatabase(id)
   if (!row) throw new Error(`Database ${id} not found`)
@@ -119,8 +179,16 @@ export async function provisionDatabase(id: string): Promise<void> {
       adminVaultPath: adminVaultPath(id),
     })
 
+    const restore = row.restoreSourceId && row.restoreBackup && row.restoreTarget
+      ? { sourceId: row.restoreSourceId, backup: row.restoreBackup, target: row.restoreTarget }
+      : null
+    if (restore) await restoreIntoVolume(db, driver, restore)
+
     await submitJobSpec(buildDatabaseJobSpec(db, driver))
     await waitFor(() => serviceHealthy(db.host), HEALTH_TIMEOUT_MS, `${db.host} to become healthy`)
+    if (restore) {
+      secrets = [...secrets, ...(await finishRestore(db, driver, admin, await readAdminCredentials(restore.sourceId)))]
+    }
     await retry(() => driver.bootstrap(connectionFor(db, admin)), 10, POLL_MS)
 
     await updateDatabase(id, { status: 'ready', statusReason: null })

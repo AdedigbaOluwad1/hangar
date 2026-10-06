@@ -5,7 +5,8 @@ import { getDriver } from './driver'
 import { postgresDriver, quoteIdentifier } from './postgres'
 import { attachmentEnv, attachmentEnvKeys, connectionUrl, envPrefix } from './env'
 import { parseBackupList } from './backup-list'
-import { buildBackupJobSpec, buildCleanupJobSpec, buildDatabaseJobSpec, planResources, quotaHeadroomMb, quotaLimits } from './job'
+import { chooseRestore } from './restore-plan'
+import { buildBackupJobSpec, buildRestoreJobSpec, buildCleanupJobSpec, buildDatabaseJobSpec, planResources, quotaHeadroomMb, quotaLimits } from './job'
 import { checkCapacity, resolveRequest } from './admission'
 import { adminVaultPath, databaseFqdn, databaseHost, databaseJobId, databaseVolumeDir, walgVaultPath } from './names'
 
@@ -167,4 +168,53 @@ test('runs the backup as a one-shot job on the database volume, read-only, with 
   assert.ok(task.Templates[0].EmbeddedTmpl.includes(`hangar/data/databases/${job.ID}/backup`))
   assert.match(task.Config.args[1], /--confirm/)
   for (const key of ['PGPASSWORD', 'AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY']) assert.equal(key in task.Env, false)
+})
+
+const backupRows = [
+  { id: 'b1', status: 'completed', s3Key: 'base_1', restorableFrom: new Date('2026-10-04T02:01:00Z'), startedAt: new Date('2026-10-04T02:00:00Z') },
+  { id: 'b2', status: 'completed', s3Key: 'base_2', restorableFrom: new Date('2026-10-05T02:01:00Z'), startedAt: new Date('2026-10-05T02:00:00Z') },
+  { id: 'b3', status: 'failed', s3Key: null, restorableFrom: null, startedAt: new Date('2026-10-06T02:00:00Z') },
+]
+const noon = new Date('2026-10-06T12:00:00Z')
+
+test('picks the base backup and recovery target for a restore', () => {
+  assert.deepEqual(chooseRestore(backupRows, {}, true, noon), { backup: 'base_2', target: 'latest' })
+  assert.deepEqual(chooseRestore(backupRows, { backupId: 'b1' }, false, noon), { backup: 'base_1', target: 'immediate' })
+  assert.deepEqual(
+    chooseRestore(backupRows, { time: new Date('2026-10-04T20:00:00Z') }, true, noon),
+    { backup: 'base_1', target: '2026-10-04T20:00:00.000Z' },
+  )
+  assert.deepEqual(
+    chooseRestore(backupRows, { time: new Date('2026-10-05T10:00:00Z') }, true, noon),
+    { backup: 'base_2', target: '2026-10-05T10:00:00.000Z' },
+  )
+})
+
+test('refuses restores it cannot honour', () => {
+  assert.ok('error' in chooseRestore(backupRows, { time: new Date('2026-10-03T00:00:00Z') }, true, noon))
+  assert.ok('error' in chooseRestore(backupRows, { time: new Date('2026-10-07T00:00:00Z') }, true, noon))
+  assert.ok('error' in chooseRestore(backupRows, { time: noon }, false, noon))
+  assert.ok('error' in chooseRestore(backupRows, { backupId: 'b3' }, true, noon))
+  assert.ok('error' in chooseRestore(backupRows, { backupId: 'b1', time: noon }, true, noon))
+  assert.ok('error' in chooseRestore([], {}, true, noon))
+})
+
+test('restores into the new volume with the source archive and a recovery target', () => {
+  const source = 's3://hangar-backups/databases/db-src00001'
+  const script = postgresDriver.restoreScript(source, 'base_000000010000000000000004', '2026-10-05T10:00:00.000Z')
+  assert.match(script, /^wal-g backup-fetch \/var\/lib\/postgresql\/data base_000000010000000000000004 && /)
+  assert.ok(script.endsWith('touch /var/lib/postgresql/data/recovery.signal'))
+  const conf = Buffer.from(script.match(/echo (\S+) \|/)![1], 'base64').toString()
+  assert.ok(conf.includes(`WALG_S3_PREFIX=${source} wal-g wal-fetch`))
+  assert.ok(conf.includes("recovery_target_time = '2026-10-05T10:00:00.000Z'"))
+  assert.throws(() => postgresDriver.restoreScript(source, 'x; rm -rf /', 'latest'))
+  assert.throws(() => postgresDriver.restoreScript(source, 'base_1', "now'; drop"))
+
+  const job = buildRestoreJobSpec(db, postgresDriver, source, 'base_1', 'latest').Job
+  const [prepare, restore] = job.TaskGroups[0].Tasks as [any, any]
+  assert.equal(job.Type, 'batch')
+  assert.deepEqual(prepare.Lifecycle, { Hook: 'prestart', Sidecar: false })
+  assert.equal(restore.Env.WALG_S3_PREFIX, source)
+  assert.deepEqual(restore.Config.volumes, [`${databaseVolumeDir(db.id)}:/var/lib/postgresql/data`])
+  assert.ok(restore.Templates[0].EmbeddedTmpl.includes(`hangar/data/databases/${job.ID}/backup`))
 })

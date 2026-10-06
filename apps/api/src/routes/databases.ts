@@ -16,6 +16,7 @@ import { generateCallsign } from '../lib/callsign'
 import { checkCapacity, resolveRequest } from '../databases/admission'
 import { getDriver } from '../databases/driver'
 import { databaseHost } from '../databases/names'
+import { chooseRestore } from '../databases/restore-plan'
 import { enqueueDeprovision, enqueueProvision, requestBackup } from '../databases/queue'
 import {
   CreateDatabaseBody,
@@ -24,6 +25,7 @@ import {
   DatabaseDetailSchema, DatabaseIdParam,
   DatabaseListSchema,
   DatabaseSchema,
+  RestoreDatabaseBody,
 } from '../schemas/databases'
 import { ErrorSchema } from '../schemas/deployments'
 
@@ -46,8 +48,8 @@ function publicAttachment(a: { id: string; deploymentId: string; envName: string
   return { id: a.id, deploymentId: a.deploymentId, envName: a.envName, status: a.status, createdAt: a.createdAt }
 }
 
-function publicDatabase<T extends { adminVaultPath: string | null; nomadJobId: string | null; volumePath: string | null; projectId: number; userId: string | null; deletedAt: Date | null }>(row: T) {
-  const { adminVaultPath, nomadJobId, volumePath, projectId, userId, deletedAt, ...rest } = row
+function publicDatabase<T extends { adminVaultPath: string | null; nomadJobId: string | null; volumePath: string | null; projectId: number; userId: string | null; deletedAt: Date | null; restoreBackup: string | null; restoreTarget: string | null }>(row: T) {
+  const { adminVaultPath, nomadJobId, volumePath, projectId, userId, deletedAt, restoreBackup, restoreTarget, ...rest } = row
   return rest
 }
 
@@ -281,4 +283,71 @@ databases.openapi(backupNowRoute, async (c) => {
   const backup = await getBackup(backupId)
   if (!backup) return c.json({ error: 'Not found' }, 404)
   return c.json(publicBackup(backup), 202)
+})
+
+const restoreRoute = createRoute({
+  method: 'post',
+  path: '/{id}/restore',
+  tags: ['Databases'],
+  summary: 'Restore a backup or a point in time into a new database',
+  request: {
+    params: DatabaseIdParam,
+    body: { required: true, content: { 'application/json': { schema: RestoreDatabaseBody } } },
+  },
+  responses: {
+    202: {
+      content: { 'application/json': { schema: DatabaseSchema } },
+      description: 'A new database is being created from the backup',
+    },
+    400: {
+      content: { 'application/json': { schema: ErrorSchema } },
+      description: 'No suitable backup, or an invalid time',
+    },
+    404: {
+      content: { 'application/json': { schema: ErrorSchema } },
+      description: 'Not found',
+    },
+    409: {
+      content: { 'application/json': { schema: ErrorSchema } },
+      description: 'Not enough database storage',
+    },
+  },
+})
+
+databases.openapi(restoreRoute, async (c) => {
+  const { id } = c.req.valid('param')
+  const body = c.req.valid('json')
+  const source = await getDatabase(id)
+  if (!source) return c.json({ error: 'Not found' }, 404)
+  if (source.status === 'deleting') return c.json({ error: 'The database is being deleted.' }, 409)
+
+  const plan = chooseRestore(
+    await listBackups(id),
+    { backupId: body.backupId, time: body.time ? new Date(body.time) : undefined },
+    ENGINES[source.engine].pitr,
+    new Date(),
+  )
+  if ('error' in plan) return c.json({ error: plan.error }, 400)
+
+  const shortage = checkCapacity(await reservedStorageGb(), source.storageGb, storageCapacityGb())
+  if (shortage) return c.json({ error: shortage }, 409)
+
+  const callsign = await generateCallsign(isDatabaseCallsignTaken)
+  const database = await createDatabase({
+    id: `db-${nanoid(8).toLowerCase().replace(/[^a-z0-9]/g, '')}`,
+    callsign,
+    engine: source.engine,
+    version: source.version,
+    plan: source.plan,
+    host: databaseHost(callsign),
+    port: source.port,
+    storageGb: source.storageGb,
+    restoreSourceId: source.id,
+    restoreBackup: plan.backup,
+    restoreTarget: plan.target,
+  })
+
+  await enqueueProvision(database.id)
+
+  return c.json(publicDatabase(database), 202)
 })

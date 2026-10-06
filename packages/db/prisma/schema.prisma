@@ -91,27 +91,30 @@ enum DatabaseStatus {
 }
 
 model Database {
-  id             String               @id
-  callsign       String               @unique
-  engine         DatabaseEngine
-  version        String
-  plan           String
-  status         DatabaseStatus       @default(provisioning)
-  statusReason   String?              @map("status_reason")
-  nomadJobId     String?              @map("nomad_job_id")
-  host           String
-  port           Int
-  volumePath     String?              @map("volume_path")
-  storageGb      Int                  @map("storage_gb")
-  projectId      Int                  @unique @default(autoincrement()) @map("project_id")
-  adminVaultPath String?              @map("admin_vault_path")
-  userId         String?              @map("user_id")
-  lastBackupAt   DateTime?            @map("last_backup_at")
-  createdAt      DateTime             @default(now()) @map("created_at")
-  updatedAt      DateTime             @updatedAt @map("updated_at")
-  deletedAt      DateTime?            @map("deleted_at")
-  attachments    DatabaseAttachment[]
-  backups        DatabaseBackup[]
+  id              String               @id
+  callsign        String               @unique
+  engine          DatabaseEngine
+  version         String
+  plan            String
+  status          DatabaseStatus       @default(provisioning)
+  statusReason    String?              @map("status_reason")
+  nomadJobId      String?              @map("nomad_job_id")
+  host            String
+  port            Int
+  volumePath      String?              @map("volume_path")
+  storageGb       Int                  @map("storage_gb")
+  projectId       Int                  @unique @default(autoincrement()) @map("project_id")
+  adminVaultPath  String?              @map("admin_vault_path")
+  restoreSourceId String?              @map("restore_source_id")
+  restoreBackup   String?              @map("restore_backup")
+  restoreTarget   String?              @map("restore_target")
+  userId          String?              @map("user_id")
+  lastBackupAt    DateTime?            @map("last_backup_at")
+  createdAt       DateTime             @default(now()) @map("created_at")
+  updatedAt       DateTime             @updatedAt @map("updated_at")
+  deletedAt       DateTime?            @map("deleted_at")
+  attachments     DatabaseAttachment[]
+  backups         DatabaseBackup[]
 
   @@map("databases")
 }

@@ -20,6 +20,9 @@ export async function createDatabase(data: {
   port: number
   storageGb: number
   userId?: string
+  restoreSourceId?: string
+  restoreBackup?: string
+  restoreTarget?: string
 }): Promise<Database> {
   return prisma.database.create({ data })
 }

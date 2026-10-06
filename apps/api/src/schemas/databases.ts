@@ -20,6 +20,7 @@ export const DatabaseSchema = z
     host: z.string().openapi({ example: 'db-cobalt-heron' }),
     port: z.number().int().openapi({ example: 5432 }),
     storageGb: z.number().int().openapi({ example: 5 }),
+    restoreSourceId: z.string().nullable(),
     lastBackupAt: z.coerce.date().nullable(),
     createdAt: z.coerce.date(),
     updatedAt: z.coerce.date(),
@@ -83,3 +84,10 @@ export const DatabaseBackupSchema = z
   .openapi('DatabaseBackup')
 
 export const DatabaseBackupListSchema = z.array(DatabaseBackupSchema).openapi('DatabaseBackupList')
+
+export const RestoreDatabaseBody = z
+  .object({
+    backupId: z.string().optional().openapi({ example: 'bak-a1b2c3d4e5' }),
+    time: z.string().datetime().optional().openapi({ example: '2026-10-06T08:30:41Z' }),
+  })
+  .openapi('RestoreDatabaseBody')

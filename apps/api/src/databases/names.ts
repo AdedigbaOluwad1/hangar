@@ -39,3 +39,7 @@ export function backupJobId(databaseId: string, backupId: string): string {
 export function backupSecretPath(jobId: string): string {
   return `hangar/data/databases/${jobId}/backup`
 }
+
+export function restoreJobId(id: string): string {
+  return `${databaseJobId(id)}-restore`
+}

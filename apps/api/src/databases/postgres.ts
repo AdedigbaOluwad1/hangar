@@ -109,6 +109,63 @@ export const postgresDriver: DatabaseDriver = {
     ].join('\n')
   },
 
+  restoreScript(sourcePrefix, backup, target) {
+    if (!/^[A-Za-z0-9_.]+$/.test(backup)) throw new Error('Invalid backup name')
+    if (!/^(latest|immediate|\d{4}-\d{2}-\d{2}T[\d:.]+Z)$/.test(target)) throw new Error('Invalid recovery target')
+    if (!/^s3:\/\/[A-Za-z0-9._\/-]+$/.test(sourcePrefix)) throw new Error('Invalid backup location')
+    const data = '/var/lib/postgresql/data'
+    const lines = [`restore_command = 'WALG_S3_PREFIX=${sourcePrefix} wal-g wal-fetch "%f" "%p"'`]
+    if (target === 'immediate') lines.push("recovery_target = 'immediate'", "recovery_target_action = 'promote'")
+    else if (target !== 'latest') lines.push(`recovery_target_time = '${target}'`, "recovery_target_action = 'promote'")
+    return [
+      `wal-g backup-fetch ${data} ${backup}`,
+      `echo ${Buffer.from(`${lines.join('\n')}\n`).toString('base64')} | base64 -d >> ${data}/postgresql.auto.conf`,
+      `touch ${data}/recovery.signal`,
+    ].join(' && ')
+  },
+
+  restoreEnv(sourcePrefix) {
+    return {
+      WALG_S3_PREFIX: sourcePrefix,
+      AWS_ENDPOINT: 'http://seaweedfs.service.consul:8333',
+      AWS_S3_FORCE_PATH_STYLE: 'true',
+      AWS_REGION: 'us-east-1',
+    }
+  },
+
+  restoreTemplate(secretPath) {
+    return [
+      `{{ with secret "${secretPath}" }}`,
+      'AWS_ACCESS_KEY_ID={{ .Data.data.access_key | toJSON }}',
+      'AWS_SECRET_ACCESS_KEY={{ .Data.data.secret_key | toJSON }}',
+      '{{ end }}',
+    ].join('\n')
+  },
+
+  async isRecovering(conn) {
+    return withClient(conn, 'postgres', async (client) => {
+      const result = await client.query('SELECT pg_is_in_recovery() AS recovering')
+      return result.rows[0].recovering === true
+    })
+  },
+
+  async setAdminPassword(conn, password) {
+    await withClient(conn, 'postgres', async (client) => {
+      await client.query(`ALTER ROLE ${quoteIdentifier(ADMIN_USER)} PASSWORD ${client.escapeLiteral(password)}`)
+    })
+  },
+
+  async dropAppRoles(conn) {
+    const names = await withClient(conn, 'postgres', async (client) => {
+      const result = await client.query(
+        "SELECT rolname FROM pg_roles WHERE rolcanlogin AND rolname <> $1 AND rolname NOT LIKE 'pg\\_%'",
+        [ADMIN_USER],
+      )
+      return result.rows.map((row) => row.rolname as string)
+    })
+    for (const name of names) await this.dropRole(conn, name)
+  },
+
   async bootstrap(conn) {
     await withClient(conn, 'postgres', async (client) => {
       if (!(await roleExists(client, OWNER_ROLE))) await client.query(`CREATE ROLE ${OWNER_ROLE} NOLOGIN`)

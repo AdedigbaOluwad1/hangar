@@ -9,6 +9,7 @@ import {
   databaseFqdn,
   databaseJobId,
   databaseVolumeDir,
+  restoreJobId,
   walgVaultPath,
 } from './names'
 
@@ -167,6 +168,63 @@ export function buildBackupJobSpec(db: DatabaseSpec, driver: DatabaseDriver, bac
                 {
                   EmbeddedTmpl: driver.backupTemplate(backupSecretPath(id)),
                   DestPath: 'secrets/backup.env',
+                  Envvars: true,
+                  ChangeMode: 'noop',
+                },
+              ],
+              Resources: { CPU: 256, MemoryMB: 256 },
+            },
+          ],
+        },
+      ],
+    },
+  }
+}
+
+export function buildRestoreJobSpec(db: DatabaseSpec, driver: DatabaseDriver, sourcePrefix: string, backup: string, target: string) {
+  const id = restoreJobId(db.id)
+  const dir = databaseVolumeDir(db.id)
+  const { hard, soft } = quotaLimits(db.storageGb)
+  return {
+    Job: {
+      ID: id,
+      Name: id,
+      Type: 'batch',
+      Datacenters: ['dc1'],
+      TaskGroups: [
+        {
+          Name: 'restore',
+          Count: 1,
+          Networks: [{ DNS: { Servers: ['10.88.0.1'] } }],
+          RestartPolicy: { Attempts: 0, Mode: 'fail' },
+          ReschedulePolicy: { Attempts: 0, Unlimited: false },
+          Tasks: [
+            {
+              Name: 'prepare-volume',
+              Driver: 'raw_exec',
+              Lifecycle: { Hook: 'prestart', Sidecar: false },
+              Config: {
+                command: QUOTA_COMMAND,
+                args: ['set', dir, String(db.projectId), hard, soft, '--owner', driver.dataOwner],
+              },
+              Resources: { CPU: 50, MemoryMB: 32 },
+            },
+            {
+              Name: 'restore',
+              Driver: 'podman',
+              User: driver.dataOwner.split(':')[0],
+              Config: {
+                image: driver.image(db.version),
+                command: '/bin/sh',
+                args: ['-c', driver.restoreScript(sourcePrefix, backup, target)],
+                volumes: [`${dir}:${driver.dataPath}`],
+              },
+              Env: driver.restoreEnv(sourcePrefix),
+              Vault: { Role: DATABASE_VAULT_ROLE, Env: false, DisableFile: true, ChangeMode: 'noop' },
+              Templates: [
+                {
+                  EmbeddedTmpl: driver.restoreTemplate(backupSecretPath(id)),
+                  DestPath: 'secrets/restore.env',
                   Envvars: true,
                   ChangeMode: 'noop',
                 },
