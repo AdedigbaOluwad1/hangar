@@ -156,6 +156,7 @@ Secrets stored in Vault at `hangar/data/config`:
 - `nomad_addr` — Nomad API address reachable from containers
 - `consul_addr` — Consul API address reachable from containers
 - `nomad_token` — Nomad deploy ACL token (least-privilege; used by API to submit user deployment jobs)
+- `admin_token` — the shared admin token (temporary until accounts land). The dashboard signs in with it at `/sign-in`, and the API swaps it for a signed `HttpOnly` session cookie (`POST /auth/login`, 12 hours). Scripts can send it as `Authorization: Bearer`. Every route except `/health`, `/auth/login` and `/auth/logout` requires one or the other. Read it with `vault kv get -field=admin_token hangar/config`
 
 ### Nomad ACL Token Hierarchy
 

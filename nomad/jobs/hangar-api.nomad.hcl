@@ -41,6 +41,7 @@ job "hangar-api" {
 NOMAD_ADDR={{ .Data.data.nomad_addr }}
 CONSUL_ADDR={{ .Data.data.consul_addr }}
 NOMAD_TOKEN={{ .Data.data.nomad_token }}
+ADMIN_TOKEN={{ .Data.data.admin_token }}
 {{- end }}
 BUILDKIT_HOST=tcp://buildkit.service.consul:1234
 REGISTRY_HOST=registry.service.consul:5000

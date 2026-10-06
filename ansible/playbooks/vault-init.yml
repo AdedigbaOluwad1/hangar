@@ -163,7 +163,8 @@
           vault kv put hangar/config \
             nomad_addr="{{ nomad_addr }}" \
             consul_addr="{{ consul_addr }}" \
-            nomad_token="{{ nomad_token.stdout }}"
+            nomad_token="{{ nomad_token.stdout }}" \
+            admin_token="$(openssl rand -hex 32)"
       changed_when: false
       no_log: true
 

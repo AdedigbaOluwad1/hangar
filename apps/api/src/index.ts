@@ -1,14 +1,17 @@
 import { OpenAPIHono } from '@hono/zod-openapi'
 import { swaggerUI } from '@hono/swagger-ui'
-import { logs, deployments } from './routes'
+import { auth, logs, deployments } from './routes'
+import { allowedOrigins, requireAuth } from './lib/auth'
 import { cors } from 'hono/cors'
 import { serve } from '@hono/node-server'
 
 const app = new OpenAPIHono()
 
-app.use('*', cors());
+app.use('*', cors({ origin: allowedOrigins(), allowHeaders: ['Authorization', 'Content-Type'], credentials: true }))
+app.use('*', requireAuth)
 app.get('/health', (c) => c.json({ ok: true }));
 app.get('/docs', swaggerUI({ url: '/openapi.json' }))
+app.route('/auth', auth)
 app.route('/deployments', deployments)
 app.route('/deployments', logs)
 
