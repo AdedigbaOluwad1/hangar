@@ -70,7 +70,7 @@ All workloads run as Nomad jobs with the Podman driver. There is no Docker daemo
 | `hangar-buildkit` | service | 1234 (static) | Image builder |
 | `hangar-api` | service | 3001 (static) | Hono API server |
 | `hangar-web` | service | 5173 (static) | React frontend |
-| `hangar-caddy` | service | 80, 2019 (static) | Reverse proxy |
+| `hangar-caddy` | service | 80 (static) | Reverse proxy; admin API on 2019 is container-internal only |
 
 ### Networking
 
@@ -112,7 +112,7 @@ reverse_proxy {
 
 On every request, Caddy resolves the current healthy IP from Consul directly. When a container is redeployed and gets a new Podman IP, Caddy picks it up automatically within 5 seconds — no restarts, no SIGHUP, no config changes.
 
-For user-deployed apps, routes are injected at runtime via Caddy's admin API at port 2019.
+For user-deployed apps, routes are injected at runtime via Caddy's admin API at port 2019, reachable only from inside the container network.
 
 ### Image Tagging and Registry GC
 
@@ -663,10 +663,10 @@ nomad alloc logs $(nomad job allocs <job-name> | grep running | awk '{print $1}'
 
 ```bash
 # Full Caddy config
-curl -s http://<host-ip>:2019/config/ | jq .
+sudo podman exec $(sudo podman ps -q --filter name=caddy) wget -qO- http://localhost:2019/config/
 
 # Just the routes
-curl -s http://<host-ip>:2019/config/apps/http/servers/srv0/routes | jq .
+sudo podman exec $(sudo podman ps -q --filter name=caddy) wget -qO- http://localhost:2019/config/apps/http/servers/srv0/routes
 ```
 
 ### Vault Operations
@@ -915,7 +915,7 @@ sudo podman ps -a --format '{{.ID}} {{.Names}}' | grep "<shortname>" | awk '{pri
 sudo kill -9 $(sudo ss -tlnp | grep ':<PORT>' | grep -o 'pid=[0-9]*' | cut -d= -f2) 2>/dev/null
 ```
 
-Ports to watch: `80`, `2019`, `3001`, `5000`, `5173`, `5432`, `6379`, `1234`.
+Ports to watch: `80`, `3001`, `5000`, `5173`, `5432`, `6379`, `1234`.
 
 ### BuildKit stale lockfile
 

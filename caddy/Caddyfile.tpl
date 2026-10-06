@@ -1,6 +1,6 @@
 {
   admin 0.0.0.0:2019 {
-    origins localhost:2019 ""
+    origins localhost:2019 caddy.service.consul:2019
   }
 }
 

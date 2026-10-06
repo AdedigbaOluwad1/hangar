@@ -11,16 +11,12 @@ job "hangar-caddy" {
         static = 80
         to     = 80
       }
-      port "admin" {
-        static = 2019
-        to     = 2019
-      }
     }
     task "caddy" {
       driver = "podman"
       config {
         image   = "docker.io/library/caddy:2-alpine"
-        ports   = ["http", "admin"]
+        ports   = ["http"]
         volumes = [
           "local/Caddyfile:/etc/caddy/Caddyfile",
           "/opt/hangar/data/caddy:/data",
@@ -30,7 +26,7 @@ job "hangar-caddy" {
         data = <<EOT
 {
   admin 0.0.0.0:2019 {
-    origins localhost:2019 ""
+    origins localhost:2019 caddy.service.consul:2019
   }
 }
 :80 {
@@ -64,12 +60,12 @@ EOT
       }
       service {
         name         = "caddy"
-        port         = "admin"
+        port         = 2019
         address_mode = "driver"
         provider     = "consul"
         check {
           type         = "tcp"
-          port         = "admin"
+          port         = 2019
           interval     = "10s"
           timeout      = "3s"
           address_mode = "driver"

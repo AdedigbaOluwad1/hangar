@@ -43,14 +43,6 @@ resource "hcloud_firewall" "hangar" {
     port      = "443"
     source_ips = ["0.0.0.0/0", "::/0"]
   }
-
-  # allow Caddy admin — internal only in prod, locked down here
-  rule {
-    direction = "in"
-    protocol  = "tcp"
-    port      = "2019"
-    source_ips = ["0.0.0.0/0", "::/0"]
-  }
 }
 
 # the server
