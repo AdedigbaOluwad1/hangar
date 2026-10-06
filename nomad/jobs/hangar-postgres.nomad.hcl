@@ -24,10 +24,31 @@ job "hangar-postgres" {
         volumes = ["/opt/hangar/data/postgres:/var/lib/postgresql/data"]
       }
 
+      identity {
+        name = "vault_default"
+        aud  = ["vault.io"]
+        file = true
+        ttl  = "1h"
+      }
+
+      vault {
+        role = "nomad-workloads"
+      }
+
+      template {
+        data        = <<EOT
+{{- with secret "hangar/data/config" -}}
+POSTGRES_PASSWORD={{ .Data.data.postgres_password }}
+{{- end }}
+EOT
+        destination = "secrets/postgres.env"
+        env         = true
+        change_mode = "restart"
+      }
+
       env {
-        POSTGRES_USER     = "hangar"
-        POSTGRES_PASSWORD = "hangar"
-        POSTGRES_DB       = "hangar"
+        POSTGRES_USER = "hangar"
+        POSTGRES_DB   = "hangar"
       }
 
       resources {

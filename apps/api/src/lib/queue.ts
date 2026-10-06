@@ -6,6 +6,8 @@ const redisUrl = new URL(process.env.REDIS_URL ?? 'redis://redis:6379')
 const connection = {
   host: redisUrl.hostname,
   port: parseInt(redisUrl.port) || 6379,
+  username: redisUrl.username ? decodeURIComponent(redisUrl.username) : undefined,
+  password: redisUrl.password ? decodeURIComponent(redisUrl.password) : undefined,
 }
 
 interface DeployJobData {

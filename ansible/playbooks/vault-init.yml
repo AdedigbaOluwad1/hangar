@@ -158,13 +158,20 @@
 
     - name: Seed hangar/config secret
       shell: |
-        VAULT_ADDR=https://127.0.0.1:8200 VAULT_SKIP_VERIFY=true \
-          VAULT_TOKEN={{ vault_root_token }} \
-          vault kv put hangar/config \
-            nomad_addr="{{ nomad_addr }}" \
-            consul_addr="{{ consul_addr }}" \
-            nomad_token="{{ nomad_token.stdout }}" \
-            admin_token="$(openssl rand -hex 32)"
+        set -e
+        export VAULT_ADDR=https://127.0.0.1:8200 VAULT_SKIP_VERIFY=true VAULT_TOKEN={{ vault_root_token }}
+        existing=$(vault kv get -format=json hangar/config 2>/dev/null || echo '{}')
+        keep() { echo "$existing" | jq -r --arg k "$1" '.data.data[$k] // empty'; }
+        admin_token=$(keep admin_token)
+        postgres_password=$(keep postgres_password)
+        redis_password=$(keep redis_password)
+        vault kv put hangar/config \
+          nomad_addr="{{ nomad_addr }}" \
+          consul_addr="{{ consul_addr }}" \
+          nomad_token="{{ nomad_token.stdout }}" \
+          admin_token="${admin_token:-$(openssl rand -hex 32)}" \
+          postgres_password="${postgres_password:-$(openssl rand -hex 24)}" \
+          redis_password="${redis_password:-$(openssl rand -hex 24)}"
       changed_when: false
       no_log: true
 

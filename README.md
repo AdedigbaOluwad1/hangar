@@ -308,8 +308,8 @@ Current secrets:
 | `consul_addr` | `http://10.88.0.1:8500` |
 | `caddy_admin_url` | `http://caddy.service.consul:2019` |
 | `buildkit_host` | `tcp://buildkit.service.consul:1234` |
-| `database_url` | `postgresql://hangar:hangar@postgres.service.consul:5432/hangar` |
-| `redis_url` | `redis://redis.service.consul:6379` |
+| `postgres_password` | generated once by `vault-init`, applied to the `hangar` role by `deploy.sh` |
+| `redis_password` | generated once by `vault-init`, set as Redis `requirepass` |
 
 ---
 
@@ -472,12 +472,12 @@ This provisions the full infrastructure — installs all system packages, initia
 
 ### Step 4 — Create .env.local Files
 
-**`apps/api/.env.local`** — loaded automatically by the API dev server:
+**`apps/api/.env.local`** — loaded automatically by the API dev server. The passwords come from Vault, so export `VAULT_ADDR`, `VAULT_SKIP_VERIFY` and `VAULT_TOKEN` first (see Environment Variables):
 
 ```bash
 cat > apps/api/.env.local << EOF
-REDIS_URL=redis://redis.service.consul:6379
-DATABASE_URL=postgresql://hangar:hangar@postgres.service.consul:5432/hangar
+REDIS_URL=redis://:$(vault kv get -field=redis_password hangar/config)@redis.service.consul:6379
+DATABASE_URL=postgresql://hangar:$(vault kv get -field=postgres_password hangar/config)@postgres.service.consul:5432/hangar
 VAULT_ADDR=https://127.0.0.1:8200
 VAULT_SKIP_VERIFY=true
 SWAGGER_ENABLED=true
@@ -499,8 +499,8 @@ EOF
 **`packages/db/.env.local`** — used by Prisma CLI for migrations:
 
 ```bash
-cat > packages/db/.env.local << 'EOF'
-DATABASE_URL=postgresql://hangar:hangar@postgres.service.consul:5432/hangar
+cat > packages/db/.env.local << EOF
+DATABASE_URL=postgresql://hangar:$(vault kv get -field=postgres_password hangar/config)@postgres.service.consul:5432/hangar
 EOF
 ```
 
@@ -567,8 +567,8 @@ Every session after the first, regenerate `.env.local` with fresh tokens (Vault 
 
 ```bash
 cat > apps/api/.env.local << EOF
-REDIS_URL=redis://redis.service.consul:6379
-DATABASE_URL=postgresql://hangar:hangar@postgres.service.consul:5432/hangar
+REDIS_URL=redis://:$(vault kv get -field=redis_password hangar/config)@redis.service.consul:6379
+DATABASE_URL=postgresql://hangar:$(vault kv get -field=postgres_password hangar/config)@postgres.service.consul:5432/hangar
 VAULT_ADDR=https://127.0.0.1:8200
 VAULT_SKIP_VERIFY=true
 SWAGGER_ENABLED=true

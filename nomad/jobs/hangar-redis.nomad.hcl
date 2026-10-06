@@ -21,8 +21,34 @@ job "hangar-redis" {
       config {
         image   = "docker.io/library/redis:7-alpine"
         ports   = ["db"]
-        args    = ["--appendonly", "yes", "--bind", "0.0.0.0"]
-        volumes = ["/opt/hangar/data/redis:/data"]
+        args    = ["/etc/redis/redis.conf"]
+        volumes = [
+          "secrets/redis.conf:/etc/redis/redis.conf",
+          "/opt/hangar/data/redis:/data",
+        ]
+      }
+
+      identity {
+        name = "vault_default"
+        aud  = ["vault.io"]
+        file = true
+        ttl  = "1h"
+      }
+
+      vault {
+        role = "nomad-workloads"
+      }
+
+      template {
+        data        = <<EOT
+appendonly yes
+bind 0.0.0.0
+{{- with secret "hangar/data/config" }}
+requirepass {{ .Data.data.redis_password }}
+{{- end }}
+EOT
+        destination = "secrets/redis.conf"
+        change_mode = "restart"
       }
 
       resources {

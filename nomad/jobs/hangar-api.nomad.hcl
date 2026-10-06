@@ -42,11 +42,11 @@ NOMAD_ADDR={{ .Data.data.nomad_addr }}
 CONSUL_ADDR={{ .Data.data.consul_addr }}
 NOMAD_TOKEN={{ .Data.data.nomad_token }}
 ADMIN_TOKEN={{ .Data.data.admin_token }}
+DATABASE_URL=postgresql://hangar:{{ .Data.data.postgres_password }}@postgres.service.consul:5432/hangar
+REDIS_URL=redis://:{{ .Data.data.redis_password }}@redis.service.consul:6379
 {{- end }}
 BUILDKIT_HOST=tcp://buildkit.service.consul:1234
 REGISTRY_HOST=registry.service.consul:5000
-DATABASE_URL=postgresql://hangar:hangar@postgres.service.consul:5432/hangar
-REDIS_URL=redis://redis.service.consul:6379
 EOT
         destination = "secrets/config.env"
         env         = true
