@@ -72,8 +72,9 @@ export async function runBackup(backupId: string): Promise<void> {
     const alloc = await waitForJob(jobId)
     if (alloc.status !== 'complete') throw new Error('The backup job did not complete')
 
-    const parsed = parseBackupList(await readAllocStdout(alloc.id, 'backup'))
-    if (!parsed) throw new Error('The backup finished but could not be read back from the archive')
+    const stdout = await readAllocStdout(alloc.id, 'backup')
+    const parsed = parseBackupList(stdout)
+    if (!parsed) throw new Error(`The backup finished but could not be read back from the archive: ${stdout.slice(0, 300)}`)
 
     const finishedAt = parsed.finishedAt ?? new Date()
     await updateBackup(backupId, {

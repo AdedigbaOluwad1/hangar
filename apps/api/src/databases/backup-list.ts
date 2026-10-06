@@ -4,7 +4,22 @@ export interface ParsedBackup {
   finishedAt: Date | null
 }
 
-export function parseBackupList(stdout: string): ParsedBackup | null {
+const LOG_LINE = /^\S+ (stdout|stderr) ([FP]) ?(.*)$/
+
+export function extractStdout(raw: string): string {
+  let out = ''
+  let framed = false
+  for (const line of raw.split('\n')) {
+    const match = LOG_LINE.exec(line)
+    if (!match) continue
+    framed = true
+    if (match[1] === 'stdout') out += match[3] + (match[2] === 'F' ? '\n' : '')
+  }
+  return framed ? out : raw
+}
+
+export function parseBackupList(raw: string): ParsedBackup | null {
+  const stdout = extractStdout(raw)
   const start = stdout.indexOf('[')
   const end = stdout.lastIndexOf(']')
   if (start === -1 || end < start) return null

@@ -85,7 +85,7 @@ export const postgresDriver: DatabaseDriver = {
     return [
       'wal-g backup-push /var/lib/postgresql/data',
       `wal-g delete before FIND_FULL "${cutoff}" --confirm`,
-      'wal-g backup-list --json',
+      'wal-g backup-list --detail --json',
     ].join(' && ')
   },
 
@@ -116,7 +116,10 @@ export const postgresDriver: DatabaseDriver = {
     const data = '/var/lib/postgresql/data'
     const lines = [`restore_command = 'WALG_S3_PREFIX=${sourcePrefix} wal-g wal-fetch "%f" "%p"'`]
     if (target === 'immediate') lines.push("recovery_target = 'immediate'", "recovery_target_action = 'promote'")
-    else if (target !== 'latest') lines.push(`recovery_target_time = '${target}'`, "recovery_target_action = 'promote'")
+    else if (target !== 'latest') {
+      const pgTime = target.replace('T', ' ').replace(/Z$/, '+00')
+      lines.push(`recovery_target_time = '${pgTime}'`, "recovery_target_action = 'promote'")
+    }
     return [
       `wal-g backup-fetch ${data} ${backup}`,
       `echo ${Buffer.from(`${lines.join('\n')}\n`).toString('base64')} | base64 -d >> ${data}/postgresql.auto.conf`,

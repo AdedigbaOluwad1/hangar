@@ -4,7 +4,7 @@ import { DATABASE_PLANS } from '@hangar/types'
 import { getDriver } from './driver'
 import { postgresDriver, quoteIdentifier } from './postgres'
 import { attachmentEnv, attachmentEnvKeys, connectionUrl, envPrefix } from './env'
-import { parseBackupList } from './backup-list'
+import { extractStdout, parseBackupList } from './backup-list'
 import { chooseRestore } from './restore-plan'
 import { buildBackupJobSpec, buildRestoreJobSpec, buildCleanupJobSpec, buildDatabaseJobSpec, planResources, quotaHeadroomMb, quotaLimits } from './job'
 import { checkCapacity, resolveRequest } from './admission'
@@ -206,7 +206,7 @@ test('restores into the new volume with the source archive and a recovery target
   assert.ok(script.endsWith('touch /var/lib/postgresql/data/recovery.signal'))
   const conf = Buffer.from(script.match(/echo (\S+) \|/)![1], 'base64').toString()
   assert.ok(conf.includes(`WALG_S3_PREFIX=${source} wal-g wal-fetch`))
-  assert.ok(conf.includes("recovery_target_time = '2026-10-05T10:00:00.000Z'"))
+  assert.ok(conf.includes("recovery_target_time = '2026-10-05 10:00:00.000+00'"))
   assert.throws(() => postgresDriver.restoreScript(source, 'x; rm -rf /', 'latest'))
   assert.throws(() => postgresDriver.restoreScript(source, 'base_1', "now'; drop"))
 
@@ -217,4 +217,16 @@ test('restores into the new volume with the source archive and a recovery target
   assert.equal(restore.Env.WALG_S3_PREFIX, source)
   assert.deepEqual(restore.Config.volumes, [`${databaseVolumeDir(db.id)}:/var/lib/postgresql/data`])
   assert.ok(restore.Templates[0].EmbeddedTmpl.includes(`hangar/data/databases/${job.ID}/backup`))
+})
+
+test('reads wal-g output out of the container log framing', () => {
+  const raw = [
+    '2026-10-06T12:56:27.18+00:00 stderr F INFO: 2026/10/06 Backup will be pushed to storage: default',
+    '2026-10-06T12:56:28.10+00:00 stdout F [{"backup_name":"base_000000010000000000000004","start_time":"2026-10-06T12:56:27Z","finish_time":"2026-10-06T12:56:28Z","compressed_size":4096}]',
+    '',
+  ].join('\n')
+  assert.equal(extractStdout(raw).trim().startsWith('[{"backup_name"'), true)
+  const parsed = parseBackupList(raw)
+  assert.equal(parsed?.name, 'base_000000010000000000000004')
+  assert.equal(parsed?.sizeBytes, 4096)
 })

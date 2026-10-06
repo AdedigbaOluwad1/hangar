@@ -655,13 +655,17 @@ Follows the dashboard template (guide §11) and the existing form and detail pat
 
 **Prerequisite for slice 1, done: env reaches apps through Vault, not the job spec.** User jobs get a `vault` block with the `nomad-apps` role and a `template` that renders their own `hangar/data/jobs/hangar-<id>/env` into the task's environment. The role is only usable by job ids matching `hangar-dep-*`, and its policy is templated on the `nomad_job_id` claim, so an app can read only its own path (reading `hangar/config` or another app's path returns 403). The Vault token is not exposed to the app (`env = false`, `disable_file`). The job spec holds only `PORT`. Database attachments (§11.3) reuse this path. Values round-trip exactly, including newlines, quotes, `$`, `#` and unicode. The secret is created empty before the first deploy, because a template on a missing secret blocks the task.
 
-**Done when (slice 1)**
-- [ ] Creating a Postgres database from the dashboard reaches `ready` with no manual steps and takes a first backup.
-- [ ] Attaching it to a running app injects `DATABASE_URL`, restarts the app on its current image, and the app connects.
-- [ ] Two apps can share one database, each with its own role, and detaching one leaves the other connected.
-- [ ] Restoring to a point in time creates a new database containing only data from before that time.
-- [ ] Deleting an app leaves its databases untouched; deleting a database with attachments is refused.
-- [ ] No credential appears in logs, the API's responses (apart from the audited reveal) or the repo.
+**Done when (slice 1)**, drilled on the sandbox on 2026-10-06
+- [x] Creating a Postgres database reaches `ready` with no manual steps in about 20 seconds. The first backup is queued once it is ready, not before.
+- [x] Attaching it to a running app injects `DATABASE_URL` and the `DATABASE_*` variables, restarts the app on its current image, and the injected URL connects as a non-superuser role.
+- [x] Two apps share one database, each with its own role, and detaching one drops only its role and leaves the other attached.
+- [x] Restoring to a point in time creates a new database containing only data from before that time: rows written before the target came back, rows written after did not, and no login role from the source survived.
+- [x] Deleting an app detaches it and leaves its databases untouched; deleting a database with attachments is refused with a 409.
+- [x] No credential appears in the API log, the Nomad job specs, or any API response (apart from the audited reveal, which is not built yet).
+
+The drill found and fixed two bugs: Postgres rejects an ISO `T…Z` recovery target (it needs `YYYY-MM-DD HH:MM:SS+00`), and `wal-g backup-list --json` carries no size or finish time without `--detail`. Container logs from the Nomad API come framed (`<time> stdout F <line>`), so output is unframed before parsing.
+
+Not drilled: a restore that fails mid-way cannot be retried in place, because the volume is no longer empty, so the half-restored database has to be deleted and restored again; the nightly scheduler has not yet fired; the restore of a specific backup (`backupId`) was not exercised.
 
 ### 11.9 Later (so we don't forget)
 
