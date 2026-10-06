@@ -3,6 +3,7 @@ import { swaggerUI } from '@hono/swagger-ui'
 import { auth, logs, deployments } from './routes'
 import { allowedOrigins, requireAuth } from './lib/auth'
 import { cors } from 'hono/cors'
+import './databases/queue'
 import { serve } from '@hono/node-server'
 
 const app = new OpenAPIHono()

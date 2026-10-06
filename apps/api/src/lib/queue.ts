@@ -3,7 +3,7 @@ import { runPipeline } from '../pipeline'
 
 const redisUrl = new URL(process.env.REDIS_URL ?? 'redis://redis:6379')
 
-const connection = {
+export const redisConnection = {
   host: redisUrl.hostname,
   port: parseInt(redisUrl.port) || 6379,
   username: redisUrl.username ? decodeURIComponent(redisUrl.username) : undefined,
@@ -18,7 +18,7 @@ interface DeployJobData {
   restartImageTag?: string
 }
 
-export const deployQueue = new Queue<DeployJobData>('deployments', { connection })
+export const deployQueue = new Queue<DeployJobData>('deployments', { connection: redisConnection })
 
 new Worker<DeployJobData>('deployments', async (job) => {
   await runPipeline(job.data.deploymentId, job.data.buildId, {
@@ -26,6 +26,6 @@ new Worker<DeployJobData>('deployments', async (job) => {
     rollbackImageTag: job.data.rollbackImageTag,
     restartImageTag: job.data.restartImageTag,
   })
-}, { connection, concurrency: 1 })
+}, { connection: redisConnection, concurrency: 1 })
 
 console.log('⚡ Deploy queue worker ready')
