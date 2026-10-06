@@ -1,5 +1,4 @@
-import { writeLog } from '@hangar/db'
-import { emitLog } from '../lib'
+import { writeLog } from '../lib'
 import { PIPELINE_LOG } from '@hangar/types'
 async function getCaddyAdmin(): Promise<string> {
   return process.env.CADDY_ADMIN_URL ?? 'http://127.0.0.1:2019'
@@ -27,7 +26,6 @@ async function waitForService(deploymentId: string, retries = 20, delay = 3000):
 export async function patchCaddy(deploymentId: string, buildId: string): Promise<string> {
   const CADDY_ADMIN = await getCaddyAdmin()
   await writeLog(buildId, 'deploy', `🌐 ${PIPELINE_LOG.route}`)
-  await emitLog(buildId, 'deploy', `🌐 ${PIPELINE_LOG.route}`)
   const address = await waitForService(deploymentId)
   const route = {
     match: [{ host: [`${deploymentId}.localhost`] }],
@@ -56,7 +54,6 @@ export async function patchCaddy(deploymentId: string, buildId: string): Promise
   }
   const liveUrl = `http://${deploymentId}.localhost`
   await writeLog(buildId, 'deploy', `🔗 ${PIPELINE_LOG.live} ${liveUrl}`)
-  await emitLog(buildId, 'deploy', `🔗 ${PIPELINE_LOG.live} ${liveUrl}`)
   return liveUrl
 }
 export async function unpatchCaddy(deploymentId: string): Promise<void> {

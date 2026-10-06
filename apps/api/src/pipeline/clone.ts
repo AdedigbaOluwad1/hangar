@@ -2,8 +2,8 @@ import { execa } from 'execa'
 import { mkdtemp } from 'fs/promises'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { writeLog, getDeployment } from '@hangar/db'
-import { emitLog } from '../lib'
+import { getDeployment } from '@hangar/db'
+import { writeLog } from '../lib'
 import { PIPELINE_LOG } from '@hangar/types'
 
 export async function clone(deploymentId: string, buildId: string): Promise<string> {
@@ -14,21 +14,18 @@ export async function clone(deploymentId: string, buildId: string): Promise<stri
   const dir = await mkdtemp(join(tmpdir(), `hangar-${deploymentId}-`))
 
   await writeLog(buildId, 'system', `📁 ${PIPELINE_LOG.clone} ${dir}`)
-  await emitLog(buildId, 'system', `📁 ${PIPELINE_LOG.clone} ${dir}`)
 
   const proc = execa('git', ['clone', '--depth=1', deployment.sourceUrl, dir])
 
   proc.stdout?.on('data', (chunk: Buffer) => {
     for (const line of chunk.toString().split('\n').filter(Boolean)) {
       writeLog(buildId, 'build', line)
-      emitLog(buildId, 'build', line)
     }
   })
 
   proc.stderr?.on('data', (chunk: Buffer) => {
     for (const line of chunk.toString().split('\n').filter(Boolean)) {
       writeLog(buildId, 'build', line)
-      emitLog(buildId, 'build', line)
     }
   })
 

@@ -1,10 +1,10 @@
 import { rm } from 'fs/promises'
-import { updateDeployment, updateBuild, stopPreviousBuilds, writeLog } from '@hangar/db'
+import { updateDeployment, updateBuild, stopPreviousBuilds } from '@hangar/db'
 import { clone } from './clone'
 import { build } from './build'
 import { runContainer } from './run'
 import { patchCaddy, unpatchCaddy } from './caddy'
-import { emitDone, emitLog, stopJob } from '../lib'
+import { emitDone, forgetBuildSecrets, maskForBuild, stopJob, trackBuildSecrets, writeLog } from '../lib'
 import { PIPELINE_LOG } from '@hangar/types'
 
 export async function runPipeline(
@@ -17,13 +17,13 @@ export async function runPipeline(
 ) {
   let dir: string | undefined
   try {
+    await trackBuildSecrets(deploymentId, buildId)
     let imageTag: string
 
     if (options.rollbackImageTag) {
       imageTag = options.rollbackImageTag
       await updateBuild(buildId, { status: 'deploying', imageTag })
       await writeLog(buildId, 'system', `⏪ ${PIPELINE_LOG.rollback}: ${imageTag}`)
-      await emitLog(buildId, 'system', `⏪ ${PIPELINE_LOG.rollback}: ${imageTag}`)
     } else {
       await updateBuild(buildId, { status: 'building' })
       dir = await clone(deploymentId, buildId)
@@ -40,14 +40,15 @@ export async function runPipeline(
     await updateDeployment(deploymentId, { liveUrl })
     await stopPreviousBuilds(deploymentId, buildId)
     await updateBuild(buildId, { status: 'running' })
-    await emitLog(buildId, 'system', `✅ ${PIPELINE_LOG.complete}`)
+    await writeLog(buildId, 'system', `✅ ${PIPELINE_LOG.complete}`)
   } catch (err: any) {
-    console.error('Pipeline error:', err)
+    console.error('Pipeline error:', maskForBuild(buildId, String(err?.stack ?? err)))
     await writeLog(buildId, 'system', `❌ ${PIPELINE_LOG.failed}: ${err.message}`)
     await updateDeployment(deploymentId, { status: 'failed' })
     await updateBuild(buildId, { status: 'failed' })
   } finally {
     await emitDone(buildId)
+    forgetBuildSecrets(buildId)
     if (dir) {
       await rm(dir, { recursive: true, force: true }).catch(() => { })
     }

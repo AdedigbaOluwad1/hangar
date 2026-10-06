@@ -1,7 +1,6 @@
 import { execa } from 'execa'
 import { join } from 'path'
-import { writeLog } from '@hangar/db'
-import { emitLog, gcOldTags } from '../lib'
+import { gcOldTags, writeLog } from '../lib'
 import { PIPELINE_LOG } from '@hangar/types'
 
 export async function build(
@@ -17,18 +16,15 @@ export async function build(
   const planPath = join(dir, 'railpack-plan.json')
 
   await writeLog(buildId, 'build', `📋 ${PIPELINE_LOG.detect}...`)
-  await emitLog(buildId, 'build', `📋 ${PIPELINE_LOG.detect}...`)
   const prepareProc = execa('railpack', ['prepare', dir, '--plan-out', planPath])
   prepareProc.stdout?.on('data', (chunk: Buffer) => {
     for (const line of chunk.toString().split('\n').filter(Boolean)) {
       writeLog(buildId, 'build', line)
-      emitLog(buildId, 'build', line)
     }
   })
   prepareProc.stderr?.on('data', (chunk: Buffer) => {
     for (const line of chunk.toString().split('\n').filter(Boolean)) {
       writeLog(buildId, 'build', line)
-      emitLog(buildId, 'build', line)
     }
   })
   await prepareProc
@@ -36,7 +32,6 @@ export async function build(
   await gcOldTags(registryHost, deploymentId)
 
   await writeLog(buildId, 'build', `🔨 ${PIPELINE_LOG.build} ${versionedTag}`)
-  await emitLog(buildId, 'build', `🔨 ${PIPELINE_LOG.build} ${versionedTag}`)
   const buildProc = execa('buildctl', [
     '--addr', process.env.BUILDKIT_HOST!,
     'build',
@@ -52,19 +47,16 @@ export async function build(
   buildProc.stdout?.on('data', (chunk: Buffer) => {
     for (const line of chunk.toString().split('\n').filter(Boolean)) {
       writeLog(buildId, 'build', line)
-      emitLog(buildId, 'build', line)
     }
   })
   buildProc.stderr?.on('data', (chunk: Buffer) => {
     for (const line of chunk.toString().split('\n').filter(Boolean)) {
       writeLog(buildId, 'build', line)
-      emitLog(buildId, 'build', line)
     }
   })
   await buildProc
 
   await writeLog(buildId, 'build', `✅ ${PIPELINE_LOG.push}: ${versionedTag}`)
-  await emitLog(buildId, 'build', `✅ ${PIPELINE_LOG.push}: ${versionedTag}`)
 
   return versionedTag
 }

@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "dotenv -e .env.local -- tsx watch src/index.ts",
     "build": "tsc",
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "tsx --test src/lib/mask.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "keywords": [],
