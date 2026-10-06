@@ -257,11 +257,11 @@ Changes that only affect runtime (env, resources, replicas, health check) **rede
 
 ### 6.2 Environment variables
 
-- Per environment, versioned; values in Vault at `hangar/data/deployments/<id>/<env>/env` (today's path plus the environment segment), metadata and history in `EnvVar`.
+- Per environment, versioned; values in Vault at `hangar/data/jobs/hangar-<id>/<env>/env` (today's path is `hangar/data/jobs/hangar-<id>/env`, keyed by Nomad job id so each app's policy can be bound to it), metadata and history in `EnvVar`.
 - Secret values are write-only in the UI after saving (shown as `••••`, replaceable, never returned by the API).
 - Bulk edit as `.env` text; import from a file.
 - Shared variable groups at the org level, referenced by name.
-- **Status:** `GET`/`PATCH /deployments/:id/env` exist. A patch merges `set`/`unset` into the Vault secret with check-and-set, rejects `PORT`, `HANGAR_*` and `NOMAD_*`, and returns how the change lands: `restarted` (a `restart` build reuses the current image and the running job's CPU and memory), `in_flight` (a build is running and reads the variables when it deploys), or `on_next_deploy` (the app isn't running). It answers 409 while a build is deploying. Still to do: the dashboard editor, versioning and history, secret flags, and delivering values through a Vault template instead of the job spec (below).
+- **Status:** `GET`/`PATCH /deployments/:id/env` exist. A patch merges `set`/`unset` into the Vault secret with check-and-set, rejects `PORT`, `HANGAR_*` and `NOMAD_*`, and returns how the change lands: `restarted` (a `restart` build reuses the current image and the running job's CPU and memory), `in_flight` (a build is running and reads the variables when it deploys), or `on_next_deploy` (the app isn't running). It answers 409 while a build is deploying. Values reach the app through a Nomad `template` that reads the app's own Vault path, never through the job spec. Still to do: the dashboard editor, versioning and history, and secret flags.
 - Hangar-provided variables injected automatically: `PORT`, `HANGAR_DEPLOYMENT_ID`, `HANGAR_COMMIT_SHA`, `HANGAR_ENVIRONMENT`, `HANGAR_PUBLIC_URL`.
 
 ### 6.3 Config as code: `hangar.toml`
@@ -647,7 +647,7 @@ Follows the dashboard template (guide §11) and the existing form and detail pat
 | 4 | FerretDB with its Postgres backend, `MONGODB_URI` | slice 1 |
 | 5 | Resize, point-in-time recovery for MySQL and MariaDB, scheduled quota alerts | slices 2–4 |
 
-**Prerequisite for slice 1: deliver env through Vault, not the job spec.** `lib/nomad.ts` puts user env values straight into the job's `Env`, so anyone who can read the job (`nomad job inspect`) sees every secret, and a database password would be no different. User jobs should instead get a Nomad `template` that reads their own Vault path. The shared `nomad-workloads` Vault role can read all of `hangar/data/*`, so user jobs need a separate role whose policy is limited to `hangar/data/deployments/<their job id>/*` (bound through the `nomad_job_id` claim) before any user job gets a `vault` block.
+**Prerequisite for slice 1, done: env reaches apps through Vault, not the job spec.** User jobs get a `vault` block with the `nomad-apps` role and a `template` that renders their own `hangar/data/jobs/hangar-<id>/env` into the task's environment. The role is only usable by job ids matching `hangar-dep-*`, and its policy is templated on the `nomad_job_id` claim, so an app can read only its own path (reading `hangar/config` or another app's path returns 403). The Vault token is not exposed to the app (`env = false`, `disable_file`). The job spec holds only `PORT`. Database attachments (§11.3) reuse this path. Values round-trip exactly, including newlines, quotes, `$`, `#` and unicode. The secret is created empty before the first deploy, because a template on a missing secret blocks the task.
 
 **Done when (slice 1)**
 - [ ] Creating a Postgres database from the dashboard reaches `ready` with no manual steps and takes a first backup.

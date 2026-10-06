@@ -1,13 +1,13 @@
 import { writeLog as persistLog } from '@hangar/db'
 import { emitLog } from './emitter'
 import { maskLine, platformSecrets, userEnvSecrets } from './mask'
-import { getUserEnv } from './user-env'
+import { readEnv } from './env'
 
 const platform = platformSecrets()
 const buildSecrets = new Map<string, string[]>()
 
 export async function trackBuildSecrets(deploymentId: string, buildId: string): Promise<void> {
-  buildSecrets.set(buildId, userEnvSecrets(await getUserEnv(deploymentId)))
+  buildSecrets.set(buildId, userEnvSecrets(await readEnv(deploymentId).then((env) => env.vars, () => ({}))))
 }
 
 export function forgetBuildSecrets(buildId: string): void {

@@ -252,8 +252,29 @@
         path "hangar/data/*" {
           capabilities = ["read"]
         }
-        path "hangar/data/deployments/*" {
+        path "hangar/data/jobs/*" {
           capabilities = ["create", "update", "read", "delete"]
+        }
+        EOF
+      changed_when: false
+      no_log: true
+
+    - name: Read the Nomad JWT mount accessor
+      shell: |
+        VAULT_ADDR=https://127.0.0.1:8200 VAULT_SKIP_VERIFY=true \
+          VAULT_TOKEN={{ vault_root_token }} \
+          vault auth list -format=json | jq -r '."jwt-nomad/".accessor'
+      register: jwt_accessor
+      changed_when: false
+      no_log: true
+
+    - name: Create Vault policy for user apps
+      shell: |
+        VAULT_ADDR=https://127.0.0.1:8200 VAULT_SKIP_VERIFY=true \
+          VAULT_TOKEN={{ vault_root_token }} \
+          vault policy write nomad-apps - <<'EOF'
+        path "hangar/data/jobs/{{ '{{' }}identity.entity.aliases.{{ jwt_accessor.stdout }}.metadata.nomad_job_id{{ '}}' }}/*" {
+          capabilities = ["read"]
         }
         EOF
       changed_when: false
@@ -276,6 +297,27 @@
       changed_when: false
       no_log: true
 
+    - name: Create Nomad JWT auth role for user apps
+      shell: |
+        VAULT_ADDR=https://127.0.0.1:8200 VAULT_SKIP_VERIFY=true \
+          VAULT_TOKEN={{ vault_root_token }} \
+          vault write auth/jwt-nomad/role/nomad-apps - <<'EOF'
+        {
+          "role_type": "jwt",
+          "bound_audiences": "vault.io",
+          "bound_claims_type": "glob",
+          "bound_claims": {"nomad_job_id": "hangar-dep-*"},
+          "user_claim": "/nomad_job_id",
+          "user_claim_json_pointer": true,
+          "claim_mappings": {"/nomad_job_id": "nomad_job_id", "/nomad_task": "nomad_task"},
+          "token_policies": "nomad-apps",
+          "token_period": "1h",
+          "token_type": "service"
+        }
+        EOF
+      changed_when: false
+      no_log: true
+
     # ── Done ─────────────────────────────────────────────────────────────────
 
     - name: Confirm vault-init complete
@@ -286,4 +328,5 @@
           - "✅ hangar/config seeded with deploy token"
           - "✅ JWT auth configured at jwt-nomad"
           - "✅ nomad-workloads policy + role created"
+          - "✅ nomad-apps policy + role created (user apps read only their own env)"
           - "✅ Vault ready for Nomad workload identity"

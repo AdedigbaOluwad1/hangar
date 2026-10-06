@@ -154,6 +154,8 @@ Nomad mints a JWT for each alloc (TTL: 1h)
   → Secrets injected as env vars into the container
 ```
 
+User apps use a second role, `nomad-apps`, which only jobs named `hangar-dep-*` can log in to. Its policy is templated on the job id, so an app can read only `hangar/data/jobs/<its own job id>/*`, where its environment variables live. The API writes them there (`PATCH /deployments/:id/env`) and a Nomad `template` renders them into the container; the job spec never contains the values and the app is not given a Vault token. After changing the policies or roles, rerun `vault-init.yml`.
+
 Secrets stored in Vault at `hangar/data/config`:
 - `nomad_addr` — Nomad API address reachable from containers
 - `consul_addr` — Consul API address reachable from containers

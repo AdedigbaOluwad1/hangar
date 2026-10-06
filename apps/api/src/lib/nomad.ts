@@ -1,4 +1,5 @@
 import { getConfig } from "./config"
+import { buildJobSpec, jobId } from "./job-spec"
 
 async function getNomadAddr(): Promise<string> {
   const config = await getConfig()
@@ -15,63 +16,10 @@ async function nomadHeaders(): Promise<Record<string, string>> {
 export async function submitJob(
   deploymentId: string,
   imageTag: string,
-  userEnv: Record<string, string> = {},
   resources: { cpu?: number; memoryMb?: number } = {},
 ) {
   const NOMAD_ADDR = await getNomadAddr()
-  const job = {
-    Job: {
-      ID: `hangar-${deploymentId}`,
-      Name: `hangar-${deploymentId}`,
-      Type: 'service',
-      Datacenters: ['dc1'],
-      TaskGroups: [
-        {
-          Name: 'app',
-          Count: 1,
-          Networks: [
-            {
-              DynamicPorts: [
-                { Label: 'http', To: 3000 }
-              ]
-            }
-          ],
-          Tasks: [
-            {
-              Name: 'web',
-              Driver: 'podman',
-              Config: {
-                image: imageTag,
-                ports: ['http'],
-              },
-              Env: {
-                PORT: '3000',
-                ...userEnv,
-              },
-              Resources: {
-                CPU: resources.cpu ?? 500,
-                MemoryMB: resources.memoryMb ?? 512,
-              },
-              Services: [
-                {
-                  Name: `hangar-${deploymentId}`,
-                  PortLabel: 'http',
-                  Checks: [
-                    {
-                      Type: 'http',
-                      Path: '/',
-                      Interval: 10_000_000_000,
-                      Timeout: 2_000_000_000,
-                    }
-                  ]
-                }
-              ]
-            }
-          ]
-        }
-      ]
-    }
-  }
+  const job = buildJobSpec(deploymentId, imageTag, resources)
 
   const res = await fetch(`${NOMAD_ADDR}/v1/jobs`, {
     method: 'POST',
@@ -88,7 +36,7 @@ export async function submitJob(
 
 export async function getJobResources(deploymentId: string): Promise<{ cpu?: number; memoryMb?: number }> {
   const NOMAD_ADDR = await getNomadAddr()
-  const res = await fetch(`${NOMAD_ADDR}/v1/job/hangar-${deploymentId}`, { headers: await nomadHeaders() })
+  const res = await fetch(`${NOMAD_ADDR}/v1/job/${jobId(deploymentId)}`, { headers: await nomadHeaders() })
   if (!res.ok) return {}
   const job = await res.json()
   const resources = job?.TaskGroups?.[0]?.Tasks?.[0]?.Resources
@@ -98,7 +46,7 @@ export async function getJobResources(deploymentId: string): Promise<{ cpu?: num
 export async function stopJob(deploymentId: string) {
   const NOMAD_ADDR = await getNomadAddr()
   const res = await fetch(
-    `${NOMAD_ADDR}/v1/job/hangar-${deploymentId}`,
+    `${NOMAD_ADDR}/v1/job/${jobId(deploymentId)}`,
     { method: 'DELETE', headers: await nomadHeaders() }
   )
   if (!res.ok) {
@@ -109,7 +57,7 @@ export async function stopJob(deploymentId: string) {
 export async function getJobStatus(deploymentId: string) {
   const NOMAD_ADDR = await getNomadAddr()
   const res = await fetch(
-    `${NOMAD_ADDR}/v1/job/hangar-${deploymentId}/allocations`,
+    `${NOMAD_ADDR}/v1/job/${jobId(deploymentId)}/allocations`,
     { headers: await nomadHeaders() }
   )
   if (!res.ok) return null
