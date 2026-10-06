@@ -176,7 +176,7 @@ scripts/db-quota.sh usage <project-id>                 # used, soft, hard in KiB
 scripts/db-quota.sh clear <dir> <project-id>           # remove the limit
 ```
 
-Limits can be raised or lowered at any time with `set`. A directory that reaches its hard limit fails its own writes with "No space left on device" and nothing else on the host is affected.
+Limits can be raised or lowered at any time with `set` (`--owner UID:GID` also sets the directory's owner), and `purge` removes a directory and its limit. A directory that reaches its hard limit fails its own writes with "No space left on device" and nothing else on the host is affected. A database that hits its hard limit can stop outright, because Postgres cannot write WAL; the limit for a managed database is therefore its plan size plus headroom, and raising it with `set` is how a stopped database is brought back.
 
 The Terraform volume is now `xfs` with `automount = false`. Changing the format of an existing volume makes Terraform replace it; the old ext4 volume was never mounted by Hangar, so nothing stored there is lost, but check before applying to a real environment.
 

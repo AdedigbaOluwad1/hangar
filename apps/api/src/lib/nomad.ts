@@ -43,6 +43,33 @@ export async function getJobResources(deploymentId: string): Promise<{ cpu?: num
   return { cpu: resources?.CPU, memoryMb: resources?.MemoryMB }
 }
 
+export async function submitJobSpec(spec: object) {
+  const NOMAD_ADDR = await getNomadAddr()
+  const res = await fetch(`${NOMAD_ADDR}/v1/jobs`, {
+    method: 'POST',
+    headers: await nomadHeaders(),
+    body: JSON.stringify(spec),
+  })
+  if (!res.ok) throw new Error(`Nomad job submit failed: ${res.status} ${await res.text()}`)
+  return res.json()
+}
+
+export async function stopJobById(id: string, purge = false) {
+  const NOMAD_ADDR = await getNomadAddr()
+  const res = await fetch(`${NOMAD_ADDR}/v1/job/${id}${purge ? '?purge=true' : ''}`, {
+    method: 'DELETE',
+    headers: await nomadHeaders(),
+  })
+  if (!res.ok && res.status !== 404) throw new Error(`Nomad job stop failed: ${res.status}`)
+}
+
+export async function listJobAllocations(id: string): Promise<{ ID: string; ClientStatus: string }[]> {
+  const NOMAD_ADDR = await getNomadAddr()
+  const res = await fetch(`${NOMAD_ADDR}/v1/job/${id}/allocations`, { headers: await nomadHeaders() })
+  if (!res.ok) return []
+  return res.json()
+}
+
 export async function stopJob(deploymentId: string) {
   const NOMAD_ADDR = await getNomadAddr()
   const res = await fetch(

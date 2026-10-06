@@ -389,6 +389,14 @@
       when: xfs_support.stdout == "yes"
       tags: [database-storage]
 
+    - name: Install the database quota helper
+      become: true
+      copy:
+        src: "{{ playbook_dir }}/../../scripts/db-quota.sh"
+        dest: /usr/local/bin/hangar-db-quota
+        mode: "0755"
+      tags: [database-storage]
+
     - name: Check project quotas are enforced
       become: true
       shell: "xfs_quota -x -c 'state -p' {{ database_mount }} | grep -q 'Enforcement: ON'"

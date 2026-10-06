@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "dotenv -e .env.local -- tsx watch src/index.ts",
     "build": "tsc",
-    "test": "tsx --test src/lib/mask.test.ts src/lib/env-rules.test.ts src/lib/job-spec.test.ts src/lib/engines.test.ts",
+    "test": "tsx --test src/lib/mask.test.ts src/lib/env-rules.test.ts src/lib/job-spec.test.ts src/lib/engines.test.ts src/databases/databases.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "keywords": [],
@@ -26,6 +26,7 @@
     "ioredis": "^5.10.1",
     "nanoid": "^5.1.9",
     "node-vault": "^0.12.0",
+    "pg": "^8.20.0",
     "tar": "^7.5.13",
     "uuidv7": "^1.2.1",
     "zod": "^4.3.6"
@@ -34,6 +35,7 @@
     "@types/dockerode": "^4.0.1",
     "@types/ioredis": "^5.0.0",
     "@types/node": "^22",
+    "@types/pg": "^8.20.0",
     "cross-env": "^10.1.0",
     "dotenv-cli": "^11.0.0",
     "tsx": "^4.21.0"

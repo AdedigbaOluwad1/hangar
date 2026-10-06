@@ -9,9 +9,11 @@ usage() {
   cat <<USAGE
 usage: $0 <command>
   check                                 the volume is XFS and enforcing project quotas
-  set <dir> <project-id> <hard> [soft]  create <dir>, put it in the project and limit it (sizes like 512m, 5g)
+  set <dir> <project-id> <hard> [soft] [--owner UID:GID]
+                                        create <dir>, put it in the project and limit it (sizes like 512m, 5g)
   usage <project-id>                    print: used soft hard (in KiB)
   clear <dir> <project-id>              remove the limit and the project from <dir>
+  purge <dir> <project-id>              clear, then delete <dir> and everything in it
 USAGE
   exit 1
 }
@@ -36,9 +38,17 @@ case "$cmd" in
     ;;
   set)
     [ $# -ge 3 ] || usage
-    dir="$1"; id="$2"; hard="$3"; soft="${4:-$3}"
+    dir="$1"; id="$2"; hard="$3"; shift 3
+    soft="$hard"; owner=""
+    if [ $# -gt 0 ] && [ "$1" != "--owner" ]; then soft="$1"; shift; fi
+    if [ $# -gt 0 ]; then
+      [ "$1" = "--owner" ] && [ $# -eq 2 ] || usage
+      [[ "$2" =~ ^[0-9]+:[0-9]+$ ]] || fail "owner must look like 70:70"
+      owner="$2"
+    fi
     valid_id "$id"; valid_size "$hard"; valid_size "$soft"; under_mount "$dir"
     $SUDO mkdir -p "$dir"
+    [ -z "$owner" ] || $SUDO chown "$owner" "$dir"
     $SUDO xfs_quota -x -c "project -s -p $dir $id" "$MOUNT" > /dev/null
     $SUDO xfs_quota -x -c "limit -p bsoft=$soft bhard=$hard $id" "$MOUNT"
     echo "✅ $dir limited to $hard (project $id)"
@@ -55,6 +65,15 @@ case "$cmd" in
     $SUDO xfs_quota -x -c "limit -p bsoft=0 bhard=0 $id" "$MOUNT"
     $SUDO xfs_quota -x -c "project -C -p $dir $id" "$MOUNT" > /dev/null
     echo "✅ $dir no longer limited"
+    ;;
+  purge)
+    [ $# -eq 2 ] || usage
+    dir="$1"; id="$2"
+    valid_id "$id"; under_mount "$dir"
+    [ "$(realpath -m "$dir")" != "$MOUNT" ] || fail "refusing to purge the whole volume"
+    $SUDO xfs_quota -x -c "limit -p bsoft=0 bhard=0 $id" "$MOUNT"
+    $SUDO rm -rf --one-file-system "$dir"
+    echo "✅ $dir removed"
     ;;
   *) usage ;;
 esac

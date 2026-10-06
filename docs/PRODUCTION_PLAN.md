@@ -551,7 +551,7 @@ Users add a database to their apps from the dashboard. Hangar runs it as its own
 | Redis and Valkey | Both offered. Valkey is BSD; Redis 8 is AGPLv3, which is fine unmodified. |
 | Credentials | **Hangar-managed roles.** The admin credential lives in Vault KV (`hangar/data/databases/<id>/admin`) and is read only by the worker. Each attachment gets its own role and credential (`hangar/data/databases/<id>/attachments/<attachmentId>`). Vault's database secrets engine is not used for apps: short leases don't suit credentials baked into env vars. |
 | Restore | **Always into a new database** (from a backup or a point in time). Never overwrites in place. |
-| Storage limits | **XFS project quotas** on a dedicated volume mounted at `/opt/hangar/data/databases` (`scripts/db-quota.sh`, set up by `setup.yml`). Each database directory is its own project with a hard limit equal to its plan size and a soft limit below it. A database that fills its quota gets "no space left on device" on its own writes and nothing else is affected. Raising the limit is a live change, so storage resize needs no data migration. Provisioning refuses a database when the sum of hard limits would exceed the volume. |
+| Storage limits | **XFS project quotas** on a dedicated volume mounted at `/opt/hangar/data/databases` (`scripts/db-quota.sh`, set up by `setup.yml`). Each database directory is its own project. The advertised size is the plan's `storageGb`; the XFS hard limit is that plus headroom (the larger of 512 MB and 10%), and the soft limit is 80% of the plan. A database that reaches the hard limit affects only itself, but see the warning in §11.5: a full Postgres does not just refuse writes, it can stop. The control plane therefore makes a database read-only at 100% of its plan, long before the hard limit. Raising the limit is a live change, so storage resize needs no data migration, and it is also the recovery path for a database that stopped. Provisioning refuses a database when the plan sizes plus headroom would exceed the volume (about 91% of it is usable). |
 | Outside access | None in v1. Databases are reachable only on the platform network (§11.5). |
 | First slice | Postgres end to end, then MySQL and MariaDB, then Redis and Valkey, then FerretDB. |
 
@@ -565,7 +565,7 @@ Users add a database to their apps from the dashboard. Hangar runs it as its own
 
 `Database.status`: `provisioning` → `ready` ⇄ `degraded`, `stopped`, `failed`, `deleting`. Attachment status: `attaching`, `attached`, `detaching`, `failed`.
 
-**Status:** the model is in place (`Database`, `DatabaseAttachment`, `DatabaseBackup`, migration `add_managed_databases`) with its query layer in `@hangar/db`, the engine and plan tables in `@hangar/types`, and `projectId` starting at 1000. Provisioning, attach and the rest follow in the order of §11.8.
+**Status:** the model is in place (`Database`, `DatabaseAttachment`, `DatabaseBackup`, migration `add_managed_databases`) with its query layer in `@hangar/db`, the engine and plan tables in `@hangar/types`, and `projectId` starting at 1000. The driver layer and Postgres provisioning are built (`apps/api/src/databases/`): the `DatabaseDriver` interface, the Postgres driver, the job builder, `provisionDatabase` and `deprovisionDatabase`, the `nomad-databases` Vault role (only `hangar-db-*` jobs, only their own `hangar/data/databases/<job id>/*`) and the host quota helper installed as `/usr/local/bin/hangar-db-quota`. The queue, state machine and storage watchdog come next, then attach, backups and the dashboard (§11.8).
 
 ### 11.3 Flows
 
@@ -573,7 +573,7 @@ All state changes run on a `database` queue in the worker (§4.2). Every step is
 
 **Create**
 1. `POST /databases` validates engine, version, plan and name, writes the row as `provisioning`, enqueues `provision`.
-2. Generate the admin credential into Vault; reserve a `projectId`; check the volume has room for the plan's storage.
+2. Generate the admin credential into Vault (`hangar/data/databases/<job id>/admin`) together with a copy of the backup credentials the engine needs (`.../walg`), so the database job reads only its own paths; reserve a `projectId`; check the volume has room for the plan's storage.
 3. Submit `hangar-db-<callsign>` (no published host port; registers `db-<callsign>` in Consul). A `raw_exec` prestart task in the job runs `scripts/db-quota.sh set` to create the data directory and apply its quota, so the limit exists before the engine writes a byte.
 4. Wait for Consul health, then run the engine driver's `bootstrap` (create the app database and its owner).
 5. Take a first backup, set `ready`. Optional "attach to" runs after this.
@@ -604,7 +604,7 @@ All state changes run on a `database` queue in the worker (§4.2). Every step is
 | Redis, Valkey | `REDIS_URL` (and `VALKEY_URL` for Valkey) | one ACL user per attachment, no dangerous commands | nightly RDB snapshot copied to the bucket | no |
 | MongoDB-compatible | `MONGODB_URI` | role scoped to its database | FerretDB runs against a Postgres with the DocumentDB extension in the same Nomad group; the Postgres side uses WAL-G | yes, from the backend |
 
-Each engine is a small driver (`bootstrap`, `createRole`, `dropRole`, `rotateRole`, `healthCheck`, `backup`, `restore`) and its own image built like `hangar-postgres` (engine plus tooling, pushed to the registry). Honest copy: the UI claims point-in-time recovery only where the table says yes.
+Each engine is a small driver (`bootstrap`, `createRole`, `rotateRole`, `dropRole`, `restrictWrites`, `allowWrites`, and later `backup` and `restore`; the interface also supplies the image, arguments, environment and Vault template for its Nomad task) and its own image built like `hangar-postgres` (engine plus tooling, pushed to the registry). Honest copy: the UI claims point-in-time recovery only where the table says yes.
 
 The extra variables take the name of the URL variable minus its `_URL` or `_URI` suffix, so an attachment called `ANALYTICS_URL` gets `ANALYTICS_HOST`, `ANALYTICS_PORT` and so on, and two databases never collide. When an app has two databases of the same kind, `envName` defaults to `DATABASE_URL`, then asks for a name; Hangar never overwrites an existing variable. `ENGINES` in `@hangar/types` holds each engine's versions, port, URL scheme, default variable names and minimum plan, and `DATABASE_PLANS` holds the three sizes.
 
@@ -615,7 +615,10 @@ The extra variables take the name of the URL variable minus its `_URL` or `_URI`
 - The admin credential never leaves Vault and the worker. Users see their attachment's connection details; the password is shown only after an explicit reveal, which writes an `AuditLog` row.
 - Backups are encrypted client-side (WAL-G libsodium or pgp key from Vault); the same is turned on for the platform Postgres.
 - Attachment credentials are added to log masking when an app starts, as user env values already are.
-- Storage: databases live on their own XFS volume with a project quota per database (§11.1), so a runaway database cannot fill the node or another database. The worker reads usage with `scripts/db-quota.sh usage <projectId>` (the soft limit raises an event on the database page), and the volume itself is watched by the observability phase. The Hetzner volume is formatted XFS by Terraform and mounted by `setup.yml`; development hosts use a sparse loopback image with the same mount options.
+- Storage: databases live on their own XFS volume with a project quota per database (§11.1), so a runaway database cannot fill the node or another database.
+  - **A full quota can stop Postgres.** Tested on the sandbox: at the hard limit a statement fails cleanly with "could not extend file ... No space left on device", but the next WAL write panics (`could not create file pg_wal/xlogtemp`), crash recovery cannot write either, and the server shuts down; Nomad then retries until space exists. Raising the quota brings it straight back.
+  - **So the limit is a backstop, not the control.** The hard limit leaves headroom above the plan for WAL and recovery, and a storage watchdog in the worker (step 3) reads usage and calls the driver's `restrictWrites` at 100% of the plan: the app database becomes read-only and sessions are cut so they reconnect read-only. `allowWrites` reverses it after the user frees space or upgrades. Usage comes from a small periodic host job that publishes `xfs_quota report` to Consul KV, because the API container cannot run `xfs_quota`.
+  - The volume itself is watched by the observability phase. The Hetzner volume is formatted XFS by Terraform and mounted by `setup.yml`; development hosts use a sparse loopback image with the same mount options.
 - Data-at-rest encryption is the host's (LUKS on the data pool).
 
 ### 11.6 Dashboard
