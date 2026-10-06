@@ -551,6 +551,7 @@ Users add a database to their apps from the dashboard. Hangar runs it as its own
 | Redis and Valkey | Both offered. Valkey is BSD; Redis 8 is AGPLv3, which is fine unmodified. |
 | Credentials | **Hangar-managed roles.** The admin credential lives in Vault KV (`hangar/data/databases/<id>/admin`) and is read only by the worker. Each attachment gets its own role and credential (`hangar/data/databases/<id>/attachments/<attachmentId>`). Vault's database secrets engine is not used for apps: short leases don't suit credentials baked into env vars. |
 | Restore | **Always into a new database** (from a backup or a point in time). Never overwrites in place. |
+| Storage limits | **XFS project quotas** on a dedicated volume mounted at `/opt/hangar/data/databases` (`scripts/db-quota.sh`, set up by `setup.yml`). Each database directory is its own project with a hard limit equal to its plan size and a soft limit below it. A database that fills its quota gets "no space left on device" on its own writes and nothing else is affected. Raising the limit is a live change, so storage resize needs no data migration. Provisioning refuses a database when the sum of hard limits would exceed the volume. |
 | Outside access | None in v1. Databases are reachable only on the platform network (§11.5). |
 | First slice | Postgres end to end, then MySQL and MariaDB, then Redis and Valkey, then FerretDB. |
 
@@ -558,7 +559,7 @@ Users add a database to their apps from the dashboard. Hangar runs it as its own
 
 | Entity | Key fields | Notes |
 |---|---|---|
-| `Database` | `id`, `callsign` (unique), `engine`, `version`, `plan`, `status`, `nomadJobId`, `host` (Consul name), `port`, `volumePath`, `storageGb`, `adminVaultPath`, `lastBackupAt`, `deletedAt`, `orgId`/`userId` | Lives independently of apps; deleting an app never deletes data |
+| `Database` | `id`, `callsign` (unique), `engine`, `version`, `plan`, `status`, `nomadJobId`, `host` (Consul name), `port`, `volumePath`, `storageGb`, `projectId` (unique, from 1000, the XFS project), `adminVaultPath`, `lastBackupAt`, `deletedAt`, `orgId`/`userId` | Lives independently of apps; deleting an app never deletes data |
 | `DatabaseAttachment` | `id`, `databaseId`, `deploymentId`, `envName`, `username`, `vaultPath`, `status` | Many to many. `envName` is unique per deployment |
 | `DatabaseBackup` | `id`, `databaseId`, `kind` (`scheduled`, `manual`, `final`), `status`, `sizeBytes`, `startedAt`, `finishedAt`, `s3Key`, `restorableFrom`, `restorableTo` | `restorable*` is filled only for engines with point-in-time recovery |
 
@@ -570,8 +571,8 @@ All state changes run on a `database` queue in the worker (§4.2). Every step is
 
 **Create**
 1. `POST /databases` validates engine, version, plan and name, writes the row as `provisioning`, enqueues `provision`.
-2. Generate the admin credential into Vault; create the data directory.
-3. Submit `hangar-db-<callsign>` (no published host port; registers `<callsign>` in Consul).
+2. Generate the admin credential into Vault; reserve a `projectId`; check the volume has room for the plan's storage.
+3. Submit `hangar-db-<callsign>` (no published host port; registers `<callsign>` in Consul). A `raw_exec` prestart task in the job runs `scripts/db-quota.sh set` to create the data directory and apply its quota, so the limit exists before the engine writes a byte.
 4. Wait for Consul health, then run the engine driver's `bootstrap` (create the app database and its owner).
 5. Take a first backup, set `ready`. Optional "attach to" runs after this.
 
@@ -587,7 +588,7 @@ All state changes run on a `database` queue in the worker (§4.2). Every step is
 
 **Restore**: pick a backup or, for engines with point-in-time recovery, a time. A new database is provisioned from it. The user attaches apps to it or swaps the env name when ready.
 
-**Rotate credentials**: the driver sets a new password, Vault is updated, attached apps restart. **Resize**: CPU and memory restart the job; storage is a larger volume plus a migration (not in the first slice).
+**Rotate credentials**: the driver sets a new password, Vault is updated, attached apps restart. **Resize**: CPU and memory restart the job. Storage raises the quota on the live volume, with no migration, as far as the volume has room; shrinking below current use is refused.
 
 **Delete**: typed-name confirmation, blocked while attached unless "detach all" is chosen. A `final` backup is kept for 7 days, and the volume is removed after that.
 
@@ -612,7 +613,7 @@ When an app has two databases of the same kind, `envName` defaults to `DATABASE_
 - The admin credential never leaves Vault and the worker. Users see their attachment's connection details; the password is shown only after an explicit reveal, which writes an `AuditLog` row.
 - Backups are encrypted client-side (WAL-G libsodium or pgp key from Vault); the same is turned on for the platform Postgres.
 - Attachment credentials are added to log masking when an app starts, as user env values already are.
-- Storage quotas: plain host directories cannot enforce a per-database limit, so one runaway database could fill the node. XFS project quotas (or fixed-size volumes) are required before the feature is opened to other people. Until then, a monitored soft limit raises an alert and an event on the database page.
+- Storage: databases live on their own XFS volume with a project quota per database (§11.1), so a runaway database cannot fill the node or another database. The worker reads usage with `scripts/db-quota.sh usage <projectId>` (the soft limit raises an event on the database page), and the volume itself is watched by the observability phase. The Hetzner volume is formatted XFS by Terraform and mounted by `setup.yml`; development hosts use a sparse loopback image with the same mount options.
 - Data-at-rest encryption is the host's (LUKS on the data pool).
 
 ### 11.6 Dashboard
@@ -641,7 +642,7 @@ Follows the dashboard template (guide §11) and the existing form and detail pat
 
 | Slice | Scope | Needs |
 |---|---|---|
-| 1 | Postgres end to end: model, `database` queue and driver interface, provisioning, attach, detach, backup list, restore to new database, dashboard pages | Phase 1 (§4.1, §4.2), restart-with-new-env (§6.1), quotas decision |
+| 1 | Postgres end to end: model, `database` queue and driver interface, provisioning, attach, detach, backup list, restore to new database, dashboard pages | Phase 1 (§4.1, §4.2); restart-with-new-env, Vault env delivery and the XFS quota volume are in place |
 | 2 | MySQL and MariaDB drivers, images and physical backups | slice 1 |
 | 3 | Redis and Valkey drivers, ACL users, RDB backups | slice 1 |
 | 4 | FerretDB with its Postgres backend, `MONGODB_URI` | slice 1 |
@@ -705,5 +706,5 @@ Milestones 5 and 6 run on a single node on purpose: zero-downtime deploys, Consu
 | Service mesh | Consul Connect now vs later | Later; host networking first |
 | MongoDB for managed databases | FerretDB vs MongoDB (SSPL) | FerretDB now; MongoDB in the enterprise edition |
 | Managed database isolation | Instance per database vs shared server per engine | Instance per database; shared tier later |
-| Managed database storage limits | XFS project quotas vs fixed-size volumes vs soft limit | Quotas before opening to other users; soft limit until then |
+| Managed database storage limits | XFS project quotas vs fixed-size volumes vs soft limit | **Decided: XFS project quotas** on a dedicated volume |
 | Database access from outside | None vs CLI proxy vs public with TLS | None in v1; CLI proxy next, then a GUI tool |

@@ -69,17 +69,17 @@ resource "hcloud_server" "hangar" {
   }
 }
 
-# persistent volume for Docker data
+# persistent volume for database data; XFS so each database can get a project quota
 resource "hcloud_volume" "hangar_data" {
   name      = "${var.server_name}-data"
   size      = 50  # 50GB
   location  = var.location
-  format    = "ext4"
+  format    = "xfs"
 }
 
 # attach volume to server
 resource "hcloud_volume_attachment" "hangar_data" {
   volume_id = hcloud_volume.hangar_data.id
   server_id = hcloud_server.hangar.id
-  automount = true
+  automount = false
 }

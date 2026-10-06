@@ -165,6 +165,21 @@ Secrets stored in Vault at `hangar/data/config`:
 - `walg_access_key`, `walg_secret_key` — S3 identity for WAL-G, limited to the `hangar-backups` bucket
 - `admin_token` — the shared admin token (temporary until accounts land). The dashboard signs in with it at `/sign-in`, and the API swaps it for a signed `HttpOnly` session cookie (`POST /auth/login`, 12 hours). Scripts can send it as `Authorization: Bearer`. Every route except `/health`, `/auth/login` and `/auth/logout` requires one or the other. Read it with `vault kv get -field=admin_token hangar/config`
 
+### Database Storage (XFS Quotas)
+
+Managed databases keep their data on a dedicated XFS volume mounted at `/opt/hangar/data/databases` with the `prjquota` option, so every database directory can have its own hard size limit. `setup.yml` creates it (tag `database-storage`): on Hetzner it formats and mounts the Terraform volume (passed as `database_volume_id`), anywhere else it makes a sparse loopback image at `/opt/hangar/database-volume.img` (`database_volume_gb`, default 20) and mounts it through `/etc/fstab` with `nofail`. If the kernel has no XFS module the play says so and managed databases stay disabled.
+
+```bash
+scripts/db-quota.sh check                              # the volume enforces project quotas
+scripts/db-quota.sh set <dir> <project-id> 5g [soft]   # create <dir> and limit it
+scripts/db-quota.sh usage <project-id>                 # used, soft, hard in KiB
+scripts/db-quota.sh clear <dir> <project-id>           # remove the limit
+```
+
+Limits can be raised or lowered at any time with `set`. A directory that reaches its hard limit fails its own writes with "No space left on device" and nothing else on the host is affected.
+
+The Terraform volume is now `xfs` with `automount = false`. Changing the format of an existing volume makes Terraform replace it; the old ext4 volume was never mounted by Hangar, so nothing stored there is lost, but check before applying to a real environment.
+
 ### Nomad ACL Token Hierarchy
 
 Three tokens exist, each with a different scope:

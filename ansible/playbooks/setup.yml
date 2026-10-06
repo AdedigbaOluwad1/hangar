@@ -8,6 +8,9 @@
     hangar_data_dir: /opt/hangar/data
     podman_bridge_gateway: "10.88.0.1"
     consul_dns_port: 8600
+    database_volume_id: ""
+    database_volume_gb: 20
+    database_volume_image: /opt/hangar/database-volume.img
 
   tasks:
     # ── Detect Environment ───────────────────────────────────────────────────
@@ -311,6 +314,87 @@
         - { path: caddy, owner: "{{ ansible_user_id }}" }
         - { path: postgres, owner: "999" }
         - { path: redis, owner: "999" }
+
+    # ── Database storage: XFS with project quotas ────────────────────────────
+    # Each managed database gets a directory on this volume with its own quota,
+    # so one runaway database cannot fill the node. A Hetzner volume is used when
+    # database_volume_id is set; otherwise a sparse loopback image stands in.
+
+    - name: Install XFS tools
+      become: true
+      apt:
+        name: xfsprogs
+        state: present
+      tags: [database-storage]
+
+    - name: Load the XFS kernel module
+      become: true
+      command: modprobe xfs
+      changed_when: false
+      failed_when: false
+      tags: [database-storage]
+
+    - name: Check XFS support
+      shell: grep -qw xfs /proc/filesystems && echo yes || echo no
+      register: xfs_support
+      changed_when: false
+      tags: [database-storage]
+
+    - name: Say when XFS is unavailable
+      debug:
+        msg: "XFS is not available on this kernel, so managed databases cannot be enforced to a quota and stay disabled."
+      when: xfs_support.stdout == "no"
+      tags: [database-storage]
+
+    - name: Work out the database volume
+      set_fact:
+        database_mount: "{{ hangar_data_dir }}/databases"
+        database_use_image: "{{ database_volume_id | string | length == 0 }}"
+        database_device: "{{ database_volume_image if (database_volume_id | string | length == 0) else '/dev/disk/by-id/scsi-0HC_Volume_' ~ database_volume_id }}"
+      tags: [database-storage]
+
+    - name: Create the database mount point
+      become: true
+      file:
+        path: "{{ database_mount }}"
+        state: directory
+        mode: "0755"
+      when: xfs_support.stdout == "yes"
+      tags: [database-storage]
+
+    - name: Create the sparse database volume image
+      become: true
+      command: "truncate -s {{ database_volume_gb }}G {{ database_volume_image }}"
+      args:
+        creates: "{{ database_volume_image }}"
+      when: xfs_support.stdout == "yes" and database_use_image | bool
+      tags: [database-storage]
+
+    - name: Format the database volume as XFS
+      become: true
+      community.general.filesystem:
+        fstype: xfs
+        dev: "{{ database_device }}"
+      when: xfs_support.stdout == "yes"
+      tags: [database-storage]
+
+    - name: Mount the database volume with project quotas
+      become: true
+      ansible.posix.mount:
+        path: "{{ database_mount }}"
+        src: "{{ database_device }}"
+        fstype: xfs
+        opts: "{{ 'loop,' if database_use_image | bool else '' }}prjquota,noatime,nofail"
+        state: mounted
+      when: xfs_support.stdout == "yes"
+      tags: [database-storage]
+
+    - name: Check project quotas are enforced
+      become: true
+      shell: "xfs_quota -x -c 'state -p' {{ database_mount }} | grep -q 'Enforcement: ON'"
+      changed_when: false
+      when: xfs_support.stdout == "yes"
+      tags: [database-storage]
 
     - name: Fix Hangar data directory ownership (recursive)
       become: true

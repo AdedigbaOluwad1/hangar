@@ -46,7 +46,9 @@ jobs:
       - name: Get server IP from Terraform
         if: inputs.mode == 'terraform'
         id: terraform_output
-        run: echo "server_ip=$(terraform output -raw server_ip)" >> $GITHUB_OUTPUT
+        run: |
+          echo "server_ip=$(terraform output -raw server_ip)" >> $GITHUB_OUTPUT
+          echo "volume_id=$(terraform output -raw volume_id)" >> $GITHUB_OUTPUT
         working-directory: terraform
 
       - name: Wait for SSH
@@ -87,6 +89,7 @@ jobs:
             -i ansible/inventory.ini \
             ansible/playbooks/setup.yml \
             --vault-password-file .vault-pass \
+            --extra-vars "database_volume_id=${{ steps.terraform_output.outputs.volume_id }}" \
             --limit hangar_remote
 
       - name: Run deploy.yml
