@@ -2,7 +2,14 @@ import type { Deployment, Build, CreateDeploymentInput, Health } from '@hangar/t
 
 const BASE = typeof window !== 'undefined' ? '/api' : 'http://api:3001';
 
+export class UnauthorizedError extends Error {
+	constructor() {
+		super('Sign in to continue');
+	}
+}
+
 async function json<T>(res: Response): Promise<T> {
+	if (res.status === 401) throw new UnauthorizedError();
 	if (!res.ok) {
 		const body = await res.json().catch(() => ({ error: res.statusText }));
 		throw new Error(body.error ?? `Request failed with ${res.status}`);
@@ -11,6 +18,17 @@ async function json<T>(res: Response): Promise<T> {
 }
 
 export const api = {
+	getSession: (): Promise<{ ok: true }> => fetch(`${BASE}/auth/session`).then((r) => json(r)),
+
+	signIn: (token: string): Promise<{ ok: true }> =>
+		fetch(`${BASE}/auth/login`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ token }),
+		}).then((r) => json(r)),
+
+	signOut: (): Promise<{ ok: true }> => fetch(`${BASE}/auth/logout`, { method: 'POST' }).then((r) => json(r)),
+
 	listDeployments: (): Promise<Deployment[]> => fetch(`${BASE}/deployments`).then((r) => json(r)),
 
 	getDeployment: (id: string): Promise<Deployment> => fetch(`${BASE}/deployments/${id}`).then((r) => json(r)),

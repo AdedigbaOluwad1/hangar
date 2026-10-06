@@ -1,11 +1,22 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useState } from 'react';
-import { Links, Meta, Outlet, Scripts, ScrollRestoration, type LinksFunction } from 'react-router';
+import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { useRef, useState } from 'react';
+import {
+	Links,
+	Meta,
+	Outlet,
+	Scripts,
+	ScrollRestoration,
+	useLocation,
+	useNavigate,
+	type LinksFunction,
+} from 'react-router';
 import '@fontsource-variable/big-shoulders-display';
 import '@fontsource-variable/inter';
 import '@fontsource-variable/jetbrains-mono';
 import './app.css';
 import { Toaster } from './components/ui/sonner';
+import { UnauthorizedError } from './lib/api';
+import { paths } from './lib/paths';
 
 export const links: LinksFunction = () => [
 	{ rel: 'icon', href: '/favicon.svg', type: 'image/svg+xml' },
@@ -15,14 +26,31 @@ export const links: LinksFunction = () => [
 ];
 
 export default function App() {
-	const [queryClient] = useState(
-		() =>
-			new QueryClient({
-				defaultOptions: {
-					queries: { staleTime: 5000, refetchOnWindowFocus: false },
+	const navigate = useNavigate();
+	const location = useLocation();
+	const redirect = useRef<() => void>(() => {});
+	redirect.current = () => {
+		if (location.pathname === paths.signIn) return;
+		const here = location.pathname + location.search;
+		navigate(`${paths.signIn}?next=${encodeURIComponent(here)}`, { replace: true });
+	};
+
+	const [queryClient] = useState(() => {
+		const onError = (error: Error) => {
+			if (error instanceof UnauthorizedError) redirect.current();
+		};
+		return new QueryClient({
+			queryCache: new QueryCache({ onError }),
+			mutationCache: new MutationCache({ onError }),
+			defaultOptions: {
+				queries: {
+					staleTime: 5000,
+					refetchOnWindowFocus: false,
+					retry: (count, error) => !(error instanceof UnauthorizedError) && count < 3,
 				},
-			}),
-	);
+			},
+		});
+	});
 
 	return (
 		<html lang="en" className="dark">

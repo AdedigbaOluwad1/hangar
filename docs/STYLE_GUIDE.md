@@ -246,7 +246,7 @@ Shared UI lives in `components/ui/` (shadcn, Base UI style `base-nova`, Hugeicon
 | `Toaster` (`ui/sonner.tsx`) | mounted once in `root.tsx`; call `toast.success/error` | icons tinted signal/alarm/deck | `toast.success('Stood down', { description: '…' })` |
 | `StatusBadge` | `status`, `className` | pulse while pending/building/deploying | `<StatusBadge status={deploymentStatus(d)} />` |
 | `CopyButton` | `value`, `label` | tick for 1.5s after copy | Next to ids |
-| `Header` | `action?` | active nav link `steel-100` | Every dashboard page |
+| `Header` | `action?`, `bare?` | active nav link `steel-100`; `bare` drops the nav (sign-in); Sign out sits last in the nav | Every dashboard page, `routes/sign-in.tsx` |
 | `Mark` | `className` | — | Logo |
 | `DeploymentList` | `deployments` | empty state built in | `routes/dashboard.tsx` |
 | `FlightPath` | `lines`, `status` | done / active / waiting / skipped / failed per stage | `routes/dashboard.deployments.$id.tsx` |
@@ -482,6 +482,7 @@ Lore names places and moments; plain words name data. Eyebrows and section label
 | Doing this | Start from |
 |---|---|
 | Create / deploy | `components/deploy-form.tsx`, `routes/dashboard.deployments.new.tsx` |
+| Sign in / single-field form | `routes/sign-in.tsx` (page head + one `.panel` form with the footer bar; a 401 anywhere redirects here via `root.tsx`) |
 | Redeploy | `components/deployment-actions.tsx` (`redeploy`) |
 | Rollback / choose from a list | `components/deployment-actions.tsx` (Base UI `Select`) |
 | Destructive confirm | `components/deployment-actions.tsx` (`AlertDialog`) |
