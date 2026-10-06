@@ -28,6 +28,12 @@ async function json<T>(res: Response): Promise<T> {
 	return res.json();
 }
 
+export interface EnvPatchResult {
+	keys: string[];
+	apply: 'restarted' | 'in_flight' | 'on_next_deploy';
+	build: Build | null;
+}
+
 export const api = {
 	getSession: (): Promise<{ ok: true }> => fetch(`${BASE}/auth/session`).then((r) => json(r)),
 
@@ -95,6 +101,15 @@ export const api = {
 		fetch(`${BASE}/databases/${id}`, { method: 'DELETE' }).then((r) => json(r)),
 
 	listBackups: (id: string): Promise<DatabaseBackup[]> => fetch(`${BASE}/databases/${id}/backups`).then((r) => json(r)),
+
+	getEnvKeys: (id: string): Promise<{ keys: string[] }> => fetch(`${BASE}/deployments/${id}/env`).then((r) => json(r)),
+
+	patchEnv: (id: string, patch: { set?: Record<string, string>; unset?: string[] }): Promise<EnvPatchResult> =>
+		fetch(`${BASE}/deployments/${id}/env`, {
+			method: 'PATCH',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify(patch),
+		}).then((r) => json(r)),
 
 	listAttachments: (deploymentId: string): Promise<DeploymentAttachment[]> =>
 		fetch(`${BASE}/deployments/${deploymentId}/attachments`).then((r) => json(r)),

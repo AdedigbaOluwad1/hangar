@@ -19,6 +19,7 @@ import { CopyButton } from '../components/copy-button';
 import { FlightPath } from '../components/flight-path';
 import { CallsignTitle } from '../components/callsign-title';
 import { DataPanel } from '../components/data-panel';
+import { EnvPanel } from '../components/env-panel';
 
 export function meta({ params }: Route.MetaArgs) {
 	return [{ title: `${params.id} · Hangar` }];
@@ -198,6 +199,10 @@ export default function DeploymentDetail() {
 
 						<section data-reveal aria-labelledby="data-title" className="mt-10">
 							<DataPanel deploymentId={deploymentId} />
+						</section>
+
+						<section data-reveal aria-labelledby="env-title" className="mt-10">
+							<EnvPanel deploymentId={deploymentId} />
 						</section>
 
 						<div className="mt-10 grid grid-cols-1 gap-6 md:grid-cols-[280px_minmax(0,1fr)]">

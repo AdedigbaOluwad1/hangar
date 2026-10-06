@@ -51,6 +51,7 @@ export function DataPanel({ deploymentId }: { deploymentId: string }) {
 
 	function invalidate() {
 		queryClient.invalidateQueries({ queryKey: ['attachments', deploymentId] });
+		queryClient.invalidateQueries({ queryKey: ['env', deploymentId] });
 		queryClient.invalidateQueries({ queryKey: ['deployment', deploymentId] });
 		queryClient.invalidateQueries({ queryKey: ['builds', deploymentId] });
 		queryClient.invalidateQueries({ queryKey: ['databases'] });

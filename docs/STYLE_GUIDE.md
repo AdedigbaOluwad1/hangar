@@ -259,6 +259,7 @@ Shared UI lives in `components/ui/` (shadcn, Base UI style `base-nova`, Hugeicon
 | `DatabaseForm` | — | pending "Creating…", inline error; engines not built yet are disabled with the "Coming" chip | `routes/dashboard.databases.new.tsx` |
 | `DatabaseActions` | `databaseId`, `callsign`, `status`, `backingUp` | Back up now (outline), Delete with typed-callsign confirm | `routes/dashboard.databases.$id.tsx` |
 | `DataPanel` | `deploymentId` | loading skeleton, dashed empty, attaching/detaching rows disable Detach; Add database and Detach open confirm dialogs | `routes/dashboard.deployments.$id.tsx` |
+| `EnvPanel` | `deploymentId` | values never shown (masked); Change, Remove with Undo, new rows validated inline; database-managed keys are locked and labelled; Save is outline (the page has no amber primary) | `routes/dashboard.deployments.$id.tsx` |
 | `BackupList` | `databaseId`, `backups`, `canRestore` | empty dashed panel; Restore confirm opens a new database | `routes/dashboard.databases.$id.tsx` |
 | Classes | `.panel`, `.chip`, `.chip-coming`, `.eyebrow`, `.display`, `.live-dot` | — | `app.css` |
 
@@ -490,6 +491,7 @@ Lore names places and moments; plain words name data. Eyebrows and section label
 |---|---|
 | Create / deploy | `components/deploy-form.tsx`, `routes/dashboard.deployments.new.tsx` |
 | Create a database / choose from several `Select`s | `components/database-form.tsx` |
+| Edit a list of key/value rows in place | `components/env-panel.tsx` |
 | Destructive confirm with a typed name | `components/database-actions.tsx` |
 | Row actions on a list inside a panel | `components/backup-list.tsx`, `components/data-panel.tsx` |
 | Form inside a confirm dialog | `components/data-panel.tsx` (attach) |
