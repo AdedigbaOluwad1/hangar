@@ -21,6 +21,7 @@ resource "hcloud_firewall" "hangar" {
   name = "${var.server_name}-firewall"
 
   # allow SSH
+  # TODO: restrict to operator IPs; see Phase 0 in docs/PRODUCTION_PLAN.md
   rule {
     direction = "in"
     protocol  = "tcp"

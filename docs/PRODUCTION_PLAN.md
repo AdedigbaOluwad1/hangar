@@ -81,6 +81,7 @@ POST /deployments → Postgres rows → BullMQ (concurrency 1, inside the API pr
 
 - **Caddy admin:** bind to `127.0.0.1:2019` (or the private interface once clustered); drop the empty origin; remove the `2019` rule from `terraform/main.tf`.
 - **Firewall:** public ingress only on 22 (restricted to operator IPs), 80 and 443. Nomad 4646, Consul 8500/8501, Vault 8200 and registry 5000 are private-only.
+  - TODO: restrict SSH (22) in `terraform/main.tf` to an `operator_cidrs` variable. Blocked on how `provision.yml` reaches the server, since GitHub-hosted runners SSH in from unpredictable IPs (options: provision from an operator machine, allow the runner IP per run, or provision over Tailscale). The Hetzner firewall already drops 4646, 8500/8501, 8200 and 5000 from outside.
 - **API auth stub:** require a static admin token (`Authorization: Bearer`, stored in Vault) on every route except `/health` until real sign-in lands in Phase 2. Restrict CORS to the dashboard origin.
 - **Credentials out of job files:** Postgres and Redis passwords generated at install time, stored in Vault, injected with Nomad `template` blocks (the API already uses this path).
 - **Registry:** TLS plus htpasswd auth; BuildKit and Nomad's Podman driver get the credentials from Vault.
