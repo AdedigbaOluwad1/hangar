@@ -565,6 +565,8 @@ Users add a database to their apps from the dashboard. Hangar runs it as its own
 
 `Database.status`: `provisioning` → `ready` ⇄ `degraded`, `stopped`, `failed`, `deleting`. Attachment status: `attaching`, `attached`, `detaching`, `failed`.
 
+**Status:** the model is in place (`Database`, `DatabaseAttachment`, `DatabaseBackup`, migration `add_managed_databases`) with its query layer in `@hangar/db`, the engine and plan tables in `@hangar/types`, and `projectId` starting at 1000. Provisioning, attach and the rest follow in the order of §11.8.
+
 ### 11.3 Flows
 
 All state changes run on a `database` queue in the worker (§4.2). Every step is idempotent and retried, and on worker start any database stuck mid-operation is re-driven or marked `failed` with a reason.
@@ -572,7 +574,7 @@ All state changes run on a `database` queue in the worker (§4.2). Every step is
 **Create**
 1. `POST /databases` validates engine, version, plan and name, writes the row as `provisioning`, enqueues `provision`.
 2. Generate the admin credential into Vault; reserve a `projectId`; check the volume has room for the plan's storage.
-3. Submit `hangar-db-<callsign>` (no published host port; registers `<callsign>` in Consul). A `raw_exec` prestart task in the job runs `scripts/db-quota.sh set` to create the data directory and apply its quota, so the limit exists before the engine writes a byte.
+3. Submit `hangar-db-<callsign>` (no published host port; registers `db-<callsign>` in Consul). A `raw_exec` prestart task in the job runs `scripts/db-quota.sh set` to create the data directory and apply its quota, so the limit exists before the engine writes a byte.
 4. Wait for Consul health, then run the engine driver's `bootstrap` (create the app database and its owner).
 5. Take a first backup, set `ready`. Optional "attach to" runs after this.
 
@@ -596,19 +598,19 @@ All state changes run on a `database` queue in the worker (§4.2). Every step is
 
 | Engine | Env injected | Role model | Backup | Point-in-time |
 |---|---|---|---|---|
-| Postgres | `DATABASE_URL`, `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, `PGDATABASE` | role owning its database | WAL-G, nightly base + continuous WAL (built for the platform DB) | yes |
-| MySQL | `DATABASE_URL` (`mysql://`), `MYSQL_*` | user with all privileges on its schema | nightly physical backup (xtrabackup) | later, with binlog archiving |
+| Postgres | `DATABASE_URL` plus `DATABASE_HOST`, `DATABASE_PORT`, `DATABASE_USER`, `DATABASE_PASSWORD`, `DATABASE_NAME` | role owning its database | WAL-G, nightly base + continuous WAL (built for the platform DB) | yes |
+| MySQL | `DATABASE_URL` (`mysql://`) plus the component variables | user with all privileges on its schema | nightly physical backup (xtrabackup) | later, with binlog archiving |
 | MariaDB | same as MySQL | same | nightly mariabackup | later |
 | Redis, Valkey | `REDIS_URL` (and `VALKEY_URL` for Valkey) | one ACL user per attachment, no dangerous commands | nightly RDB snapshot copied to the bucket | no |
 | MongoDB-compatible | `MONGODB_URI` | role scoped to its database | FerretDB runs against a Postgres with the DocumentDB extension in the same Nomad group; the Postgres side uses WAL-G | yes, from the backend |
 
 Each engine is a small driver (`bootstrap`, `createRole`, `dropRole`, `rotateRole`, `healthCheck`, `backup`, `restore`) and its own image built like `hangar-postgres` (engine plus tooling, pushed to the registry). Honest copy: the UI claims point-in-time recovery only where the table says yes.
 
-When an app has two databases of the same kind, `envName` defaults to `DATABASE_URL`, then asks for a name; Hangar never overwrites an existing variable.
+The extra variables take the name of the URL variable minus its `_URL` or `_URI` suffix, so an attachment called `ANALYTICS_URL` gets `ANALYTICS_HOST`, `ANALYTICS_PORT` and so on, and two databases never collide. When an app has two databases of the same kind, `envName` defaults to `DATABASE_URL`, then asks for a name; Hangar never overwrites an existing variable. `ENGINES` in `@hangar/types` holds each engine's versions, port, URL scheme, default variable names and minimum plan, and `DATABASE_PLANS` holds the three sizes.
 
 ### 11.5 Connectivity and security
 
-- Databases are reachable at `<callsign>.service.consul:<port>` from app containers. Nothing is published on the host.
+- Databases are reachable at `db-<callsign>.service.consul:<port>` from app containers. The `db-` prefix keeps them clear of the internal-only app names planned in §6.1. Nothing is published on the host.
 - Today any container on the bridge can reach any database port, so credentials are the only barrier. Per-attachment roles limit the damage; Consul Connect intentions (§8.6) or per-app networks close the gap in the cluster phase.
 - The admin credential never leaves Vault and the worker. Users see their attachment's connection details; the password is shown only after an explicit reveal, which writes an `AuditLog` row.
 - Backups are encrypted client-side (WAL-G libsodium or pgp key from Vault); the same is turned on for the platform Postgres.

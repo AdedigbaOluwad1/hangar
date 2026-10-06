@@ -22,18 +22,19 @@ enum BuildStatus {
 }
 
 model Deployment {
-  id          String           @id
-  callsign    String           @unique
-  status      DeploymentStatus @default(pending)
-  sourceType  String           @map("source_type")
-  sourceUrl   String?          @map("source_url")
-  imageTag    String?          @map("image_tag")
-  containerId String?          @map("container_id")
-  liveUrl     String?          @map("live_url")
-  userId      String?          @map("user_id")
-  createdAt   DateTime         @default(now()) @map("created_at")
-  updatedAt   DateTime         @updatedAt @map("updated_at")
-  builds      Build[]
+  id                  String               @id
+  callsign            String               @unique
+  status              DeploymentStatus     @default(pending)
+  sourceType          String               @map("source_type")
+  sourceUrl           String?              @map("source_url")
+  imageTag            String?              @map("image_tag")
+  containerId         String?              @map("container_id")
+  liveUrl             String?              @map("live_url")
+  userId              String?              @map("user_id")
+  createdAt           DateTime             @default(now()) @map("created_at")
+  updatedAt           DateTime             @updatedAt @map("updated_at")
+  builds              Build[]
+  databaseAttachments DatabaseAttachment[]
 
   @@map("deployments")
 }
@@ -69,4 +70,103 @@ model Log {
   build     Build    @relation(fields: [buildId], references: [id])
 
   @@map("logs")
+}
+
+enum DatabaseEngine {
+  postgres
+  mysql
+  mariadb
+  redis
+  valkey
+  ferretdb
+}
+
+enum DatabaseStatus {
+  provisioning
+  ready
+  degraded
+  stopped
+  failed
+  deleting
+}
+
+model Database {
+  id             String               @id
+  callsign       String               @unique
+  engine         DatabaseEngine
+  version        String
+  plan           String
+  status         DatabaseStatus       @default(provisioning)
+  statusReason   String?              @map("status_reason")
+  nomadJobId     String?              @map("nomad_job_id")
+  host           String
+  port           Int
+  volumePath     String?              @map("volume_path")
+  storageGb      Int                  @map("storage_gb")
+  projectId      Int                  @unique @default(autoincrement()) @map("project_id")
+  adminVaultPath String?              @map("admin_vault_path")
+  userId         String?              @map("user_id")
+  lastBackupAt   DateTime?            @map("last_backup_at")
+  createdAt      DateTime             @default(now()) @map("created_at")
+  updatedAt      DateTime             @updatedAt @map("updated_at")
+  deletedAt      DateTime?            @map("deleted_at")
+  attachments    DatabaseAttachment[]
+  backups        DatabaseBackup[]
+
+  @@map("databases")
+}
+
+enum AttachmentStatus {
+  attaching
+  attached
+  detaching
+  failed
+}
+
+model DatabaseAttachment {
+  id           String           @id
+  databaseId   String           @map("database_id")
+  deploymentId String           @map("deployment_id")
+  envName      String           @map("env_name")
+  username     String
+  vaultPath    String           @map("vault_path")
+  status       AttachmentStatus @default(attaching)
+  createdAt    DateTime         @default(now()) @map("created_at")
+  updatedAt    DateTime         @updatedAt @map("updated_at")
+  database     Database         @relation(fields: [databaseId], references: [id])
+  deployment   Deployment       @relation(fields: [deploymentId], references: [id])
+
+  @@unique([databaseId, deploymentId])
+  @@unique([deploymentId, envName])
+  @@map("database_attachments")
+}
+
+enum BackupKind {
+  scheduled
+  manual
+  final
+}
+
+enum BackupStatus {
+  running
+  completed
+  failed
+}
+
+model DatabaseBackup {
+  id             String       @id
+  databaseId     String       @map("database_id")
+  kind           BackupKind
+  status         BackupStatus @default(running)
+  sizeBytes      BigInt?      @map("size_bytes")
+  s3Key          String?      @map("s3_key")
+  restorableFrom DateTime?    @map("restorable_from")
+  restorableTo   DateTime?    @map("restorable_to")
+  error          String?
+  startedAt      DateTime     @default(now()) @map("started_at")
+  finishedAt     DateTime?    @map("finished_at")
+  database       Database     @relation(fields: [databaseId], references: [id])
+
+  @@index([databaseId, startedAt])
+  @@map("database_backups")
 }
