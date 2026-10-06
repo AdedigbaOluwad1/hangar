@@ -14,7 +14,12 @@ import { getDriver } from '../databases/driver'
 import { attachmentEnvKeys } from '../databases/env'
 import { databaseJobId } from '../databases/names'
 import { enqueueAttach, enqueueDetach } from '../databases/queue'
-import { AttachDatabaseBody, AttachmentIdParam, DatabaseAttachmentSchema } from '../schemas/databases'
+import {
+  AttachDatabaseBody,
+  AttachmentIdParam,
+  DatabaseAttachmentSchema,
+  DeploymentAttachmentListSchema,
+} from '../schemas/databases'
 import { DeploymentIdParam, ErrorSchema } from '../schemas/deployments'
 
 export const attachments = new OpenAPIHono({
@@ -30,6 +35,44 @@ export const attachments = new OpenAPIHono({
 function publicAttachment(a: { id: string; deploymentId: string; envName: string; status: 'attaching' | 'attached' | 'detaching' | 'failed'; createdAt: Date }) {
   return { id: a.id, deploymentId: a.deploymentId, envName: a.envName, status: a.status, createdAt: a.createdAt }
 }
+
+const listRoute = createRoute({
+  method: 'get',
+  path: '/{id}/attachments',
+  tags: ['Databases'],
+  summary: 'List the databases attached to an app',
+  request: { params: DeploymentIdParam },
+  responses: {
+    200: {
+      content: { 'application/json': { schema: DeploymentAttachmentListSchema } },
+      description: 'Attachments with the database they point at and the variables they manage',
+    },
+    404: {
+      content: { 'application/json': { schema: ErrorSchema } },
+      description: 'Not found',
+    },
+  },
+})
+
+attachments.openapi(listRoute, async (c) => {
+  const { id } = c.req.valid('param')
+  if (!(await getDeployment(id))) return c.json({ error: 'Not found' }, 404)
+
+  const rows = await listAttachmentsForDeployment(id)
+  const items = []
+  for (const row of rows) {
+    const database = await getDatabase(row.databaseId)
+    if (!database) continue
+    items.push({
+      ...publicAttachment(row),
+      databaseId: database.id,
+      databaseCallsign: database.callsign,
+      engine: database.engine,
+      variables: attachmentEnvKeys(database.engine, row.envName, getDriver(database.engine).appDatabase),
+    })
+  }
+  return c.json(items, 200)
+})
 
 const attachRoute = createRoute({
   method: 'post',

@@ -135,6 +135,13 @@ export interface DatabaseAttachment {
   createdAt: string
 }
 
+export interface DeploymentAttachment extends DatabaseAttachment {
+  databaseId: string
+  databaseCallsign: string
+  engine: DatabaseEngine
+  variables: string[]
+}
+
 export interface DatabaseBackup {
   id: string
   databaseId: string

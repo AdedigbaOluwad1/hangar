@@ -91,3 +91,12 @@ export const RestoreDatabaseBody = z
     time: z.string().datetime().optional().openapi({ example: '2026-10-06T08:30:41Z' }),
   })
   .openapi('RestoreDatabaseBody')
+
+export const DeploymentAttachmentSchema = DatabaseAttachmentSchema.extend({
+  databaseId: z.string().openapi({ example: 'db-a1b2c3d4' }),
+  databaseCallsign: z.string().openapi({ example: 'cobalt-heron' }),
+  engine: z.enum(Object.keys(ENGINES) as [keyof typeof ENGINES, ...(keyof typeof ENGINES)[]]),
+  variables: z.array(z.string()).openapi({ example: ['DATABASE_URL', 'DATABASE_HOST'] }),
+}).openapi('DeploymentAttachment')
+
+export const DeploymentAttachmentListSchema = z.array(DeploymentAttachmentSchema).openapi('DeploymentAttachmentList')

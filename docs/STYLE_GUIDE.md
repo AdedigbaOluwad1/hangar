@@ -258,6 +258,7 @@ Shared UI lives in `components/ui/` (shadcn, Base UI style `base-nova`, Hugeicon
 | `DatabaseList` | `databases` | empty state built in ("Hold empty") | `routes/dashboard.databases.tsx` |
 | `DatabaseForm` | — | pending "Creating…", inline error; engines not built yet are disabled with the "Coming" chip | `routes/dashboard.databases.new.tsx` |
 | `DatabaseActions` | `databaseId`, `callsign`, `status`, `backingUp` | Back up now (outline), Delete with typed-callsign confirm | `routes/dashboard.databases.$id.tsx` |
+| `DataPanel` | `deploymentId` | loading skeleton, dashed empty, attaching/detaching rows disable Detach; Add database and Detach open confirm dialogs | `routes/dashboard.deployments.$id.tsx` |
 | `BackupList` | `databaseId`, `backups`, `canRestore` | empty dashed panel; Restore confirm opens a new database | `routes/dashboard.databases.$id.tsx` |
 | Classes | `.panel`, `.chip`, `.chip-coming`, `.eyebrow`, `.display`, `.live-dot` | — | `app.css` |
 
@@ -294,7 +295,7 @@ Hooks: `useReveal`, `useCountUp`, `registerEases` (`lib/motion.ts`); `useAct`, `
 | `failed` | Failed | `alarm-400` | still; flight-path jet turns red and stops at the failed stage |
 | `stopped` | Stopped | `steel-500` | still; live card reads "Stood down." |
 
-Databases and backups reuse the same map through `databaseStatus(d)` and `backupStatus(b)`: `provisioning` (amber, pings), `ready` (green: the instance is reachable), `degraded` (`deck-300`), `deleting` (grey, pings), `backing-up` (amber, pings) and `complete` (grey: done, not live). Failed and stopped are shared.
+Databases and backups reuse the same map through `databaseStatus(d)` and `backupStatus(b)`: `provisioning` (amber, pings), `ready` (green: the instance is reachable), `degraded` (`deck-300`), `deleting` (grey, pings), `backing-up` (amber, pings), `complete` (grey: done, not live), and for attachments `attaching` (amber, pings), `attached` (grey) and `detaching` (grey, pings). Failed and stopped are shared.
 
 Map lives in `STATUS` (`lib/status.ts`). Jet tints in `deployment-list.tsx` (`JET_TONE`) mirror it.
 
@@ -490,7 +491,8 @@ Lore names places and moments; plain words name data. Eyebrows and section label
 | Create / deploy | `components/deploy-form.tsx`, `routes/dashboard.deployments.new.tsx` |
 | Create a database / choose from several `Select`s | `components/database-form.tsx` |
 | Destructive confirm with a typed name | `components/database-actions.tsx` |
-| Row actions on a list inside a panel | `components/backup-list.tsx` |
+| Row actions on a list inside a panel | `components/backup-list.tsx`, `components/data-panel.tsx` |
+| Form inside a confirm dialog | `components/data-panel.tsx` (attach) |
 | Sign in / single-field form | `routes/sign-in.tsx` (page head + one `.panel` form with the footer bar; a 401 anywhere redirects here via `root.tsx`) |
 | Redeploy | `components/deployment-actions.tsx` (`redeploy`) |
 | Rollback / choose from a list | `components/deployment-actions.tsx` (Base UI `Select`) |

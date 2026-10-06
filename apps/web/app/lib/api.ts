@@ -5,7 +5,9 @@ import type {
 	Health,
 	Database,
 	DatabaseDetail,
+	DatabaseAttachment,
 	DatabaseBackup,
+	DeploymentAttachment,
 	CreateDatabaseInput,
 } from '@hangar/types';
 
@@ -93,6 +95,19 @@ export const api = {
 		fetch(`${BASE}/databases/${id}`, { method: 'DELETE' }).then((r) => json(r)),
 
 	listBackups: (id: string): Promise<DatabaseBackup[]> => fetch(`${BASE}/databases/${id}/backups`).then((r) => json(r)),
+
+	listAttachments: (deploymentId: string): Promise<DeploymentAttachment[]> =>
+		fetch(`${BASE}/deployments/${deploymentId}/attachments`).then((r) => json(r)),
+
+	attachDatabase: (deploymentId: string, body: { databaseId: string; envName?: string }): Promise<DatabaseAttachment> =>
+		fetch(`${BASE}/deployments/${deploymentId}/attachments`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify(body),
+		}).then((r) => json(r)),
+
+	detachDatabase: (deploymentId: string, attachmentId: string): Promise<DatabaseAttachment> =>
+		fetch(`${BASE}/deployments/${deploymentId}/attachments/${attachmentId}`, { method: 'DELETE' }).then((r) => json(r)),
 
 	restoreDatabase: (id: string, backupId: string): Promise<Database> =>
 		fetch(`${BASE}/databases/${id}/restore`, {

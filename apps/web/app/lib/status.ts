@@ -78,6 +78,29 @@ export const STATUS: Record<string, StatusStyle> = {
 		glyph: 'text-steel-500',
 		pulse: true,
 	},
+	attaching: {
+		label: 'Attaching',
+		dot: 'bg-deck-400',
+		text: 'text-deck-300',
+		ring: 'border-deck-400/40',
+		glyph: 'text-deck-400',
+		pulse: true,
+	},
+	attached: {
+		label: 'Attached',
+		dot: 'bg-steel-400',
+		text: 'text-steel-300',
+		ring: 'border-steel-500/40',
+		glyph: 'text-steel-500',
+	},
+	detaching: {
+		label: 'Detaching',
+		dot: 'bg-steel-400',
+		text: 'text-steel-300',
+		ring: 'border-steel-500/40',
+		glyph: 'text-steel-500',
+		pulse: true,
+	},
 	'backing-up': {
 		label: 'Backing up',
 		dot: 'bg-deck-400',
@@ -125,3 +148,5 @@ export function backupStatus(b: Pick<DatabaseBackup, 'status'>): string {
 	if (b.status === 'completed') return 'complete';
 	return 'failed';
 }
+
+export const ACTIVE_ATTACHMENT_STATUSES = ['attaching', 'detaching'];
