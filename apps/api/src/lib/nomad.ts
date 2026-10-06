@@ -86,6 +86,15 @@ export async function submitJob(
   return res.json()
 }
 
+export async function getJobResources(deploymentId: string): Promise<{ cpu?: number; memoryMb?: number }> {
+  const NOMAD_ADDR = await getNomadAddr()
+  const res = await fetch(`${NOMAD_ADDR}/v1/job/hangar-${deploymentId}`, { headers: await nomadHeaders() })
+  if (!res.ok) return {}
+  const job = await res.json()
+  const resources = job?.TaskGroups?.[0]?.Tasks?.[0]?.Resources
+  return { cpu: resources?.CPU, memoryMb: resources?.MemoryMB }
+}
+
 export async function stopJob(deploymentId: string) {
   const NOMAD_ADDR = await getNomadAddr()
   const res = await fetch(

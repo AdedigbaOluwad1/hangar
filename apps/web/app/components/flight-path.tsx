@@ -26,7 +26,7 @@ function readFlight(lines: LogLine[], status?: string) {
 	let complete = status === 'running';
 
 	for (const { line } of lines) {
-		if (line.includes(PIPELINE_LOG.rollback)) {
+		if (line.includes(PIPELINE_LOG.rollback) || line.includes(PIPELINE_LOG.restart)) {
 			rollback = true;
 			reached = Math.max(reached, SCHEDULE);
 		}

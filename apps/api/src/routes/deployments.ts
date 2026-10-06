@@ -12,7 +12,20 @@ import {
   updateBuild,
   isCallsignTaken,
 } from '@hangar/db'
-import { getVault, deployQueue, stopJob, getJobStatus, registryFetch, manifestExists } from '../lib'
+import {
+  deployQueue,
+  stopJob,
+  getJobStatus,
+  getJobResources,
+  registryFetch,
+  manifestExists,
+  writeEnv,
+  listEnvKeys,
+  patchEnv,
+  validateEnv,
+  validatePatch,
+  EnvLimitError,
+} from '../lib'
 import { unpatchCaddy } from '../pipeline/caddy'
 import { generateCallsign } from '../lib/callsign'
 import {
@@ -29,6 +42,9 @@ import {
   TagsResponseSchema,
   RollbackBodySchema,
   RenameDeploymentBody,
+  EnvKeysSchema,
+  EnvPatchBody,
+  EnvPatchResponseSchema,
 } from '../schemas/deployments'
 
 export const deployments = new OpenAPIHono({
@@ -113,6 +129,11 @@ deployments.openapi(createRoute_, async (c) => {
     return c.json({ error: 'sourceUrl required for git deploys' }, 400)
   }
 
+  if (body.env && typeof body.env === 'object') {
+    const problem = validateEnv(body.env)
+    if (problem) return c.json({ error: problem }, 400)
+  }
+
   const deployment = await createDeployment({
     id: `dep-${nanoid(8).toLowerCase().replace(/[^a-z0-9-]/g, '')}`,
     callsign: await generateCallsign(isCallsignTaken),
@@ -121,10 +142,7 @@ deployments.openapi(createRoute_, async (c) => {
   })
 
   if (body.env && typeof body.env === 'object') {
-    const vault = getVault()
-    await vault.write(`hangar/data/deployments/${deployment.id}/env`, {
-      data: body.env,
-    })
+    await writeEnv(deployment.id, body.env)
   }
 
   const build = await createBuild({
@@ -215,6 +233,110 @@ deployments.openapi(deleteRoute, async (c) => {
     await updateBuild(deployment.latestBuild.id, { status: 'stopped' })
   }
   return c.json({ message: 'Deployment stopped' }, 200)
+})
+
+const getEnvRoute = createRoute({
+  method: 'get',
+  path: '/{id}/env',
+  tags: ['Deployments'],
+  summary: 'List environment variable names — values are never returned',
+  request: { params: DeploymentIdParam },
+  responses: {
+    200: {
+      content: { 'application/json': { schema: EnvKeysSchema } },
+      description: 'The variable names',
+    },
+    404: {
+      content: { 'application/json': { schema: ErrorSchema } },
+      description: 'Not found',
+    },
+  },
+})
+
+deployments.openapi(getEnvRoute, async (c) => {
+  const { id } = c.req.valid('param')
+  const deployment = await getDeployment(id)
+  if (!deployment) return c.json({ error: 'Not found' }, 404)
+  return c.json({ keys: await listEnvKeys(id) }, 200)
+})
+
+const patchEnvRoute = createRoute({
+  method: 'patch',
+  path: '/{id}/env',
+  tags: ['Deployments'],
+  summary: 'Set or remove environment variables and restart the app on its current image — no rebuild',
+  request: {
+    params: DeploymentIdParam,
+    body: {
+      required: true,
+      content: { 'application/json': { schema: EnvPatchBody } },
+    },
+  },
+  responses: {
+    200: {
+      content: { 'application/json': { schema: EnvPatchResponseSchema } },
+      description: 'Saved; says how the change reaches the running app',
+    },
+    400: {
+      content: { 'application/json': { schema: ErrorSchema } },
+      description: 'Invalid variable name or value',
+    },
+    404: {
+      content: { 'application/json': { schema: ErrorSchema } },
+      description: 'Not found',
+    },
+    409: {
+      content: { 'application/json': { schema: ErrorSchema } },
+      description: 'The app is mid-deploy; try again when it finishes',
+    },
+  },
+})
+
+deployments.openapi(patchEnvRoute, async (c) => {
+  const { id } = c.req.valid('param')
+  const patch = c.req.valid('json')
+
+  const problem = validatePatch(patch)
+  if (problem) return c.json({ error: problem }, 400)
+
+  const deployment = await getDeployment(id)
+  if (!deployment) return c.json({ error: 'Not found' }, 404)
+
+  const latest = deployment.latestBuild
+  if (latest?.status === 'deploying') {
+    return c.json({ error: 'A deployment is in progress. Try again when it finishes.' }, 409)
+  }
+
+  let keys: string[]
+  try {
+    keys = await patchEnv(id, patch)
+  } catch (err) {
+    if (err instanceof EnvLimitError) return c.json({ error: err.message }, 400)
+    throw err
+  }
+
+  if (latest?.status === 'building') {
+    return c.json({ keys, apply: 'in_flight' as const, build: null }, 200)
+  }
+
+  if (deployment.status !== 'running' || latest?.status !== 'running' || !deployment.imageTag) {
+    return c.json({ keys, apply: 'on_next_deploy' as const, build: null }, 200)
+  }
+
+  const build = await createBuild({
+    id: uuidv7(),
+    deploymentId: id,
+    trigger: 'restart',
+  })
+
+  await deployQueue.add('deploy', {
+    deploymentId: id,
+    buildId: build.id,
+    resources: await getJobResources(id).catch(() => ({})),
+    restartImageTag: deployment.imageTag,
+  })
+
+  return c.json({ keys, apply: 'restarted' as const, build }, 200)
 })
 
 const redeployRoute = createRoute({

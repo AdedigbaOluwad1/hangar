@@ -78,7 +78,7 @@ export const BuildSchema = z
       .enum(['building', 'deploying', 'running', 'failed', 'stopped'])
       .openapi({ example: 'running' }),
     trigger: z
-      .enum(['deploy', 'redeploy', 'rollback'])
+      .enum(['deploy', 'redeploy', 'rollback', 'restart'])
       .openapi({ example: 'deploy' }),
     rollbackOf: z.string().nullable().openapi({ example: '01966a1e-7c4f-7000-8000-1234567890ab' }),
     imageTag: z.string().nullable().openapi({ example: 'registry.service.consul:5000/hangar-dep-a1b2c3d4:01966a1e-...' }),
@@ -86,6 +86,30 @@ export const BuildSchema = z
     updatedAt: z.coerce.date().openapi({ example: '2024-01-01T00:00:00.000Z' }),
   })
   .openapi('Build')
+
+export const EnvKeysSchema = z
+  .object({
+    keys: z.array(z.string()).openapi({ example: ['DATABASE_URL', 'SESSION_SECRET'] }),
+  })
+  .openapi('EnvKeys')
+
+export const EnvPatchBody = z
+  .object({
+    set: z.record(z.string(), z.string()).optional().openapi({ example: { LOG_LEVEL: 'debug' } }),
+    unset: z.array(z.string()).optional().openapi({ example: ['OLD_FLAG'] }),
+  })
+  .openapi('EnvPatch')
+
+export const EnvPatchResponseSchema = z
+  .object({
+    keys: z.array(z.string()),
+    apply: z.enum(['restarted', 'in_flight', 'on_next_deploy']).openapi({
+      description:
+        'restarted: a new build restarts the app on its current image. in_flight: a build is running and will pick the change up when it deploys. on_next_deploy: the app is not running; the change applies on its next start.',
+    }),
+    build: BuildSchema.nullable(),
+  })
+  .openapi('EnvPatchResponse')
 
 export const BuildListSchema = z.array(BuildSchema).openapi('BuildList')
 

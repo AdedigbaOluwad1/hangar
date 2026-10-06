@@ -42,6 +42,7 @@ enum BuildTrigger {
   deploy
   redeploy
   rollback
+  restart
 }
 
 model Build {

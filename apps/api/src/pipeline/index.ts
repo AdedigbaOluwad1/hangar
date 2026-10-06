@@ -13,6 +13,7 @@ export async function runPipeline(
   options: {
     resources?: { cpu?: number; memoryMb?: number }
     rollbackImageTag?: string
+    restartImageTag?: string
   } = {}
 ) {
   let dir: string | undefined
@@ -20,10 +21,12 @@ export async function runPipeline(
     await trackBuildSecrets(deploymentId, buildId)
     let imageTag: string
 
-    if (options.rollbackImageTag) {
-      imageTag = options.rollbackImageTag
+    const reusedImageTag = options.rollbackImageTag ?? options.restartImageTag
+    if (reusedImageTag) {
+      imageTag = reusedImageTag
       await updateBuild(buildId, { status: 'deploying', imageTag })
-      await writeLog(buildId, 'system', `⏪ ${PIPELINE_LOG.rollback}: ${imageTag}`)
+      const marker = options.rollbackImageTag ? `⏪ ${PIPELINE_LOG.rollback}` : `🔄 ${PIPELINE_LOG.restart}`
+      await writeLog(buildId, 'system', `${marker}: ${imageTag}`)
     } else {
       await updateBuild(buildId, { status: 'building' })
       dir = await clone(deploymentId, buildId)

@@ -261,6 +261,7 @@ Changes that only affect runtime (env, resources, replicas, health check) **rede
 - Secret values are write-only in the UI after saving (shown as `••••`, replaceable, never returned by the API).
 - Bulk edit as `.env` text; import from a file.
 - Shared variable groups at the org level, referenced by name.
+- **Status:** `GET`/`PATCH /deployments/:id/env` exist. A patch merges `set`/`unset` into the Vault secret with check-and-set, rejects `PORT`, `HANGAR_*` and `NOMAD_*`, and returns how the change lands: `restarted` (a `restart` build reuses the current image and the running job's CPU and memory), `in_flight` (a build is running and reads the variables when it deploys), or `on_next_deploy` (the app isn't running). It answers 409 while a build is deploying. Still to do: the dashboard editor, versioning and history, secret flags, and delivering values through a Vault template instead of the job spec (below).
 - Hangar-provided variables injected automatically: `PORT`, `HANGAR_DEPLOYMENT_ID`, `HANGAR_COMMIT_SHA`, `HANGAR_ENVIRONMENT`, `HANGAR_PUBLIC_URL`.
 
 ### 6.3 Config as code: `hangar.toml`
@@ -645,6 +646,8 @@ Follows the dashboard template (guide §11) and the existing form and detail pat
 | 3 | Redis and Valkey drivers, ACL users, RDB backups | slice 1 |
 | 4 | FerretDB with its Postgres backend, `MONGODB_URI` | slice 1 |
 | 5 | Resize, point-in-time recovery for MySQL and MariaDB, scheduled quota alerts | slices 2–4 |
+
+**Prerequisite for slice 1: deliver env through Vault, not the job spec.** `lib/nomad.ts` puts user env values straight into the job's `Env`, so anyone who can read the job (`nomad job inspect`) sees every secret, and a database password would be no different. User jobs should instead get a Nomad `template` that reads their own Vault path. The shared `nomad-workloads` Vault role can read all of `hangar/data/*`, so user jobs need a separate role whose policy is limited to `hangar/data/deployments/<their job id>/*` (bound through the `nomad_job_id` claim) before any user job gets a `vault` block.
 
 **Done when (slice 1)**
 - [ ] Creating a Postgres database from the dashboard reaches `ready` with no manual steps and takes a first backup.

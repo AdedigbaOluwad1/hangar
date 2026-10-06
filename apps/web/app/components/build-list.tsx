@@ -7,6 +7,7 @@ const TRIGGER: Record<string, string> = {
 	deploy: 'Launch',
 	redeploy: 'Redeploy',
 	rollback: 'Rollback',
+	restart: 'Restart',
 };
 
 export function BuildList({

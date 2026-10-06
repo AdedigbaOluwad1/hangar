@@ -47,6 +47,19 @@ export interface CreateDeploymentInput {
   resources?: Resources
 }
 
+export interface EnvPatchInput {
+  set?: Record<string, string>
+  unset?: string[]
+}
+
+export type EnvApply = 'restarted' | 'in_flight' | 'on_next_deploy'
+
+export interface EnvResponse {
+  keys: string[]
+  apply?: EnvApply
+  build?: Build | null
+}
+
 export interface Health {
   status: string
   allocId: string | null
@@ -68,5 +81,6 @@ export const PIPELINE_LOG = {
   live: 'Live at',
   complete: 'Deployment complete',
   rollback: 'Rolling back to image',
+  restart: 'Restarting on image',
   failed: 'Pipeline failed',
 } as const

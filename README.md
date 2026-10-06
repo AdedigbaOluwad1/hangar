@@ -776,6 +776,8 @@ curl -s "http://<host-ip>/api/deployments/<id>/logs?buildId=<buildId>"
 | `GET` | `/deployments/:id/health` | Check deployment health via Nomad |
 | `GET` | `/deployments/:id/tags` | List available image tags for rollback (last 3, newest first) |
 | `POST` | `/deployments/:id/rollback` | Roll back to a previous image tag — skips build |
+| `GET` | `/deployments/:id/env` | List environment variable names (values are never returned) |
+| `PATCH` | `/deployments/:id/env` | `{ set, unset }` — change variables and restart the app on its current image, no rebuild |
 
 ### Builds
 
@@ -856,6 +858,7 @@ Rollback skips clone and build entirely — it reuses the existing image from th
 | `deploy` | Initial deployment |
 | `redeploy` | Triggered via redeploy endpoint |
 | `rollback` | Triggered via rollback endpoint; `rollbackOf` contains the original build ID |
+| `restart` | Triggered by an env change on a running app; reuses the current image |
 
 ### Resource Limits
 
@@ -888,6 +891,7 @@ enum BuildTrigger {
   deploy
   redeploy
   rollback
+  restart
 }
 
 model Deployment {

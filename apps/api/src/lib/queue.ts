@@ -15,6 +15,7 @@ interface DeployJobData {
   buildId: string
   resources?: { cpu?: number; memoryMb?: number }
   rollbackImageTag?: string
+  restartImageTag?: string
 }
 
 export const deployQueue = new Queue<DeployJobData>('deployments', { connection })
@@ -23,6 +24,7 @@ new Worker<DeployJobData>('deployments', async (job) => {
   await runPipeline(job.data.deploymentId, job.data.buildId, {
     resources: job.data.resources,
     rollbackImageTag: job.data.rollbackImageTag,
+    restartImageTag: job.data.restartImageTag,
   })
 }, { connection, concurrency: 1 })
 
