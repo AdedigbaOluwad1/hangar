@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { DATABASE_PLANS } from '@hangar/types'
 import { getDriver } from './driver'
 import { postgresDriver, quoteIdentifier } from './postgres'
-import { attachmentEnv, connectionUrl, envPrefix } from './env'
+import { attachmentEnv, attachmentEnvKeys, connectionUrl, envPrefix } from './env'
 import { buildCleanupJobSpec, buildDatabaseJobSpec, planResources, quotaHeadroomMb, quotaLimits } from './job'
 import { checkCapacity, resolveRequest } from './admission'
 import { adminVaultPath, databaseFqdn, databaseHost, databaseJobId, databaseVolumeDir, walgVaultPath } from './names'
@@ -135,4 +135,13 @@ test('refuses a database that would not fit on the volume', () => {
   assert.equal(checkCapacity(13, 5, 20), null)
   assert.match(checkCapacity(14, 5, 20)!, /5 GB requested, 4 GB free of 18 GB/)
   assert.equal(checkCapacity(100, 50, null), null)
+})
+
+test('lists the variables an attachment manages so detach removes exactly those', () => {
+  const conn = { host: 'db-x.service.consul', port: 5432 }
+  const role = { username: 'a_1', password: 'pw' }
+  const keys = attachmentEnvKeys('postgres', 'DATABASE_URL', 'app')
+  assert.deepEqual(keys.sort(), Object.keys(attachmentEnv('postgres', 'DATABASE_URL', conn, role, 'app')).sort())
+  assert.ok(keys.includes('DATABASE_NAME'))
+  assert.ok(!attachmentEnvKeys('valkey', 'CACHE_URL', null).includes('CACHE_NAME'))
 })

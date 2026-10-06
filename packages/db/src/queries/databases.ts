@@ -86,6 +86,10 @@ export async function listAttachmentsForDeployment(deploymentId: string): Promis
   return prisma.databaseAttachment.findMany({ where: { deploymentId }, orderBy: { createdAt: 'asc' } })
 }
 
+export async function listAttachmentsByStatus(statuses: AttachmentStatus[]): Promise<DatabaseAttachment[]> {
+  return prisma.databaseAttachment.findMany({ where: { status: { in: statuses } } })
+}
+
 export async function listAttachmentsForDatabase(databaseId: string): Promise<DatabaseAttachment[]> {
   return prisma.databaseAttachment.findMany({ where: { databaseId }, orderBy: { createdAt: 'asc' } })
 }

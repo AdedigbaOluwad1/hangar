@@ -11,7 +11,11 @@ import {
   updateDeployment,
   updateBuild,
   isCallsignTaken,
+  listAttachmentsForDeployment,
+  updateAttachment,
 } from '@hangar/db'
+import { enqueueDetach } from '../databases/queue'
+import { managedEnvKeys } from '../databases/managed'
 import {
   deployQueue,
   stopJob,
@@ -25,6 +29,7 @@ import {
   validateEnv,
   validatePatch,
   EnvLimitError,
+  applyEnvChange,
 } from '../lib'
 import { unpatchCaddy } from '../pipeline/caddy'
 import { generateCallsign } from '../lib/callsign'
@@ -224,6 +229,11 @@ deployments.openapi(deleteRoute, async (c) => {
   if (!deployment) return c.json({ error: 'Not found' }, 404)
 
   try { await stopJob(id) } catch { }
+  for (const attachment of await listAttachmentsForDeployment(id)) {
+    if (attachment.status === 'detaching') continue
+    await updateAttachment(attachment.id, { status: 'detaching' })
+    await enqueueDetach(attachment.id)
+  }
   if (deployment.liveUrl) {
     try { await unpatchCaddy(id) } catch { }
   }
@@ -302,6 +312,10 @@ deployments.openapi(patchEnvRoute, async (c) => {
   const deployment = await getDeployment(id)
   if (!deployment) return c.json({ error: 'Not found' }, 404)
 
+  const managed = await managedEnvKeys(id)
+  const touched = [...Object.keys(patch.set ?? {}), ...(patch.unset ?? [])].find((key) => managed.has(key))
+  if (touched) return c.json({ error: `${touched} is managed by a database attachment. Detach the database to remove it.` }, 400)
+
   const latest = deployment.latestBuild
   if (latest?.status === 'deploying') {
     return c.json({ error: 'A deployment is in progress. Try again when it finishes.' }, 409)
@@ -315,28 +329,8 @@ deployments.openapi(patchEnvRoute, async (c) => {
     throw err
   }
 
-  if (latest?.status === 'building') {
-    return c.json({ keys, apply: 'in_flight' as const, build: null }, 200)
-  }
-
-  if (deployment.status !== 'running' || latest?.status !== 'running' || !deployment.imageTag) {
-    return c.json({ keys, apply: 'on_next_deploy' as const, build: null }, 200)
-  }
-
-  const build = await createBuild({
-    id: uuidv7(),
-    deploymentId: id,
-    trigger: 'restart',
-  })
-
-  await deployQueue.add('deploy', {
-    deploymentId: id,
-    buildId: build.id,
-    resources: await getJobResources(id).catch(() => ({})),
-    restartImageTag: deployment.imageTag,
-  })
-
-  return c.json({ keys, apply: 'restarted' as const, build }, 200)
+  const { apply, build } = await applyEnvChange(deployment)
+  return c.json({ keys, apply, build }, 200)
 })
 
 const redeployRoute = createRoute({

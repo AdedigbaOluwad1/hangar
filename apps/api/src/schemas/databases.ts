@@ -49,3 +49,20 @@ export const CreateDatabaseBody = z
     plan: z.enum(DATABASE_PLAN_KEYS as [string, ...string[]]).openapi({ example: 'small' }),
   })
   .openapi('CreateDatabaseBody')
+
+export const AttachmentIdParam = z.object({
+  id: z.string().openapi({ param: { name: 'id', in: 'path' }, example: 'dep-a1b2c3d4' }),
+  attachmentId: z.string().openapi({ param: { name: 'attachmentId', in: 'path' }, example: 'att-a1b2c3d4' }),
+})
+
+export const AttachDatabaseBody = z
+  .object({
+    databaseId: z.string().openapi({ example: 'db-a1b2c3d4' }),
+    envName: z
+      .string()
+      .regex(/^[A-Z][A-Z0-9_]*_(URL|URI)$/, 'Use capital letters, digits and underscores, ending in _URL or _URI')
+      .max(100)
+      .optional()
+      .openapi({ example: 'DATABASE_URL' }),
+  })
+  .openapi('AttachDatabaseBody')

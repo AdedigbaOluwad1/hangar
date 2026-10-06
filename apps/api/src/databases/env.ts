@@ -39,3 +39,8 @@ export function attachmentEnv(
   }
   return vars
 }
+
+export function attachmentEnvKeys(engine: DatabaseEngine, envName: string, database: string | null): string[] {
+  const placeholder = { username: '', password: '' }
+  return Object.keys(attachmentEnv(engine, envName, { host: '', port: 0 }, placeholder, database))
+}

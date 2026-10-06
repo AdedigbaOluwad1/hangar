@@ -1,6 +1,6 @@
 import { OpenAPIHono } from '@hono/zod-openapi'
 import { swaggerUI } from '@hono/swagger-ui'
-import { auth, logs, deployments, databases } from './routes'
+import { auth, logs, deployments, databases, attachments } from './routes'
 import { allowedOrigins, requireAuth } from './lib/auth'
 import { cors } from 'hono/cors'
 import './databases/queue'
@@ -15,6 +15,7 @@ app.get('/docs', swaggerUI({ url: '/openapi.json' }))
 app.route('/auth', auth)
 app.route('/deployments', deployments)
 app.route('/deployments', logs)
+app.route('/deployments', attachments)
 app.route('/databases', databases)
 
 app.doc('/openapi.json', {
