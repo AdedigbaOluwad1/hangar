@@ -64,7 +64,7 @@ All workloads run as Nomad jobs with the Podman driver. There is no Docker daemo
 
 | Job | Type | Port | Notes |
 |---|---|---|---|
-| `hangar-registry` | service | 5000 (static) | Local OCI registry |
+| `hangar-registry` | service | 5000 (static) | Local OCI registry; TLS with a private CA and htpasswd auth |
 | `hangar-postgres` | service | 5432 (static) | App database |
 | `hangar-redis` | service | 6379 (static) | Queue + pub/sub |
 | `hangar-buildkit` | service | 1234 (static) | Image builder |
@@ -156,6 +156,7 @@ Secrets stored in Vault at `hangar/data/config`:
 - `nomad_addr` — Nomad API address reachable from containers
 - `consul_addr` — Consul API address reachable from containers
 - `nomad_token` — Nomad deploy ACL token (least-privilege; used by API to submit user deployment jobs)
+- `registry_user`, `registry_password`, `registry_htpasswd` — credentials for the image registry (the htpasswd line is mounted into the registry; the API and BuildKit client get the user and password)
 - `admin_token` — the shared admin token (temporary until accounts land). The dashboard signs in with it at `/sign-in`, and the API swaps it for a signed `HttpOnly` session cookie (`POST /auth/login`, 12 hours). Scripts can send it as `Authorization: Bearer`. Every route except `/health`, `/auth/login` and `/auth/logout` requires one or the other. Read it with `vault kv get -field=admin_token hangar/config`
 
 ### Nomad ACL Token Hierarchy
@@ -430,27 +431,31 @@ dns_servers = ["10.88.0.1"]
 EOF
 ```
 
-Configure the local registry as insecure:
+Create the registry CA and certificate (`setup.yml` does this for you), then make Podman trust it:
 
 ```bash
-sudo mkdir -p /etc/containers/registries.conf.d
-sudo tee /etc/containers/registries.conf.d/local.conf << 'EOF'
-[[registry]]
-location = "registry.service.consul:5000"
-insecure = true
-EOF
+sudo apt-get install -y apache2-utils
+sudo mkdir -p /opt/hangar/certs/registry && cd /opt/hangar/certs/registry
+sudo openssl req -x509 -newkey rsa:4096 -nodes -keyout ca.key -out ca.crt -days 3650 -subj "/CN=Hangar Registry CA"
+sudo openssl req -newkey rsa:2048 -nodes -keyout registry.key -out registry.csr -subj "/CN=registry.service.consul"
+sudo bash -c 'openssl x509 -req -in registry.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out registry.crt -days 3650 \
+  -extfile <(printf "subjectAltName=DNS:registry.service.consul,DNS:localhost,IP:127.0.0.1\nextendedKeyUsage=serverAuth\n")'
+sudo chmod 600 ca.key registry.key
+sudo mkdir -p /etc/containers/certs.d/registry.service.consul:5000
+sudo cp ca.crt /etc/containers/certs.d/registry.service.consul:5000/ca.crt
 ```
 
-Configure BuildKit:
+Configure BuildKit to trust the same CA:
 
 ```bash
 sudo mkdir -p /etc/buildkit
 sudo tee /etc/buildkit/buildkitd.toml << 'EOF'
 [registry."registry.service.consul:5000"]
-  http = true
-  insecure = true
+  ca = ["/etc/buildkit/registry-ca.crt"]
 EOF
 ```
+
+The registry user and password live in Vault (`registry_user`, `registry_password`, `registry_htpasswd`); `vault-init.yml` seeds them and writes root's Podman credentials to `/root/.docker/config.json`.
 
 Enable the rootful Podman socket:
 
@@ -487,6 +492,10 @@ CONSUL_ADDR=http://10.88.0.1:8500
 CADDY_ADMIN_URL=http://caddy.service.consul:2019
 BUILDKIT_HOST=tcp://buildkit.service.consul:1234
 REGISTRY_HOST=registry.service.consul:5000
+REGISTRY_USER=hangar
+REGISTRY_PASSWORD=$(vault kv get -field=registry_password hangar/config)
+NODE_EXTRA_CA_CERTS=/opt/hangar/certs/registry/ca.crt
+DOCKER_CONFIG=$HOME/.hangar-docker
 VAULT_TOKEN=$(sudo cat /etc/vault.d/keys/init.json | jq -r '.root_token')
 NOMAD_TOKEN=$(sudo cat /etc/nomad.d/bootstrap.json | jq -r '.SecretID')
 EOF
@@ -504,7 +513,17 @@ DATABASE_URL=postgresql://hangar:$(vault kv get -field=postgres_password hangar/
 EOF
 ```
 
-Both files are gitignored. Never commit them.
+`buildctl` reads registry credentials from `DOCKER_CONFIG`, so create that file once (and again whenever the registry password changes):
+
+```bash
+mkdir -p ~/.hangar-docker
+cat > ~/.hangar-docker/config.json << EOF
+{"auths":{"registry.service.consul:5000":{"auth":"$(printf 'hangar:%s' "$(vault kv get -field=registry_password hangar/config)" | base64 -w0)"}}}
+EOF
+chmod 600 ~/.hangar-docker/config.json
+```
+
+Both `.env.local` files are gitignored. Never commit them.
 
 ---
 
@@ -578,6 +597,10 @@ CONSUL_ADDR=http://10.88.0.1:8500
 CADDY_ADMIN_URL=http://caddy.service.consul:2019
 BUILDKIT_HOST=tcp://buildkit.service.consul:1234
 REGISTRY_HOST=registry.service.consul:5000
+REGISTRY_USER=hangar
+REGISTRY_PASSWORD=$(vault kv get -field=registry_password hangar/config)
+NODE_EXTRA_CA_CERTS=/opt/hangar/certs/registry/ca.crt
+DOCKER_CONFIG=$HOME/.hangar-docker
 VAULT_TOKEN=$(sudo cat /etc/vault.d/keys/init.json | jq -r '.root_token')
 NOMAD_TOKEN=$(sudo cat /etc/nomad.d/bootstrap.json | jq -r '.SecretID')
 EOF

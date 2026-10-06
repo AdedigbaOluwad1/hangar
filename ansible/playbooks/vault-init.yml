@@ -165,14 +165,47 @@
         admin_token=$(keep admin_token)
         postgres_password=$(keep postgres_password)
         redis_password=$(keep redis_password)
+        registry_password=$(keep registry_password)
+        registry_htpasswd=$(keep registry_htpasswd)
+        if [ -z "$registry_password" ] || [ -z "$registry_htpasswd" ]; then
+          registry_password=${registry_password:-$(openssl rand -hex 24)}
+          registry_htpasswd=$(printf '%s' "$registry_password" | htpasswd -niB hangar)
+        fi
         vault kv put hangar/config \
           nomad_addr="{{ nomad_addr }}" \
           consul_addr="{{ consul_addr }}" \
           nomad_token="{{ nomad_token.stdout }}" \
           admin_token="${admin_token:-$(openssl rand -hex 32)}" \
           postgres_password="${postgres_password:-$(openssl rand -hex 24)}" \
-          redis_password="${redis_password:-$(openssl rand -hex 24)}"
+          redis_password="${redis_password:-$(openssl rand -hex 24)}" \
+          registry_user="hangar" \
+          registry_password="$registry_password" \
+          registry_htpasswd="$registry_htpasswd"
       changed_when: false
+      no_log: true
+
+    - name: Read registry password
+      shell: |
+        VAULT_ADDR=https://127.0.0.1:8200 VAULT_SKIP_VERIFY=true \
+          VAULT_TOKEN={{ vault_root_token }} \
+          vault kv get -field=registry_password hangar/config
+      register: registry_password
+      changed_when: false
+      no_log: true
+
+    - name: Create root Docker config directory
+      become: true
+      file:
+        path: /root/.docker
+        state: directory
+        mode: "0700"
+
+    - name: Give Podman the registry credentials
+      become: true
+      copy:
+        dest: /root/.docker/config.json
+        content: '{"auths":{"registry.service.consul:5000":{"auth":"{{ ("hangar:" ~ registry_password.stdout) | b64encode }}"}}}'
+        mode: "0600"
       no_log: true
 
     # ── Nomad workload identity JWT auth ─────────────────────────────────────

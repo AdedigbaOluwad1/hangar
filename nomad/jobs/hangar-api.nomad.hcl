@@ -22,6 +22,7 @@ job "hangar-api" {
         image      = "registry.service.consul:5000/hangar-api:latest"
         force_pull = true
         ports      = ["http"]
+        volumes    = ["/opt/hangar/certs/registry/ca.crt:/etc/hangar/registry-ca.crt:ro"]
       }
 
       identity {
@@ -44,6 +45,8 @@ NOMAD_TOKEN={{ .Data.data.nomad_token }}
 ADMIN_TOKEN={{ .Data.data.admin_token }}
 DATABASE_URL=postgresql://hangar:{{ .Data.data.postgres_password }}@postgres.service.consul:5432/hangar
 REDIS_URL=redis://:{{ .Data.data.redis_password }}@redis.service.consul:6379
+REGISTRY_USER={{ .Data.data.registry_user }}
+REGISTRY_PASSWORD={{ .Data.data.registry_password }}
 {{- end }}
 BUILDKIT_HOST=tcp://buildkit.service.consul:1234
 REGISTRY_HOST=registry.service.consul:5000
@@ -53,7 +56,19 @@ EOT
         change_mode = "restart"
       }
 
+      template {
+        data        = <<EOT
+{{- with secret "hangar/data/config" -}}
+{"auths":{"registry.service.consul:5000":{"auth":"{{ printf "%s:%s" .Data.data.registry_user .Data.data.registry_password | base64Encode }}"}}}
+{{- end }}
+EOT
+        destination = "secrets/docker/config.json"
+        change_mode = "restart"
+      }
+
       env {
+        NODE_EXTRA_CA_CERTS = "/etc/hangar/registry-ca.crt"
+        DOCKER_CONFIG       = "/secrets/docker"
         VAULT_ADDR        = "https://10.88.0.1:8200"
         CADDY_ADMIN_URL   = "http://caddy.service.consul:2019"
         VAULT_SKIP_VERIFY = "true"

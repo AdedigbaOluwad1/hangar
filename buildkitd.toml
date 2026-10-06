@@ -1,3 +1,2 @@
 [registry."registry.service.consul:5000"]
-  http = true
-  insecure = true
+  ca = ["/etc/buildkit/registry-ca.crt"]

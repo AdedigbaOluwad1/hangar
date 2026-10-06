@@ -224,14 +224,56 @@
         state: directory
         mode: "0755"
 
-    - name: Configure local registry as insecure
+    - name: Remove the insecure local registry setting
+      become: true
+      file:
+        path: /etc/containers/registries.conf.d/local.conf
+        state: absent
+
+    # ── Registry TLS ─────────────────────────────────────────────────────────
+
+    - name: Install htpasswd for registry credentials
+      become: true
+      apt:
+        name: apache2-utils
+        state: present
+
+    - name: Create registry certificate directory
+      become: true
+      file:
+        path: /opt/hangar/certs/registry
+        state: directory
+        mode: "0755"
+
+    - name: Generate registry CA and server certificate
+      become: true
+      shell: |
+        set -e
+        openssl req -x509 -newkey rsa:4096 -nodes -keyout ca.key -out ca.crt -days 3650 -subj "/CN=Hangar Registry CA"
+        openssl req -newkey rsa:2048 -nodes -keyout registry.key -out registry.csr -subj "/CN=registry.service.consul"
+        openssl x509 -req -in registry.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out registry.crt -days 3650 \
+          -extfile <(printf 'subjectAltName=DNS:registry.service.consul,DNS:localhost,IP:127.0.0.1\nextendedKeyUsage=serverAuth\n')
+        rm -f registry.csr
+        chmod 600 ca.key registry.key
+        chmod 644 ca.crt registry.crt
+      args:
+        chdir: /opt/hangar/certs/registry
+        creates: /opt/hangar/certs/registry/registry.crt
+        executable: /bin/bash
+
+    - name: Create Podman certificate directory for the registry
+      become: true
+      file:
+        path: "/etc/containers/certs.d/registry.service.consul:5000"
+        state: directory
+        mode: "0755"
+
+    - name: Trust the registry CA in Podman
       become: true
       copy:
-        dest: /etc/containers/registries.conf.d/local.conf
-        content: |
-          [[registry]]
-          location = "registry.service.consul:5000"
-          insecure = true
+        src: /opt/hangar/certs/registry/ca.crt
+        dest: "/etc/containers/certs.d/registry.service.consul:5000/ca.crt"
+        remote_src: true
         mode: "0644"
 
     # ── BuildKit config (daemon runs as Nomad job, only toml needed on host) ─
@@ -249,8 +291,7 @@
         dest: /etc/buildkit/buildkitd.toml
         content: |
           [registry."registry.service.consul:5000"]
-            http = true
-            insecure = true
+            ca = ["/etc/buildkit/registry-ca.crt"]
         mode: "0644"
 
     # ── Hangar Data Directories ──────────────────────────────────────────────

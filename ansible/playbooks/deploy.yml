@@ -78,7 +78,7 @@
 
     - name: Push API image
       become: true
-      shell: podman push {{ registry }}/hangar-api:latest --tls-verify=false
+      shell: podman push {{ registry }}/hangar-api:latest
 
     - name: Build web image
       become: true
@@ -92,7 +92,7 @@
 
     - name: Push web image
       become: true
-      shell: podman push {{ registry }}/hangar-web:latest --tls-verify=false
+      shell: podman push {{ registry }}/hangar-web:latest
 
     # ── Redeploy API ──────────────────────────────────────────────────────────
 

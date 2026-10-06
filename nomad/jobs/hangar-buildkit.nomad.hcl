@@ -43,6 +43,7 @@ job "hangar-buildkit" {
         ]
         volumes = [
           "/etc/buildkit/buildkitd.toml:/etc/buildkit/buildkitd.toml",
+          "/opt/hangar/certs/registry/ca.crt:/etc/buildkit/registry-ca.crt:ro",
           "/opt/hangar/data/buildkit:/var/lib/buildkit",
         ]
       }

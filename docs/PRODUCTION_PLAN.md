@@ -88,10 +88,10 @@ POST /deployments → Postgres rows → BullMQ (concurrency 1, inside the API pr
 - **Log hygiene:** a single `writeLog` path that masks known secret values (env vars, tokens) before persisting or emitting.
 
 **Done when**
-- [ ] `curl http://<public-ip>:2019/config/` times out from outside the host.
-- [ ] Every API route except `/health` returns 401 without a token.
-- [ ] No plaintext credential remains in `nomad/jobs/*.hcl` or the repo.
-- [ ] The registry rejects unauthenticated pushes.
+- [x] `curl http://<public-ip>:2019/config/` times out from outside the host.
+- [x] Every API route except `/health` returns 401 without a token.
+- [x] No plaintext credential remains in `nomad/jobs/*.hcl` or the repo.
+- [x] The registry rejects unauthenticated pushes.
 
 ---
 

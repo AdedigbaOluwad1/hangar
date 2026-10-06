@@ -12,7 +12,7 @@ import {
   updateBuild,
   isCallsignTaken,
 } from '@hangar/db'
-import { getVault, deployQueue, stopJob, getJobStatus } from '../lib'
+import { getVault, deployQueue, stopJob, getJobStatus, registryFetch, manifestExists } from '../lib'
 import { unpatchCaddy } from '../pipeline/caddy'
 import { generateCallsign } from '../lib/callsign'
 import {
@@ -308,7 +308,7 @@ deployments.openapi(tagsRoute, async (c) => {
   if (!deployment) return c.json({ error: 'Not found' }, 404)
 
   const registryHost = process.env.REGISTRY_HOST ?? 'registry.hangar.local:5000'
-  const res = await fetch(`http://${registryHost}/v2/hangar-${id}/tags/list`)
+  const res = await registryFetch(registryHost, `hangar-${id}/tags/list`)
   if (!res.ok) return c.json({ tags: [] }, 200)
 
   const { tags } = await res.json() as { tags: string[] | null }
@@ -359,15 +359,7 @@ deployments.openapi(rollbackRoute, async (c) => {
   if (!deployment) return c.json({ error: 'Not found' }, 404)
 
   const registryHost = process.env.REGISTRY_HOST ?? 'registry.hangar.local:5000'
-  const checkRes = await fetch(
-    `http://${registryHost}/v2/hangar-${id}/manifests/${tag}`,
-    {
-      headers: {
-        Accept:
-          'application/vnd.docker.distribution.manifest.v2+json, application/vnd.oci.image.manifest.v1+json',
-      },
-    }
-  )
+  const checkRes = await manifestExists(registryHost, `hangar-${id}`, tag)
   if (!checkRes.ok) return c.json({ error: `Tag ${tag} not found in registry` }, 400)
 
   const build = await createBuild({
