@@ -5,6 +5,7 @@ import {
   getDatabase,
   isDatabaseCallsignTaken,
   listAttachmentsForDatabase,
+  listDatabases,
   reservedStorageGb,
   updateDatabase,
 } from '@hangar/db'
@@ -14,7 +15,7 @@ import { checkCapacity, resolveRequest } from '../databases/admission'
 import { getDriver } from '../databases/driver'
 import { databaseHost } from '../databases/names'
 import { enqueueDeprovision, enqueueProvision } from '../databases/queue'
-import { CreateDatabaseBody, DatabaseIdParam, DatabaseSchema } from '../schemas/databases'
+import { CreateDatabaseBody, DatabaseDetailSchema, DatabaseIdParam, DatabaseListSchema, DatabaseSchema } from '../schemas/databases'
 import { ErrorSchema } from '../schemas/deployments'
 
 export const databases = new OpenAPIHono({
@@ -31,6 +32,59 @@ function storageCapacityGb(): number | null {
   const value = parseInt(process.env.HANGAR_DB_CAPACITY_GB ?? '', 10)
   return Number.isFinite(value) && value > 0 ? value : null
 }
+
+function publicAttachment(a: { id: string; deploymentId: string; envName: string; status: 'attaching' | 'attached' | 'detaching' | 'failed'; createdAt: Date }) {
+  return { id: a.id, deploymentId: a.deploymentId, envName: a.envName, status: a.status, createdAt: a.createdAt }
+}
+
+function publicDatabase<T extends { adminVaultPath: string | null; nomadJobId: string | null; volumePath: string | null; projectId: number; userId: string | null; deletedAt: Date | null }>(row: T) {
+  const { adminVaultPath, nomadJobId, volumePath, projectId, userId, deletedAt, ...rest } = row
+  return rest
+}
+
+const listRoute = createRoute({
+  method: 'get',
+  path: '/',
+  tags: ['Databases'],
+  summary: 'List managed databases',
+  responses: {
+    200: {
+      content: { 'application/json': { schema: DatabaseListSchema } },
+      description: 'Array of databases with their attachments',
+    },
+  },
+})
+
+databases.openapi(listRoute, async (c) => {
+  const rows = await listDatabases()
+  return c.json(rows.map((row) => ({ ...publicDatabase(row), attachments: row.attachments.map(publicAttachment) })), 200)
+})
+
+const getOneRoute = createRoute({
+  method: 'get',
+  path: '/{id}',
+  tags: ['Databases'],
+  summary: 'Get a managed database',
+  request: { params: DatabaseIdParam },
+  responses: {
+    200: {
+      content: { 'application/json': { schema: DatabaseDetailSchema } },
+      description: 'The database with its attachments',
+    },
+    404: {
+      content: { 'application/json': { schema: ErrorSchema } },
+      description: 'Not found',
+    },
+  },
+})
+
+databases.openapi(getOneRoute, async (c) => {
+  const { id } = c.req.valid('param')
+  const database = await getDatabase(id)
+  if (!database) return c.json({ error: 'Not found' }, 404)
+  const attachments = await listAttachmentsForDatabase(id)
+  return c.json({ ...publicDatabase(database), attachments: attachments.map(publicAttachment) }, 200)
+})
 
 const createRoute_ = createRoute({
   method: 'post',
@@ -86,7 +140,7 @@ databases.openapi(createRoute_, async (c) => {
 
   await enqueueProvision(database.id)
 
-  return c.json(database, 202)
+  return c.json(publicDatabase(database), 202)
 })
 
 const deleteRoute = createRoute({
@@ -128,5 +182,5 @@ databases.openapi(deleteRoute, async (c) => {
   const deleting = await updateDatabase(id, { status: 'deleting', statusReason: null })
   await enqueueDeprovision(id)
 
-  return c.json(deleting, 202)
+  return c.json(publicDatabase(deleting), 202)
 })

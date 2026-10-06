@@ -26,6 +26,22 @@ export const DatabaseSchema = z
   })
   .openapi('Database')
 
+export const DatabaseAttachmentSchema = z
+  .object({
+    id: z.string(),
+    deploymentId: z.string().openapi({ example: 'dep-a1b2c3d4' }),
+    envName: z.string().openapi({ example: 'DATABASE_URL' }),
+    status: z.enum(['attaching', 'attached', 'detaching', 'failed']),
+    createdAt: z.coerce.date(),
+  })
+  .openapi('DatabaseAttachment')
+
+export const DatabaseDetailSchema = DatabaseSchema.extend({
+  attachments: z.array(DatabaseAttachmentSchema),
+}).openapi('DatabaseDetail')
+
+export const DatabaseListSchema = z.array(DatabaseDetailSchema).openapi('DatabaseList')
+
 export const CreateDatabaseBody = z
   .object({
     engine: z.enum(Object.keys(ENGINES) as [keyof typeof ENGINES, ...(keyof typeof ENGINES)[]]).openapi({ example: 'postgres' }),
