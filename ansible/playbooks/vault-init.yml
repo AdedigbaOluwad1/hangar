@@ -165,6 +165,7 @@
         admin_token=$(keep admin_token)
         postgres_password=$(keep postgres_password)
         redis_password=$(keep redis_password)
+        fresh() { current=$(keep "$1"); if [ -n "$current" ]; then echo "$current"; else openssl rand -hex "$2"; fi; }
         registry_password=$(keep registry_password)
         registry_htpasswd=$(keep registry_htpasswd)
         if [ -z "$registry_password" ] || [ -z "$registry_htpasswd" ]; then
@@ -180,7 +181,11 @@
           redis_password="${redis_password:-$(openssl rand -hex 24)}" \
           registry_user="hangar" \
           registry_password="$registry_password" \
-          registry_htpasswd="$registry_htpasswd"
+          registry_htpasswd="$registry_htpasswd" \
+          s3_admin_access_key="$(fresh s3_admin_access_key 10)" \
+          s3_admin_secret_key="$(fresh s3_admin_secret_key 24)" \
+          walg_access_key="$(fresh walg_access_key 10)" \
+          walg_secret_key="$(fresh walg_secret_key 24)"
       changed_when: false
       no_log: true
 

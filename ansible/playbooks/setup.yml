@@ -306,6 +306,7 @@
         mode: "0755"
       loop:
         - { path: registry, owner: "{{ ansible_user_id }}" }
+        - { path: seaweedfs, owner: "{{ ansible_user_id }}" }
         - { path: buildkit, owner: "{{ ansible_user_id }}" }
         - { path: caddy, owner: "{{ ansible_user_id }}" }
         - { path: postgres, owner: "999" }
@@ -321,6 +322,7 @@
         recurse: yes
       loop:
         - { path: registry, owner: "{{ ansible_user_id }}" }
+        - { path: seaweedfs, owner: "{{ ansible_user_id }}" }
         - { path: buildkit, owner: "{{ ansible_user_id }}" }
         - { path: caddy, owner: "{{ ansible_user_id }}" }
         - { path: postgres, owner: "999" }

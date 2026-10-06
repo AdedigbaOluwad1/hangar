@@ -106,6 +106,8 @@ POST /deployments → Postgres rows → BullMQ (concurrency 1, inside the API pr
 | C. Credentials | Vault **database secrets engine** issues short-lived Postgres roles to the API | No static DB password anywhere |
 | D. HA (with the cluster) | **Patroni** with Consul as its DCS (already in the stack), one synchronous replica on a second `data` node; clients follow `primary.postgres.service.consul` | Automatic failover; RTO under a minute |
 
+**Status:** Step A is built in the sandbox (`hangar-postgres` image with WAL-G, `hangar-seaweedfs` as the S3 stand-in, nightly `hangar-postgres-backup`, restore drill in `docs/runbooks/restore-postgres.md`). Production needs the Object Storage endpoint and keys swapped in for SeaweedFS, and the drill repeated on a fresh node.
+
 Managed Postgres stays an option (Step D could be "move to managed"); the plan keeps the connection string as the only coupling, so swapping is a config change.
 
 **Migrations:** `prisma migrate deploy` runs as a one-shot Nomad batch job before each API rollout, never at API startup, so only one process migrates.

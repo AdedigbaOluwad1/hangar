@@ -65,7 +65,9 @@ All workloads run as Nomad jobs with the Podman driver. There is no Docker daemo
 | Job | Type | Port | Notes |
 |---|---|---|---|
 | `hangar-registry` | service | 5000 (static) | Local OCI registry; TLS with a private CA and htpasswd auth |
-| `hangar-postgres` | service | 5432 (static) | App database |
+| `hangar-postgres` | service | 5432 (static) | App database; WAL archived continuously to the backup bucket |
+| `hangar-postgres-backup` | batch (periodic) | none | Nightly base backup at 02:00 UTC, 14-day retention (`docs/runbooks/restore-postgres.md`) |
+| `hangar-seaweedfs` | service | none (Consul DNS only) | S3-compatible store for backups; Hetzner Object Storage replaces it in production |
 | `hangar-redis` | service | 6379 (static) | Queue + pub/sub |
 | `hangar-buildkit` | service | 1234 (static) | Image builder |
 | `hangar-api` | service | 3001 (static) | Hono API server |
@@ -157,6 +159,8 @@ Secrets stored in Vault at `hangar/data/config`:
 - `consul_addr` — Consul API address reachable from containers
 - `nomad_token` — Nomad deploy ACL token (least-privilege; used by API to submit user deployment jobs)
 - `registry_user`, `registry_password`, `registry_htpasswd` — credentials for the image registry (the htpasswd line is mounted into the registry; the API and BuildKit client get the user and password)
+- `s3_admin_access_key`, `s3_admin_secret_key` — S3 admin identity, used only to create the backup bucket
+- `walg_access_key`, `walg_secret_key` — S3 identity for WAL-G, limited to the `hangar-backups` bucket
 - `admin_token` — the shared admin token (temporary until accounts land). The dashboard signs in with it at `/sign-in`, and the API swaps it for a signed `HttpOnly` session cookie (`POST /auth/login`, 12 hours). Scripts can send it as `Authorization: Bearer`. Every route except `/health`, `/auth/login` and `/auth/logout` requires one or the other. Read it with `vault kv get -field=admin_token hangar/config`
 
 ### Nomad ACL Token Hierarchy

@@ -157,19 +157,7 @@ deploy_job() {
   fi
 }
 
-# ── Helper: keep the Postgres role password in step with Vault ───────────────
-# POSTGRES_PASSWORD only applies when the data directory is first created.
-
-sync_postgres_password() {
-  local pw container
-  pw=$(VAULT_ADDR=https://127.0.0.1:8200 VAULT_SKIP_VERIFY=true \
-    VAULT_TOKEN="$(sudo cat /etc/vault.d/keys/init.json | jq -r '.root_token')" \
-    vault kv get -field=postgres_password hangar/config)
-  container=$(sudo podman ps -q --filter name=postgres | head -1)
-  echo "ALTER USER hangar PASSWORD '$pw'" | \
-    sudo podman exec -i "$container" psql -U hangar -d hangar -v ON_ERROR_STOP=1 -q
-  echo "✅ Postgres password matches Vault"
-}
+source "$SCRIPT_DIR/scripts/data-layer.sh"
 
 # ── 1. Infrastructure setup ───────────────────────────────────────────────────
 
@@ -200,8 +188,13 @@ echo ""
 echo "🚀 Deploying Nomad infrastructure jobs..."
 
 deploy_job "$NOMAD_JOBS_DIR/hangar-registry.nomad.hcl"  "registry"
+build_postgres_image
+deploy_job "$NOMAD_JOBS_DIR/hangar-seaweedfs.nomad.hcl" "seaweedfs"
+ensure_backup_bucket
 deploy_job "$NOMAD_JOBS_DIR/hangar-postgres.nomad.hcl"  "postgres"
 sync_postgres_password
+deploy_job "$NOMAD_JOBS_DIR/hangar-postgres-backup.nomad.hcl" ""
+force_first_backup
 deploy_job "$NOMAD_JOBS_DIR/hangar-redis.nomad.hcl"     "redis"
 deploy_job "$NOMAD_JOBS_DIR/hangar-buildkit.nomad.hcl"  "buildkit"
 

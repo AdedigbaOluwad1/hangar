@@ -1,33 +1,33 @@
-job "hangar-postgres" {
+job "hangar-postgres-backup" {
   datacenters = ["dc1"]
-  type        = "service"
+  type        = "batch"
 
-  group "postgres" {
+  periodic {
+    crons            = ["0 2 * * *"]
+    prohibit_overlap = true
+  }
+
+  group "backup" {
     count = 1
 
     network {
       dns {
         servers = ["10.88.0.1"]
       }
-      port "db" {
-        static = 5432
-        to     = 5432
-      }
     }
 
-    task "postgres" {
+    task "backup" {
       driver = "podman"
+      user   = "70"
 
       config {
         image   = "registry.service.consul:5000/hangar-postgres:16"
-        ports   = ["db"]
+        command = "/bin/sh"
         args = [
-          "postgres",
-          "-c", "archive_mode=on",
-          "-c", "archive_command=wal-g wal-push \"%p\"",
-          "-c", "archive_timeout=60",
+          "-c",
+          "wal-g backup-push /var/lib/postgresql/data && wal-g delete before FIND_FULL \"$(date -u -d @$(( $(date +%s) - 14 * 86400 )) +%Y-%m-%dT%H:%M:%SZ)\" --confirm && wal-g backup-list",
         ]
-        volumes = ["/opt/hangar/data/postgres:/var/lib/postgresql/data"]
+        volumes = ["/opt/hangar/data/postgres:/var/lib/postgresql/data:ro"]
       }
 
       identity {
@@ -44,19 +44,20 @@ job "hangar-postgres" {
       template {
         data        = <<EOT
 {{- with secret "hangar/data/config" -}}
-POSTGRES_PASSWORD={{ .Data.data.postgres_password }}
+PGPASSWORD={{ .Data.data.postgres_password }}
 AWS_ACCESS_KEY_ID={{ .Data.data.walg_access_key }}
 AWS_SECRET_ACCESS_KEY={{ .Data.data.walg_secret_key }}
 {{- end }}
 EOT
-        destination = "secrets/postgres.env"
+        destination = "secrets/backup.env"
         env         = true
-        change_mode = "restart"
       }
 
       env {
-        POSTGRES_USER           = "hangar"
-        POSTGRES_DB             = "hangar"
+        PGHOST                  = "postgres.service.consul"
+        PGPORT                  = "5432"
+        PGUSER                  = "hangar"
+        PGDATABASE              = "hangar"
         WALG_S3_PREFIX          = "s3://hangar-backups/postgres"
         AWS_ENDPOINT            = "http://seaweedfs.service.consul:8333"
         AWS_S3_FORCE_PATH_STYLE = "true"
@@ -66,21 +67,6 @@ EOT
       resources {
         cpu    = 256
         memory = 256
-      }
-
-      service {
-        name         = "postgres"
-        port         = "db"
-        address_mode = "driver"
-        provider     = "consul"
-
-        check {
-          type         = "tcp"
-          port         = "db"
-          interval     = "10s"
-          timeout      = "3s"
-          address_mode = "driver"
-        }
       }
     }
   }

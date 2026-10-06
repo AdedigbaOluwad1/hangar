@@ -13,6 +13,7 @@ done
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ANSIBLE_DIR="$SCRIPT_DIR/ansible"
 NOMAD_JOBS_DIR="$SCRIPT_DIR/nomad/jobs"
+source "$SCRIPT_DIR/scripts/data-layer.sh"
 
 # ── Load .env if present ─────────────────────────────────────────────────────
 
@@ -147,7 +148,13 @@ echo ""
 echo "🚀 Deploying infrastructure jobs..."
 
 deploy_job "$NOMAD_JOBS_DIR/hangar-registry.nomad.hcl"  "registry"
+build_postgres_image
+deploy_job "$NOMAD_JOBS_DIR/hangar-seaweedfs.nomad.hcl" "seaweedfs"
+ensure_backup_bucket
 deploy_job "$NOMAD_JOBS_DIR/hangar-postgres.nomad.hcl"  "postgres"
+sync_postgres_password
+deploy_job "$NOMAD_JOBS_DIR/hangar-postgres-backup.nomad.hcl" ""
+force_first_backup
 deploy_job "$NOMAD_JOBS_DIR/hangar-redis.nomad.hcl"     "redis"
 deploy_job "$NOMAD_JOBS_DIR/hangar-buildkit.nomad.hcl"  "buildkit"
 deploy_job "$NOMAD_JOBS_DIR/hangar-caddy.nomad.hcl"     "caddy"
