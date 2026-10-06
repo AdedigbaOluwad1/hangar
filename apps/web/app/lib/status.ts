@@ -1,4 +1,4 @@
-import type { Deployment } from '@hangar/types';
+import type { Database, DatabaseBackup, Deployment } from '@hangar/types';
 
 interface StatusStyle {
 	label: string;
@@ -48,6 +48,51 @@ export const STATUS: Record<string, StatusStyle> = {
 		ring: 'border-alarm-400/40',
 		glyph: 'text-alarm-400',
 	},
+	provisioning: {
+		label: 'Provisioning',
+		dot: 'bg-deck-400',
+		text: 'text-deck-300',
+		ring: 'border-deck-400/40',
+		glyph: 'text-deck-400',
+		pulse: true,
+	},
+	ready: {
+		label: 'Ready',
+		dot: 'bg-signal-400',
+		text: 'text-signal-400',
+		ring: 'border-signal-400/40',
+		glyph: 'text-signal-400',
+	},
+	degraded: {
+		label: 'Degraded',
+		dot: 'bg-deck-300',
+		text: 'text-deck-300',
+		ring: 'border-deck-300/40',
+		glyph: 'text-deck-300',
+	},
+	deleting: {
+		label: 'Deleting',
+		dot: 'bg-steel-400',
+		text: 'text-steel-300',
+		ring: 'border-steel-500/40',
+		glyph: 'text-steel-500',
+		pulse: true,
+	},
+	'backing-up': {
+		label: 'Backing up',
+		dot: 'bg-deck-400',
+		text: 'text-deck-300',
+		ring: 'border-deck-400/40',
+		glyph: 'text-deck-400',
+		pulse: true,
+	},
+	complete: {
+		label: 'Complete',
+		dot: 'bg-steel-400',
+		text: 'text-steel-300',
+		ring: 'border-steel-500/40',
+		glyph: 'text-steel-500',
+	},
 	stopped: {
 		label: 'Stopped',
 		dot: 'bg-steel-500',
@@ -67,4 +112,16 @@ export function deploymentStatus(d: Pick<Deployment, 'status' | 'latestBuild'>):
 	const build = d.latestBuild?.status;
 	if (d.status === 'stopped' && build === 'running') return 'stopped';
 	return build ?? d.status;
+}
+
+export const ACTIVE_DATABASE_STATUSES = ['provisioning', 'deleting'];
+
+export function databaseStatus(d: Pick<Database, 'status'>): string {
+	return d.status;
+}
+
+export function backupStatus(b: Pick<DatabaseBackup, 'status'>): string {
+	if (b.status === 'running') return 'backing-up';
+	if (b.status === 'completed') return 'complete';
+	return 'failed';
 }

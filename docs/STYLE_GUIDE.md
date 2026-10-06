@@ -255,6 +255,10 @@ Shared UI lives in `components/ui/` (shadcn, Base UI style `base-nova`, Hugeicon
 | `DeploymentActions` | `deploymentId`, `currentImageTag`, `status` | — | `routes/dashboard.deployments.$id.tsx` |
 | `CallsignTitle` | `deployment` | view / editing / invalid / saving | `routes/dashboard.deployments.$id.tsx` |
 | `DeployForm` | — | pending "Launching…", inline error | `routes/dashboard.deployments.new.tsx` |
+| `DatabaseList` | `databases` | empty state built in ("Hold empty") | `routes/dashboard.databases.tsx` |
+| `DatabaseForm` | — | pending "Creating…", inline error; engines not built yet are disabled with the "Coming" chip | `routes/dashboard.databases.new.tsx` |
+| `DatabaseActions` | `databaseId`, `callsign`, `status`, `backingUp` | Back up now (outline), Delete with typed-callsign confirm | `routes/dashboard.databases.$id.tsx` |
+| `BackupList` | `databaseId`, `backups`, `canRestore` | empty dashed panel; Restore confirm opens a new database | `routes/dashboard.databases.$id.tsx` |
 | Classes | `.panel`, `.chip`, `.chip-coming`, `.eyebrow`, `.display`, `.live-dot` | — | `app.css` |
 
 Hooks: `useReveal`, `useCountUp`, `registerEases` (`lib/motion.ts`); `useAct`, `pinLength`, `flushActs`, `jumpToAct` (`story/motion.ts`); `deploymentStatus` (`lib/status.ts`); `cn` (`lib/utils.ts`).
@@ -289,6 +293,8 @@ Hooks: `useReveal`, `useCountUp`, `registerEases` (`lib/motion.ts`); `useAct`, `
 | `running` | Running | `signal-400` | still; live URL card turns green, page glow turns green |
 | `failed` | Failed | `alarm-400` | still; flight-path jet turns red and stops at the failed stage |
 | `stopped` | Stopped | `steel-500` | still; live card reads "Stood down." |
+
+Databases and backups reuse the same map through `databaseStatus(d)` and `backupStatus(b)`: `provisioning` (amber, pings), `ready` (green: the instance is reachable), `degraded` (`deck-300`), `deleting` (grey, pings), `backing-up` (amber, pings) and `complete` (grey: done, not live). Failed and stopped are shared.
 
 Map lives in `STATUS` (`lib/status.ts`). Jet tints in `deployment-list.tsx` (`JET_TONE`) mirror it.
 
@@ -392,7 +398,7 @@ Every dashboard page stacks the same layers. Copy them from the nearest page rat
 
 | Layer | Recipe | Reference |
 |---|---|---|
-| Header | `Header`, sticky, `h-16`, `bg-night-950/85 backdrop-blur-md border-b border-line`, content `max-w-6xl px-5 md:px-8`. Mark + wordmark left, nav (`Deployments`, `Docs`), at most one action right | `components/header.tsx` |
+| Header | `Header`, sticky, `h-16`, `bg-night-950/85 backdrop-blur-md border-b border-line`, content `max-w-6xl px-5 md:px-8`. Mark + wordmark left, nav (`Deployments`, `Databases`, `Docs`), at most one action right | `components/header.tsx` |
 | Atmosphere | One absolute layer behind the page head: `.blueprint-grid` masked to fade downward (`[mask-image:linear-gradient(to_bottom,black,transparent)]`, `h-[420px]`–`h-[480px]`) plus one `blur-3xl` glow blob at `/10` opacity. Glow is `deck-400`, or `signal-400` when the subject is live | `routes/dashboard.tsx`, `routes/dashboard.deployments.$id.tsx` |
 | Main | `relative mx-auto max-w-6xl px-5 md:px-8 pb-20`, `pt-10`–`pt-16` | All three routes |
 | Back link | Only on pages below the list: mono 11px uppercase `tracking-[0.16em] text-steel-400`, `ArrowLeft01Icon`, hover `steel-100` | `routes/dashboard.deployments.$id.tsx`, `dashboard.deployments.new.tsx` |
@@ -482,6 +488,9 @@ Lore names places and moments; plain words name data. Eyebrows and section label
 | Doing this | Start from |
 |---|---|
 | Create / deploy | `components/deploy-form.tsx`, `routes/dashboard.deployments.new.tsx` |
+| Create a database / choose from several `Select`s | `components/database-form.tsx` |
+| Destructive confirm with a typed name | `components/database-actions.tsx` |
+| Row actions on a list inside a panel | `components/backup-list.tsx` |
 | Sign in / single-field form | `routes/sign-in.tsx` (page head + one `.panel` form with the footer bar; a 401 anywhere redirects here via `root.tsx`) |
 | Redeploy | `components/deployment-actions.tsx` (`redeploy`) |
 | Rollback / choose from a list | `components/deployment-actions.tsx` (Base UI `Select`) |

@@ -28,6 +28,7 @@ export interface EngineSpec {
   extraEnvNames: readonly string[]
   minPlan: DatabasePlan
   pitr: boolean
+  available: boolean
 }
 
 export const ENGINES: Record<DatabaseEngine, EngineSpec> = {
@@ -41,6 +42,7 @@ export const ENGINES: Record<DatabaseEngine, EngineSpec> = {
     extraEnvNames: [],
     minPlan: 'small',
     pitr: true,
+    available: true,
   },
   mysql: {
     label: 'MySQL',
@@ -52,6 +54,7 @@ export const ENGINES: Record<DatabaseEngine, EngineSpec> = {
     extraEnvNames: [],
     minPlan: 'small',
     pitr: false,
+    available: false,
   },
   mariadb: {
     label: 'MariaDB',
@@ -63,6 +66,7 @@ export const ENGINES: Record<DatabaseEngine, EngineSpec> = {
     extraEnvNames: [],
     minPlan: 'small',
     pitr: false,
+    available: false,
   },
   redis: {
     label: 'Redis',
@@ -74,6 +78,7 @@ export const ENGINES: Record<DatabaseEngine, EngineSpec> = {
     extraEnvNames: [],
     minPlan: 'small',
     pitr: false,
+    available: false,
   },
   valkey: {
     label: 'Valkey',
@@ -85,6 +90,7 @@ export const ENGINES: Record<DatabaseEngine, EngineSpec> = {
     extraEnvNames: ['VALKEY_URL'],
     minPlan: 'small',
     pitr: false,
+    available: false,
   },
   ferretdb: {
     label: 'MongoDB-compatible (FerretDB)',
@@ -96,6 +102,7 @@ export const ENGINES: Record<DatabaseEngine, EngineSpec> = {
     extraEnvNames: [],
     minPlan: 'medium',
     pitr: true,
+    available: false,
   },
 }
 
@@ -110,19 +117,22 @@ export interface Database {
   host: string
   port: number
   storageGb: number
+  restoreSourceId: string | null
   lastBackupAt: string | null
   createdAt: string
   updatedAt: string
 }
 
+export interface DatabaseDetail extends Database {
+  attachments: DatabaseAttachment[]
+}
+
 export interface DatabaseAttachment {
   id: string
-  databaseId: string
   deploymentId: string
   envName: string
   status: AttachmentStatus
   createdAt: string
-  updatedAt: string
 }
 
 export interface DatabaseBackup {
@@ -142,7 +152,6 @@ export interface CreateDatabaseInput {
   engine: DatabaseEngine
   version?: string
   plan: DatabasePlan
-  attachTo?: { deploymentId: string; envName?: string }
 }
 
 export interface AttachDatabaseInput {

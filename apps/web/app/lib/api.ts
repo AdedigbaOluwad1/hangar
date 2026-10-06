@@ -1,4 +1,13 @@
-import type { Deployment, Build, CreateDeploymentInput, Health } from '@hangar/types';
+import type {
+	Deployment,
+	Build,
+	CreateDeploymentInput,
+	Health,
+	Database,
+	DatabaseDetail,
+	DatabaseBackup,
+	CreateDatabaseInput,
+} from '@hangar/types';
 
 const BASE = typeof window !== 'undefined' ? '/api' : 'http://api:3001';
 
@@ -68,4 +77,30 @@ export const api = {
 
 	getBuild: (id: string, buildId: string): Promise<Build> =>
 		fetch(`${BASE}/deployments/${id}/builds/${buildId}`).then((r) => json(r)),
+
+	listDatabases: (): Promise<DatabaseDetail[]> => fetch(`${BASE}/databases`).then((r) => json(r)),
+
+	getDatabase: (id: string): Promise<DatabaseDetail> => fetch(`${BASE}/databases/${id}`).then((r) => json(r)),
+
+	createDatabase: (body: CreateDatabaseInput): Promise<Database> =>
+		fetch(`${BASE}/databases`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify(body),
+		}).then((r) => json(r)),
+
+	deleteDatabase: (id: string): Promise<Database> =>
+		fetch(`${BASE}/databases/${id}`, { method: 'DELETE' }).then((r) => json(r)),
+
+	listBackups: (id: string): Promise<DatabaseBackup[]> => fetch(`${BASE}/databases/${id}/backups`).then((r) => json(r)),
+
+	restoreDatabase: (id: string, backupId: string): Promise<Database> =>
+		fetch(`${BASE}/databases/${id}/restore`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ backupId }),
+		}).then((r) => json(r)),
+
+	backUpNow: (id: string): Promise<DatabaseBackup> =>
+		fetch(`${BASE}/databases/${id}/backups`, { method: 'POST' }).then((r) => json(r)),
 };
