@@ -536,9 +536,135 @@ scaling {
 
 ---
 
-## 11. Later: managed add-ons
+## 11. Managed databases
 
-Once the data layer and clusters are stable, Hangar can offer **managed Postgres and Redis for user apps**: one-click add-ons running on the `data` pool with pinned volumes, WAL-G backups and connection strings injected as env vars (`DATABASE_URL`). This builds on Phase 1's tooling and Phase 3's env var injection and is out of scope until both ship.
+Users add a database to their apps from the dashboard. Hangar runs it as its own Nomad job on pinned storage, backs it up, and injects the connection string into the app. It builds on Phase 1's WAL-G tooling and on Phase 3's runtime-only redeploy (§6.1), and ships in slices (§11.8).
+
+### 11.1 Decisions
+
+| Topic | Decision |
+|---|---|
+| Isolation | **One instance per database** (Nomad job `hangar-db-<callsign>`, own volume, own resources). Clean isolation, simple backup and restore, no noisy neighbours, at 256–512 MB per instance. A shared server per engine can come later as a cheap tier. |
+| Engines | Postgres, MySQL, MariaDB, Redis, Valkey, and a MongoDB-compatible database served by **FerretDB**. Supported majors live in one table in `@hangar/types` (`ENGINES`): Postgres 16, MySQL 8.4, MariaDB 11.4, Redis 8, Valkey 9, FerretDB 2. Confirm each at build time. |
+| MongoDB | FerretDB (Apache-2.0) for now. The enterprise edition will run real MongoDB, which is SSPL and has obligations when offered as a service to others; revisit with the licence in hand. The app-facing contract (`MONGODB_URI`) stays the same, so the swap is an engine change. |
+| Redis and Valkey | Both offered. Valkey is BSD; Redis 8 is AGPLv3, which is fine unmodified. |
+| Credentials | **Hangar-managed roles.** The admin credential lives in Vault KV (`hangar/data/databases/<id>/admin`) and is read only by the worker. Each attachment gets its own role and credential (`hangar/data/databases/<id>/attachments/<attachmentId>`). Vault's database secrets engine is not used for apps: short leases don't suit credentials baked into env vars. |
+| Restore | **Always into a new database** (from a backup or a point in time). Never overwrites in place. |
+| Outside access | None in v1. Databases are reachable only on the platform network (§11.5). |
+| First slice | Postgres end to end, then MySQL and MariaDB, then Redis and Valkey, then FerretDB. |
+
+### 11.2 Model
+
+| Entity | Key fields | Notes |
+|---|---|---|
+| `Database` | `id`, `callsign` (unique), `engine`, `version`, `plan`, `status`, `nomadJobId`, `host` (Consul name), `port`, `volumePath`, `storageGb`, `adminVaultPath`, `lastBackupAt`, `deletedAt`, `orgId`/`userId` | Lives independently of apps; deleting an app never deletes data |
+| `DatabaseAttachment` | `id`, `databaseId`, `deploymentId`, `envName`, `username`, `vaultPath`, `status` | Many to many. `envName` is unique per deployment |
+| `DatabaseBackup` | `id`, `databaseId`, `kind` (`scheduled`, `manual`, `final`), `status`, `sizeBytes`, `startedAt`, `finishedAt`, `s3Key`, `restorableFrom`, `restorableTo` | `restorable*` is filled only for engines with point-in-time recovery |
+
+`Database.status`: `provisioning` → `ready` ⇄ `degraded`, `stopped`, `failed`, `deleting`. Attachment status: `attaching`, `attached`, `detaching`, `failed`.
+
+### 11.3 Flows
+
+All state changes run on a `database` queue in the worker (§4.2). Every step is idempotent and retried, and on worker start any database stuck mid-operation is re-driven or marked `failed` with a reason.
+
+**Create**
+1. `POST /databases` validates engine, version, plan and name, writes the row as `provisioning`, enqueues `provision`.
+2. Generate the admin credential into Vault; create the data directory.
+3. Submit `hangar-db-<callsign>` (no published host port; registers `<callsign>` in Consul).
+4. Wait for Consul health, then run the engine driver's `bootstrap` (create the app database and its owner).
+5. Take a first backup, set `ready`. Optional "attach to" runs after this.
+
+**Attach**
+1. `POST /deployments/:id/attachments { databaseId, envName }`; the database must be `ready`.
+2. Driver `createRole` makes a role limited to that database (never a superuser); the credential goes to Vault.
+3. Register the credential with log masking. Restart the app on its current image with the new env (no rebuild).
+4. The app's job spec is built from the user's env plus attachment env read from Vault at submit time. The attachment variables are read-only in the UI, labelled "managed by `<callsign>`". A clash with a user variable is rejected.
+
+**Detach**: drop the role, remove the variables, restart the app. **Delete app**: detaches everything first.
+
+**Back up now / scheduled**: nightly per database from a parameterised batch job `hangar-db-backup`, staggered so backups don't pile up. Retention follows the plan (7 days small, 14 days larger).
+
+**Restore**: pick a backup or, for engines with point-in-time recovery, a time. A new database is provisioned from it. The user attaches apps to it or swaps the env name when ready.
+
+**Rotate credentials**: the driver sets a new password, Vault is updated, attached apps restart. **Resize**: CPU and memory restart the job; storage is a larger volume plus a migration (not in the first slice).
+
+**Delete**: typed-name confirmation, blocked while attached unless "detach all" is chosen. A `final` backup is kept for 7 days, and the volume is removed after that.
+
+### 11.4 Engines
+
+| Engine | Env injected | Role model | Backup | Point-in-time |
+|---|---|---|---|---|
+| Postgres | `DATABASE_URL`, `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, `PGDATABASE` | role owning its database | WAL-G, nightly base + continuous WAL (built for the platform DB) | yes |
+| MySQL | `DATABASE_URL` (`mysql://`), `MYSQL_*` | user with all privileges on its schema | nightly physical backup (xtrabackup) | later, with binlog archiving |
+| MariaDB | same as MySQL | same | nightly mariabackup | later |
+| Redis, Valkey | `REDIS_URL` (and `VALKEY_URL` for Valkey) | one ACL user per attachment, no dangerous commands | nightly RDB snapshot copied to the bucket | no |
+| MongoDB-compatible | `MONGODB_URI` | role scoped to its database | FerretDB runs against a Postgres with the DocumentDB extension in the same Nomad group; the Postgres side uses WAL-G | yes, from the backend |
+
+Each engine is a small driver (`bootstrap`, `createRole`, `dropRole`, `rotateRole`, `healthCheck`, `backup`, `restore`) and its own image built like `hangar-postgres` (engine plus tooling, pushed to the registry). Honest copy: the UI claims point-in-time recovery only where the table says yes.
+
+When an app has two databases of the same kind, `envName` defaults to `DATABASE_URL`, then asks for a name; Hangar never overwrites an existing variable.
+
+### 11.5 Connectivity and security
+
+- Databases are reachable at `<callsign>.service.consul:<port>` from app containers. Nothing is published on the host.
+- Today any container on the bridge can reach any database port, so credentials are the only barrier. Per-attachment roles limit the damage; Consul Connect intentions (§8.6) or per-app networks close the gap in the cluster phase.
+- The admin credential never leaves Vault and the worker. Users see their attachment's connection details; the password is shown only after an explicit reveal, which writes an `AuditLog` row.
+- Backups are encrypted client-side (WAL-G libsodium or pgp key from Vault); the same is turned on for the platform Postgres.
+- Attachment credentials are added to log masking when an app starts, as user env values already are.
+- Storage quotas: plain host directories cannot enforce a per-database limit, so one runaway database could fill the node. XFS project quotas (or fixed-size volumes) are required before the feature is opened to other people. Until then, a monitored soft limit raises an alert and an event on the database page.
+- Data-at-rest encryption is the host's (LUKS on the data pool).
+
+### 11.6 Dashboard
+
+Follows the dashboard template (guide §11) and the existing form and detail patterns.
+
+- **Databases** nav item and list page: one panel of rows (engine badge, callsign, status, size, attached apps), stat strip like deployments. A lore name for the section is a working title to settle during design.
+- **New database**: `DeployForm`-style numbered sections: Engine and version, Plan, Attach (optional). Primary action "Create".
+- **Database detail**: live card with the internal connection string (password masked, reveal action), facts panel, attached apps, backups list with "Back up now" and "Restore to new database", settings (resize, rotate credentials, delete with typed confirmation), provisioning log.
+- **Deployment detail**: a Data panel listing attachments, "Add database" (create or attach existing), and managed variables shown read-only in the env editor.
+- Every state is designed: provisioning, degraded, failed, no databases yet, and an attached database that is down shown on the app page.
+
+### 11.7 API
+
+| Route | Purpose |
+|---|---|
+| `POST /databases`, `GET /databases`, `GET /databases/:id`, `DELETE /databases/:id` | Create, list, read, delete |
+| `POST /databases/:id/backups`, `GET /databases/:id/backups` | Back up now, list |
+| `POST /databases/:id/restore` | Body: backup or time; creates a new database |
+| `POST /databases/:id/rotate`, `POST /databases/:id/resize`, `POST /databases/:id/stop`, `POST /databases/:id/start` | Operations |
+| `GET /databases/:id/connection` | Reveal credentials (audited) |
+| `POST /deployments/:id/attachments`, `DELETE /deployments/:id/attachments/:attachmentId` | Attach, detach |
+| `GET /databases/:id/logs` | Provisioning and instance logs (SSE) |
+
+### 11.8 Build order
+
+| Slice | Scope | Needs |
+|---|---|---|
+| 1 | Postgres end to end: model, `database` queue and driver interface, provisioning, attach, detach, backup list, restore to new database, dashboard pages | Phase 1 (§4.1, §4.2), restart-with-new-env (§6.1), quotas decision |
+| 2 | MySQL and MariaDB drivers, images and physical backups | slice 1 |
+| 3 | Redis and Valkey drivers, ACL users, RDB backups | slice 1 |
+| 4 | FerretDB with its Postgres backend, `MONGODB_URI` | slice 1 |
+| 5 | Resize, point-in-time recovery for MySQL and MariaDB, scheduled quota alerts | slices 2–4 |
+
+**Done when (slice 1)**
+- [ ] Creating a Postgres database from the dashboard reaches `ready` with no manual steps and takes a first backup.
+- [ ] Attaching it to a running app injects `DATABASE_URL`, restarts the app on its current image, and the app connects.
+- [ ] Two apps can share one database, each with its own role, and detaching one leaves the other connected.
+- [ ] Restoring to a point in time creates a new database containing only data from before that time.
+- [ ] Deleting an app leaves its databases untouched; deleting a database with attachments is refused.
+- [ ] No credential appears in logs, the API's responses (apart from the audited reveal) or the repo.
+
+### 11.9 Later (so we don't forget)
+
+- **CLI proxy** (`hangar db connect <name>`): an authenticated tunnel from a developer's machine, so no database port is ever public.
+- **GUI tool** for browsing and querying databases inside the dashboard.
+- **MongoDB for the enterprise edition**, replacing FerretDB behind the same `MONGODB_URI` contract.
+- Shared-server tier per engine for small or free databases.
+- Read replicas and HA per engine (Patroni pattern for Postgres first, §4.1 D).
+- In-place minor and major version upgrades.
+- Optional public access with TLS and an IP allowlist.
+- Per-app networks or Consul Connect so only attached apps can reach a database.
+- Org-level quotas and billing for databases.
 
 ---
 
@@ -555,7 +681,9 @@ Once the data layer and clusters are stable, Hangar can offer **managed Postgres
 | 7 | Logs to Loki, registry on S3, metrics | 1 (4.3, 4.4), 7 | 2 | M |
 | 8 | Multi-node cluster: Terraform modules, Ansible roles, host networking, mTLS, ACLs, Vault HA | 5 | 5, 7 | L |
 | 9 | Autoscaling: apps, then nodes | 6 (9.2) | 8 | M |
-| 10 | Postgres HA (Patroni), previews, add-ons | 1 (4.1 D), 2, 11 | 8 | L |
+| 10 | Postgres HA (Patroni), previews | 1 (4.1 D), 2 | 8 | L |
+| 11 | Managed databases, slice 1: Postgres (§11.8) | 1 (4.1, 4.2), 3 (6.1) | 4 | L |
+| 12 | Managed databases, slices 2–5: MySQL, MariaDB, Redis, Valkey, FerretDB | 11 | 11 | M |
 
 Milestones 5 and 6 run on a single node on purpose: zero-downtime deploys, Consul-driven routing and real domains are worth having before there's a second machine, and they remove the two pieces (stop-then-start and admin `PATCH`) that would break first in a cluster.
 
@@ -572,3 +700,7 @@ Milestones 5 and 6 run on a single node on purpose: zero-downtime deploys, Consu
 | Log store | Loki vs ClickHouse | Loki (fits Grafana, cheap on object storage) |
 | Persistent volumes for user apps | Host volumes pinned to a node vs CSI (Hetzner Volumes CSI) | Host volumes first, CSI with the cluster |
 | Service mesh | Consul Connect now vs later | Later; host networking first |
+| MongoDB for managed databases | FerretDB vs MongoDB (SSPL) | FerretDB now; MongoDB in the enterprise edition |
+| Managed database isolation | Instance per database vs shared server per engine | Instance per database; shared tier later |
+| Managed database storage limits | XFS project quotas vs fixed-size volumes vs soft limit | Quotas before opening to other users; soft limit until then |
+| Database access from outside | None vs CLI proxy vs public with TLS | None in v1; CLI proxy next, then a GUI tool |
